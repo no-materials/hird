@@ -12,7 +12,7 @@ tags: [phase-4, ir, testing]
 ---
 # IR pretty-printer and round-trip tests
 
-Implement the Glass IR pretty-printer and the round-trip property test.
+Implement the IR pretty-printer and the round-trip property test.
 
 **Pretty-printer**:
 - Takes IR and emits Hirð source code in canonical form.

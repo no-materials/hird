@@ -9,11 +9,11 @@ priority: 0
 assignee: nomaterials
 tags: [phase-4, ir]
 ---
-# Phase 4 — Glass IR
+# Phase 4 — IR
 
 ## Goal
 
-Define a stable, type-annotated intermediate representation (Glass IR) that
+Define a stable, type-annotated intermediate representation that
 serves as the contract between the compiler frontend and all downstream
 consumers: codegen, LLM tooling, MCP server, IDE plugins, and effect-graph
 analysis.
@@ -21,21 +21,20 @@ analysis.
 ## v0.1 demo relevance
 
 The planner demo's effect-graph JSON output and the MCP server's structured
-responses both query the Glass IR. It is the representation that makes "what
+responses both query the IR. It is the representation that makes "what
 does the Planner actor do?" answerable by tooling. Without a clean IR, the
 codegen and tooling phases have no stable input.
 
 ## Design context
 
-Glass IR is explicitly typed: every node carries its inferred type and its
+The IR is explicitly typed: every node carries its inferred type and its
 effect row. This distinguishes it from the AST, which carries user-written
 annotations that may be partial. After type inference and effect inference,
 the IR is fully elaborated.
 
-The IR is named after the Glass IR concept from its sibling projects: an
-intermediate form designed to be introspectable by LLM agents, not just
-consumed by a code generator. Design it for queryability first, codegen
-convenience second.
+The design inherits a principle from its sibling projects: the IR is an
+introspectable form meant for LLM agents and tooling, not just a codegen
+input. Design it for queryability first, codegen convenience second.
 
 Key properties:
 
@@ -66,7 +65,7 @@ Key properties:
 - Round-trip property test: for well-typed programs, AST → infer → IR →
   pretty-print produces source that re-parses and re-infers to an equivalent IR.
 - JSON serialization of IR fragments (for MCP server consumption).
-- `docs/glass-ir.md` documents the IR node kinds, their fields, and the
+- `docs/ir.md` documents the IR node kinds, their fields, and the
   serialization format.
 - `cargo clippy` and `cargo test` pass for `hird-ir`.
 

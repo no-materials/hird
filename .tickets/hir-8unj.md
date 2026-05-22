@@ -23,8 +23,8 @@ Crates to create:
 - `hird-types` — type representation, unification, inference engine
 - `hird-effects` — effect row types, effect inference, handler lowering
 - `hird-actors` — actor type system, typed Pid, message protocol types
-- `hird-ir` — Glass IR data structures, lowering, serialization
-- `hird-codegen` — Erlang source emission from Glass IR
+- `hird-ir` — IR data structures, lowering, serialization
+- `hird-codegen` — Erlang source emission from IR
 - `hird-cli` — CLI binary (uses std), subcommand dispatch
 - `hird-mcp` — MCP server for compiler introspection
 - `hird-lsp` — LSP server scaffold

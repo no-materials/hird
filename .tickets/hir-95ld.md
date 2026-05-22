@@ -39,7 +39,7 @@ Extend the type system with effect row types and row polymorphism.
 - Pure functions have the empty row: A -> B ! {}.
 - The ! {} is elided in display for pure functions.
 
-**Extend Glass IR**: IrFnDef now carries a non-empty effect row.
+**Extend IR**: IrFnDef now carries a non-empty effect row.
 
 ## Acceptance Criteria
 
@@ -49,7 +49,7 @@ Extend the type system with effect row types and row polymorphism.
 - Row unification: closed-closed, open-closed, open-open cases all handled.
 - Row variable splitting works correctly.
 - Function types carry effect rows; pure functions have empty row.
-- Glass IR IrFnDef carries effect row.
+- IR IrFnDef carries effect row.
 - Unit tests: row unification cases (at least 10), effect declaration parsing,
   parametric effects.
 - Snapshot tests for effect row display: {Log}, {Log, Tool<X>}, {Log | r}, {}.

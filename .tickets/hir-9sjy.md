@@ -21,7 +21,7 @@ an LSP scaffold for editor support.
 
 The MCP server answers "what does the Planner actor do?" by returning the
 structured effect summary, message protocol, and supervisor relationship from
-the Glass IR. This is the demo's tooling headline: the compiler is queryable
+the IR. This is the demo's tooling headline: the compiler is queryable
 by LLM agents, not just by humans reading source code.
 
 ## Design context
@@ -31,7 +31,7 @@ Tools exposed:
 - `infer_type(expr)` — return the inferred type of an expression in context.
 - `lookup_definition(name)` — return the source location and type of a definition.
 - `explain_effect_row(fn_name)` — return the effect row of a function in readable form.
-- `render_ir_fragment(name)` — return the Glass IR JSON for a definition.
+- `render_ir_fragment(name)` — return the IR JSON for a definition.
 - `explain_actor_protocol(actor_name)` — return the actor's message type, state type,
   handler signatures, and effect summary.
 - `emit_actor_effect_graph(actor_name)` — return the full actor/effect graph rooted

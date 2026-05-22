@@ -74,7 +74,7 @@ graphs precise enough to show exactly which tables a function touches.
   values, not abstract effect classes.
 - Effect-aware type error messages: "function declared {Log} but body performs
   {Log, Tool<X>}" with source spans pointing to the offending call.
-- Glass IR extended with effect rows on every function node.
+- IR extended with effect rows on every function node.
 - Snapshot tests: effect inference on pure functions, single-effect functions,
   multi-effect functions, row-polymorphic functions, handler blocks, effect
   mismatch errors, capability-linked effects.

@@ -75,7 +75,7 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
   errors listing the unhandled variants.
 - Per-actor effect summaries: declared effects on actor match actual handler
   effects; mismatches produce errors.
-- Glass IR includes actor nodes with typed mailbox, state, handlers, effect summary.
+- IR includes actor nodes with typed mailbox, state, handlers, effect summary.
 - Codegen produces Erlang gen_server behavior modules (syntax validated but
   runtime testing in Phase 9).
 - OD5 scoping decision documented in DECISIONS.md.

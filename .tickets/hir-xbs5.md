@@ -53,7 +53,7 @@ a future ticket. The demo only needs one_for_one.
 - Duplicate child IDs are compile errors.
 - one_for_one codegen (next ticket); one_for_all and rest_for_one produce warnings.
 - Supervisor effect row computed from children.
-- Glass IR includes supervisor nodes.
+- IR includes supervisor nodes.
 - Snapshot tests: valid supervisor, unresolved child, type mismatch on start_args,
   duplicate child ID, supervisor effect summary.
 - At least 6 snapshot tests.

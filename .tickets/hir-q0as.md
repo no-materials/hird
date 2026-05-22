@@ -30,7 +30,7 @@ agent framework or IDE.
 3. `explain_effect_row(file, fn_name)` — return the effect row of a function in
    human-readable form with explanations of each effect.
 
-4. `render_ir_fragment(file, name)` — return the Glass IR JSON for a definition.
+4. `render_ir_fragment(file, name)` — return the IR JSON for a definition.
 
 5. `explain_actor_protocol(file, actor_name)` — return the actor's message type
    constructors, state type, handler signatures, and effect summary.

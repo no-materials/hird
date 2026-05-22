@@ -10,9 +10,9 @@ assignee: nomaterials
 parent: hir-0rzf
 tags: [phase-4, ir]
 ---
-# Glass IR data structures and lowering
+# IR data structures and lowering
 
-Define the Glass IR data structures and implement lowering from the typed AST.
+Define the IR data structures and implement lowering from the typed AST.
 
 **IR node kinds** (each carries an explicit, fully-resolved type):
 - IrLet { name, type, value, body }
@@ -54,5 +54,5 @@ Define the Glass IR data structures and implement lowering from the typed AST.
 - Desugaring: if-then-else lowered to match, operators lowered to application.
 - JSON serialization via serde produces stable, documented output.
 - Unit tests: lower a typed AST for at least 5 distinct programs, verify IR structure.
-- docs/glass-ir.md documents IR node kinds, fields, and JSON schema.
+- docs/ir.md documents IR node kinds, fields, and JSON schema.
 

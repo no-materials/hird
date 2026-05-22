@@ -70,7 +70,7 @@ This ticket resolves **OD5** (start minimal — sum-type mailboxes, no session t
 - Actor state is encapsulated: accessing state outside handlers is compile error.
 - Per-actor effect summary declared and validated against handler bodies.
 - OD5 documented in DECISIONS.md.
-- Glass IR includes actor nodes.
+- IR includes actor nodes.
 - Snapshot tests: actor declaration, typed spawn, state encapsulation violation,
   effect summary mismatch, ReplyTo usage.
 - At least 10 snapshot tests.

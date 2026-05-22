@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Hirð Glass IR data structures, lowering, and serialization"
+description = "Hirð IR data structures, lowering, and serialization"
 publish = false
 
 [dependencies]

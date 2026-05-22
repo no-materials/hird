@@ -30,7 +30,7 @@ annotations, and module imports.
 The parser uses `chumsky` for combinator-based parsing with error recovery.
 The AST is projected from a `rowan`-backed concrete syntax tree (CST) that
 preserves all source information including whitespace and comments — this is
-necessary for tooling-grade IDE support and the Glass IR round-trip property.
+necessary for tooling-grade IDE support and the IR round-trip property.
 
 The grammar specification lives in `docs/grammar.md` in BNF-ish notation. This
 document is a first-class project artifact: it will be included in LLM context

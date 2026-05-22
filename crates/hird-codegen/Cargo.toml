@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Hirð Erlang source emission from Glass IR"
+description = "Hirð Erlang source emission from IR"
 publish = false
 
 [dependencies]

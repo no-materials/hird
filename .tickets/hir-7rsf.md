@@ -13,7 +13,7 @@ tags: [phase-9, codegen, runtime, demo]
 
 ## Goal
 
-Complete the end-to-end compilation pipeline: Glass IR to Erlang source emission,
+Complete the end-to-end compilation pipeline: IR to Erlang source emission,
 an Erlang runtime support library, the hird CLI, and — critically — the v0.1
 supervised agent planner demo running on BEAM.
 
@@ -32,7 +32,7 @@ a working Hirð program that:
 
 ## Design context
 
-**Erlang source emission**: the codegen produces `.erl` files from Glass IR.
+**Erlang source emission**: the codegen produces `.erl` files from IR.
 Generated code must compile with stock `erlc` without modifications. Source
 maps are preserved as comments or sidecar files for debugging.
 
@@ -67,7 +67,7 @@ inspectable).
 
 ## Acceptance Criteria
 
-- Erlang source emission from Glass IR produces valid .erl files.
+- Erlang source emission from IR produces valid .erl files.
 - Generated .erl files compile with stock `erlc` without errors.
 - Runtime support library exists in runtime/ as hand-written Erlang:
   tool effect dispatcher, audit log sink, supervisor wiring, handler machinery.

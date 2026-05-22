@@ -10,9 +10,9 @@ assignee: nomaterials
 parent: hir-7rsf
 tags: [phase-9, codegen, erlang]
 ---
-# Erlang source emission from Glass IR
+# Erlang source emission from IR
 
-Implement the Erlang source code emitter: Glass IR → .erl files that compile
+Implement the Erlang source code emitter: IR → .erl files that compile
 with stock erlc.
 
 **Emission strategy**:
@@ -52,7 +52,7 @@ with stock erlc.
 
 ## Acceptance Criteria
 
-- All Glass IR node kinds emit valid Erlang.
+- All IR node kinds emit valid Erlang.
 - Generated .erl files compile with stock erlc without errors.
 - Variable renaming avoids Erlang reserved word conflicts.
 - ADT constructors map to tagged tuples.
