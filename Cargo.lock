@@ -157,14 +157,98 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
-name = "hird"
+name = "hird-actors"
 version = "0.1.0"
+dependencies = [
+ "hird-effects",
+]
+
+[[package]]
+name = "hird-ast"
+version = "0.1.0"
+dependencies = [
+ "hird-parse",
+]
+
+[[package]]
+name = "hird-cli"
+version = "0.1.0"
+dependencies = [
+ "hird-actors",
+ "hird-ast",
+ "hird-codegen",
+ "hird-effects",
+ "hird-ir",
+ "hird-lex",
+ "hird-lsp",
+ "hird-mcp",
+ "hird-parse",
+ "hird-types",
+]
+
+[[package]]
+name = "hird-codegen"
+version = "0.1.0"
+dependencies = [
+ "hird-ir",
+]
+
+[[package]]
+name = "hird-effects"
+version = "0.1.0"
+dependencies = [
+ "hird-types",
+]
+
+[[package]]
+name = "hird-ir"
+version = "0.1.0"
+dependencies = [
+ "hird-actors",
+ "hird-ast",
+ "hird-effects",
+ "hird-types",
+]
+
+[[package]]
+name = "hird-lex"
+version = "0.1.0"
+
+[[package]]
+name = "hird-lsp"
+version = "0.1.0"
+dependencies = [
+ "hird-ir",
+ "hird-types",
+]
+
+[[package]]
+name = "hird-mcp"
+version = "0.1.0"
+dependencies = [
+ "hird-ir",
+ "hird-types",
+]
+
+[[package]]
+name = "hird-parse"
+version = "0.1.0"
+dependencies = [
+ "hird-lex",
+]
+
+[[package]]
+name = "hird-types"
+version = "0.1.0"
+dependencies = [
+ "hird-ast",
+]
 
 [[package]]
 name = "hird_examples"
 version = "0.1.0"
 dependencies = [
- "hird",
+ "hird-lex",
 ]
 
 [[package]]
@@ -376,7 +460,7 @@ name = "wind_tunnel"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "hird",
+ "hird-lex",
 ]
 
 [[package]]

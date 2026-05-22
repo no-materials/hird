@@ -1,14 +1,15 @@
 [package]
-name = "hird_examples"
+name = "hird-actors"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð actor type system, typed Pid, and message protocols"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
+hird-effects.workspace = true
 
 [lints]
 workspace = true

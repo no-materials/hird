@@ -1,14 +1,16 @@
 [package]
-name = "hird_examples"
+name = "hird-mcp"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "MCP server for Hirð compiler introspection"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
+hird-ir.workspace = true
+hird-types.workspace = true
 
 [lints]
 workspace = true

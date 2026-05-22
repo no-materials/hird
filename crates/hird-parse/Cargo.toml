@@ -1,24 +1,15 @@
 [package]
-name = "wind_tunnel"
+name = "hird-parse"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð parser and CST construction"
 publish = false
-autobenches = false
 
 [dependencies]
 hird-lex.workspace = true
 
-[dev-dependencies]
-criterion = { default-features = false, features = [
-    "cargo_bench_support",
-], version = "0.5" }
-
 [lints]
 workspace = true
-
-[[bench]]
-name = "hird"
-harness = false

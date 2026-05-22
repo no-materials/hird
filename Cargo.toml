@@ -1,7 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/hird",
+    "crates/hird-lex",
+    "crates/hird-parse",
+    "crates/hird-ast",
+    "crates/hird-types",
+    "crates/hird-effects",
+    "crates/hird-actors",
+    "crates/hird-ir",
+    "crates/hird-codegen",
+    "crates/hird-cli",
+    "crates/hird-mcp",
+    "crates/hird-lsp",
     "examples",
     "wind_tunnel",
 ]
@@ -69,4 +79,13 @@ clippy.wildcard_dependencies = "warn"
 clippy.allow_attributes = "warn"
 
 [workspace.dependencies]
-hird = { path = "crates/hird" }
+hird-lex = { path = "crates/hird-lex" }
+hird-parse = { path = "crates/hird-parse" }
+hird-ast = { path = "crates/hird-ast" }
+hird-types = { path = "crates/hird-types" }
+hird-effects = { path = "crates/hird-effects" }
+hird-actors = { path = "crates/hird-actors" }
+hird-ir = { path = "crates/hird-ir" }
+hird-codegen = { path = "crates/hird-codegen" }
+hird-mcp = { path = "crates/hird-mcp" }
+hird-lsp = { path = "crates/hird-lsp" }

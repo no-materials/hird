@@ -1,14 +1,15 @@
 [package]
-name = "hird_examples"
+name = "hird-codegen"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð Erlang source emission from Glass IR"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
+hird-ir.workspace = true
 
 [lints]
 workspace = true

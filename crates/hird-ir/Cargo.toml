@@ -1,0 +1,18 @@
+[package]
+name = "hird-ir"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Hirð Glass IR data structures, lowering, and serialization"
+publish = false
+
+[dependencies]
+hird-ast.workspace = true
+hird-types.workspace = true
+hird-effects.workspace = true
+hird-actors.workspace = true
+
+[lints]
+workspace = true

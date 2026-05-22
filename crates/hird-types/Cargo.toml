@@ -1,14 +1,15 @@
 [package]
-name = "hird_examples"
+name = "hird-types"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð type representation, unification, and inference"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
+hird-ast.workspace = true
 
 [lints]
 workspace = true

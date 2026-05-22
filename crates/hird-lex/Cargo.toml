@@ -1,14 +1,14 @@
 [package]
-name = "hird_examples"
+name = "hird-lex"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð lexer, token definitions, and span types"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
 
 [lints]
 workspace = true

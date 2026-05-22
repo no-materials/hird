@@ -1,14 +1,15 @@
 [package]
-name = "hird_examples"
+name = "hird-effects"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Hirð effect row types, inference, and handler lowering"
 publish = false
 
 [dependencies]
-hird-lex.workspace = true
+hird-types.workspace = true
 
 [lints]
 workspace = true

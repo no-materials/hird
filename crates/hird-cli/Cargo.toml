@@ -1,0 +1,28 @@
+[package]
+name = "hird-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Hirð compiler CLI"
+publish = false
+
+[[bin]]
+name = "hird"
+path = "src/main.rs"
+
+[dependencies]
+hird-lex.workspace = true
+hird-parse.workspace = true
+hird-ast.workspace = true
+hird-types.workspace = true
+hird-effects.workspace = true
+hird-actors.workspace = true
+hird-ir.workspace = true
+hird-codegen.workspace = true
+hird-mcp.workspace = true
+hird-lsp.workspace = true
+
+[lints]
+workspace = true
