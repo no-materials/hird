@@ -1,0 +1,6 @@
+[toolchain]
+# When updating the version, also update Cargo.toml's rust-version
+channel = "1.93.1"
+components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
+targets = ["x86_64-unknown-none", "wasm32-unknown-unknown"]
+profile = "minimal"

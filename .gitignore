@@ -1,0 +1,8 @@
+target
+
+.envrc
+
+# Editor swap files.
+*.swp
+*.swo
+
