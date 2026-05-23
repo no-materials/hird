@@ -195,6 +195,7 @@ pub enum LexError {
 
 impl TokenKind {
     /// Returns `true` for keyword token kinds.
+    #[must_use]
     pub fn is_keyword(self) -> bool {
         matches!(
             self,
@@ -221,11 +222,13 @@ impl TokenKind {
     }
 
     /// Returns `true` for error token kinds.
+    #[must_use]
     pub fn is_error(self) -> bool {
         matches!(self, Self::Error(_))
     }
 
     /// Returns `true` for comment token kinds.
+    #[must_use]
     pub fn is_comment(self) -> bool {
         matches!(self, Self::LineComment | Self::BlockComment)
     }
