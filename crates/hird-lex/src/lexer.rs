@@ -29,6 +29,10 @@ impl<'src> Lexer<'src> {
     /// that downstream passes can attribute spans to specific files.
     #[must_use]
     pub fn new(source: &'src str, source_id: u32) -> Self {
+        debug_assert!(
+            source.len() <= u32::MAX as usize,
+            "source exceeds u32::MAX bytes"
+        );
         Self {
             source,
             source_id,
