@@ -1,6 +1,6 @@
 ---
 id: hir-2upi
-status: open
+status: closed
 deps: [hir-8unj]
 links: []
 created: 2026-05-22T21:36:07Z
