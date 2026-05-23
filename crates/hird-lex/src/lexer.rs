@@ -342,17 +342,19 @@ impl<'src> Iterator for Lexer<'src> {
 ///   `snake_case` (no uppercase bytes).
 /// - Identifiers starting with an uppercase letter must be
 ///   `PascalCase` (no underscores).
-/// - A leading underscore defers to whichever rule the first
-///   letter triggers. A bare `_` is always valid.
+/// - Leading underscores are stripped; the rule is chosen by the
+///   first non-underscore letter. All-underscore identifiers
+///   (e.g. `_`, `__`) are always valid.
 fn has_naming_violation(ident: &str) -> bool {
     let bytes = ident.as_bytes();
     debug_assert!(!bytes.is_empty(), "identifiers are never empty");
 
-    let (first, rest) = match bytes[0] {
-        b'_' if bytes.len() > 1 => (bytes[1], &bytes[1..]),
-        b'_' => return false,
-        other => (other, bytes),
+    let rest = match bytes.iter().position(|&b| b != b'_') {
+        Some(i) => &bytes[i..],
+        None => return false,
     };
+
+    let first = rest[0];
 
     if first.is_ascii_lowercase() {
         rest.iter().any(|b| b.is_ascii_uppercase())
@@ -482,6 +484,20 @@ mod tests {
         let bad = Error(LexError::NonCanonicalName);
         assert_eq!(kinds("_fooBar"), vec![bad]);
         assert_eq!(kinds("_Foo_Bar"), vec![bad]);
+    }
+
+    #[test]
+    fn naming_violation_with_multiple_leading_underscores() {
+        let bad = Error(LexError::NonCanonicalName);
+        assert_eq!(kinds("__camelCase"), vec![bad]);
+        assert_eq!(kinds("__Foo_Bar"), vec![bad]);
+        assert_eq!(kinds("___getX"), vec![bad]);
+    }
+
+    #[test]
+    fn all_underscores_are_valid() {
+        assert_eq!(kinds("__"), vec![Ident]);
+        assert_eq!(kinds("___"), vec![Ident]);
     }
 
     // -- integer literals --------------------------------------------------
