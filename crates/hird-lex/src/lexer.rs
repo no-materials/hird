@@ -255,7 +255,7 @@ impl<'src> Lexer<'src> {
         self.pos += 1; // opening quote
         loop {
             match self.peek() {
-                None => {
+                None | Some(b'\n') | Some(b'\r') => {
                     return self.tok(TokenKind::Error(LexError::UnterminatedString), start);
                 }
                 Some(b'"') => {
@@ -537,6 +537,22 @@ mod tests {
     #[test]
     fn unterminated_string() {
         assert_eq!(kinds(r#""oops"#), vec![Error(LexError::UnterminatedString)]);
+    }
+
+    #[test]
+    fn newline_terminates_string() {
+        assert_eq!(
+            kinds("\"oops\n42"),
+            vec![Error(LexError::UnterminatedString), Int]
+        );
+    }
+
+    #[test]
+    fn cr_terminates_string() {
+        assert_eq!(
+            kinds("\"oops\r\n42"),
+            vec![Error(LexError::UnterminatedString), Int]
+        );
     }
 
     #[test]
