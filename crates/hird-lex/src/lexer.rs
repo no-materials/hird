@@ -3,6 +3,8 @@
 
 //! Hand-written lexer for Hird source.
 
+use core::iter::FusedIterator;
+
 use crate::token::{LexError, Span, Token, TokenKind};
 
 /// Produces [`Token`]s from Hird source text.
@@ -338,6 +340,8 @@ impl<'src> Iterator for Lexer<'src> {
         }
     }
 }
+
+impl FusedIterator for Lexer<'_> {}
 
 /// Returns `true` if `ident` violates Hird canonical naming.
 ///
