@@ -21,6 +21,7 @@ impl Span {
     /// Creates a span from byte offsets and a source identifier.
     #[must_use]
     pub const fn new(start: u32, end: u32, source_id: u32) -> Self {
+        debug_assert!(end >= start, "span end precedes start");
         Self {
             start,
             end,
