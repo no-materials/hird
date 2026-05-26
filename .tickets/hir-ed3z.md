@@ -34,10 +34,10 @@ Two deliverables in this ticket:
    enough to parse unambiguously and readable enough for an LLM to generate
    conforming code from it.
 
-2. **Parser infrastructure**: set up chumsky with rowan-backed CST in hird-parse.
-   Define the SyntaxKind enum mapping token kinds to CST node kinds. Set up the
-   CST-to-AST projection in hird-ast. Configure miette or ariadne for diagnostic
-   rendering.
+2. **Parser infrastructure**: set up a hand-rolled recursive descent parser with
+   cstree-backed CST in hird-parse. Define the SyntaxKind enum mapping token
+   kinds to CST node kinds. Set up the CST-to-AST projection in hird-ast.
+   Configure miette for diagnostic rendering.
 
    This ticket establishes the parsing framework. The actual grammar productions
    are implemented in the next ticket.
@@ -46,10 +46,10 @@ Two deliverables in this ticket:
 
 - docs/grammar.md exists with complete BNF-ish grammar for v0.1 syntax.
 - Grammar covers all constructs listed above.
-- chumsky parser infrastructure compiles in hird-parse.
+- Recursive descent parser infrastructure compiles in hird-parse.
 - SyntaxKind enum defined with node kinds for all grammar productions.
-- rowan GreenNode/SyntaxNode types configured.
-- Diagnostic infrastructure (miette or ariadne) integrated: can render an error
-  with source span to terminal.
+- cstree GreenNode/SyntaxNode types configured.
+- Diagnostic infrastructure (miette) integrated: can render an error with
+  source span to terminal.
 - One smoke test: parse a trivial expression, verify CST structure.
 

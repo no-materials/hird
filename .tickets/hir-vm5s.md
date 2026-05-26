@@ -27,8 +27,9 @@ annotations, and module imports.
 
 ## Design context
 
-The parser uses `chumsky` for combinator-based parsing with error recovery.
-The AST is projected from a `rowan`-backed concrete syntax tree (CST) that
+The parser is a hand-rolled recursive descent parser with explicit error
+recovery. The AST is projected from a `cstree`-backed concrete syntax tree
+(CST) that
 preserves all source information including whitespace and comments — this is
 necessary for tooling-grade IDE support and the IR round-trip property.
 
@@ -63,13 +64,14 @@ as syntax — semantic analysis happens in later phases.
 ## Acceptance Criteria
 
 - `docs/grammar.md` exists with BNF-ish grammar covering all v0.1 surface syntax.
-- `chumsky` parser produces a `rowan`-backed CST for all grammar productions.
+- Hand-rolled recursive descent parser produces a `cstree`-backed CST for all
+  grammar productions.
 - Typed AST projection from CST covers: LetExpr, Lambda, FnDecl, TypeDecl (ADT),
   MatchExpr, ModuleDecl, UseDecl, ExternDecl, EffectDecl (syntax only),
   ActorDecl (syntax only), SupervisorDecl (syntax only), ToolDecl (syntax only).
 - Every AST node carries a source span.
-- Diagnostic infrastructure using `miette` or `ariadne`: errors and warnings with
-  source spans, colored terminal output, and structured diagnostic codes.
+- Diagnostic infrastructure using `miette`: errors and warnings with source
+  spans, colored terminal output, and structured diagnostic codes.
 - Error recovery: parser produces partial AST + diagnostics list on malformed input.
   Snapshot tests confirm partial parse results for at least 5 distinct error patterns
   (missing delimiter, unexpected token, incomplete expression, malformed type

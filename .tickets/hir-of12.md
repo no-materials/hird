@@ -14,7 +14,7 @@ tags: [phase-2, parser, diagnostics, testing]
 
 Implement parser error recovery and comprehensive test suite.
 
-**Error recovery**: the chumsky parser must recover from errors and continue
+**Error recovery**: the parser must recover from errors and continue
 producing a partial AST. Strategies:
 - Missing closing delimiter: insert synthetic closer, report error, continue.
 - Unexpected token in expression position: skip to next synchronization point
@@ -28,7 +28,7 @@ with error nodes) plus a diagnostic list.
 
 **Diagnostic quality**: each error has a unique code (E0001, E0002, ...), a
 primary message, a source span, and ideally a help suggestion. Use miette or
-ariadne for rendering.
+miette for rendering.
 
 **Test suite**:
 - Snapshot tests for at least 5 distinct error patterns:

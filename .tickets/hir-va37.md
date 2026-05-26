@@ -12,8 +12,8 @@ tags: [phase-2, parser]
 ---
 # Core syntax parsing
 
-Implement chumsky parser productions for all v0.1 surface syntax, producing
-rowan CST nodes and typed AST projections.
+Implement recursive descent parser productions for all v0.1 surface syntax,
+producing cstree CST nodes and typed AST projections.
 
 Productions to implement:
 
