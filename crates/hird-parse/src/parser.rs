@@ -98,13 +98,13 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// Records a checkpoint for retroactive node wrapping.
-    #[expect(dead_code, reason = "needed by grammar productions in hir-va37")]
+    #[expect(dead_code, reason = "infrastructure for grammar productions")]
     fn checkpoint(&mut self) -> Checkpoint {
         self.builder.checkpoint()
     }
 
     /// Wraps tokens emitted since `checkpoint` in a new node.
-    #[expect(dead_code, reason = "needed by grammar productions in hir-va37")]
+    #[expect(dead_code, reason = "infrastructure for grammar productions")]
     fn start_node_at(&mut self, checkpoint: Checkpoint, kind: SyntaxKind) {
         self.builder.start_node_at(checkpoint, kind);
     }
@@ -147,7 +147,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     /// Advances past the current token if it matches `kind`.
     /// Returns `true` if matched.
-    #[expect(dead_code, reason = "needed by grammar productions in hir-va37")]
+    #[expect(dead_code, reason = "infrastructure for grammar productions")]
     fn eat(&mut self, kind: SyntaxKind) -> bool {
         if self.at(kind) {
             self.bump();
@@ -183,9 +183,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn parse_source_file(&mut self) {
         self.start_node(SyntaxKind::SOURCE_FILE);
 
-        // Consume all tokens — actual grammar productions will be
-        // implemented in hir-va37. For now, emit every token flat
-        // under the root so the CST is structurally valid.
+        // Emit every token flat under the root until grammar
+        // productions are implemented.
         while !self.at_eof() {
             self.bump();
         }
