@@ -99,3 +99,15 @@ fn parse_preserves_comments() {
         ]
     );
 }
+
+#[test]
+fn parse_ascii_unicode_operators() {
+    // Regression: static_text must not assume a fixed representation
+    // for operators that the lexer normalises (ASCII and Unicode forms
+    // produce the same TokenKind).
+    let ascii = hird_parse::parse("\\x -> x => y", 0);
+    assert!(ascii.is_ok());
+
+    let unicode = hird_parse::parse("\u{03bb}x \u{2192} x \u{21d2} y", 0);
+    assert!(unicode.is_ok());
+}
