@@ -48,6 +48,11 @@ Standard library tools for v0.1: `llm_call`, `http_get`, `http_post`,
 `read_file`, `write_file`, `shell`. Each as a tool effect with proper
 structured types.
 
+## Task sequence
+
+1. [ ] [hir-4g3y](hir-4g3y.md) — Tool declarations and invocation records
+2. [ ] [hir-jgs1](hir-jgs1.md) — Audit log integration and tool effect docs
+
 ## Open design questions resolved in this phase
 
 - **OD2 (LLM call typing)**: Resolve how LLM calls are typed. Strong lean toward

@@ -48,6 +48,15 @@ Key design decisions in this phase:
   disambiguation. Module resolution is file-based (one module per file) unless
   a compelling reason to deviate emerges.
 
+## Task sequence
+
+1. [ ] [hir-jj3l](hir-jj3l.md) — Type representation and unification engine
+2. [ ] [hir-lhyh](hir-lhyh.md) — Let-polymorphism and ADT type checking
+3. [ ] [hir-n3si](hir-n3si.md) — Pattern match exhaustiveness checking
+4. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types
+
+Steps 3 and 4 are independent after step 2.
+
 ## Open design question
 
 - **OD6 (Module and visibility system)**: default to Gleam-style `use`

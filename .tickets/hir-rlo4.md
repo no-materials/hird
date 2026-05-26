@@ -46,6 +46,12 @@ specific capability value passed in. `EtsRead<t>` where `t` is a specific
 `Table<UserId, User, Read>` — not "ETS in general." This is what makes audit
 graphs precise enough to show exactly which tables a function touches.
 
+## Task sequence
+
+1. [ ] [hir-95ld](hir-95ld.md) — Effect row types and row polymorphism
+2. [ ] [hir-0x16](hir-0x16.md) — Effect inference and annotation checking
+3. [ ] [hir-t1cj](hir-t1cj.md) — DI-style effect handlers
+
 ## Open design questions resolved in this phase
 
 - **OD7 (Handler semantics in v0.1)**: Confirm DI-style. Document in DECISIONS.md.

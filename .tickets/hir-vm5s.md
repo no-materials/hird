@@ -47,6 +47,12 @@ with type annotations, algebraic data types, pattern matching, modules with
 supervisor declarations, and tool declarations are parsed in this phase but only
 as syntax — semantic analysis happens in later phases.
 
+## Task sequence
+
+1. [ ] [hir-ed3z](hir-ed3z.md) — Grammar specification and parser infrastructure
+2. [ ] [hir-va37](hir-va37.md) — Core syntax parsing
+3. [ ] [hir-of12](hir-of12.md) — Parser error recovery and diagnostics
+
 ## Out of scope
 
 - Type checking or inference (Phase 3).

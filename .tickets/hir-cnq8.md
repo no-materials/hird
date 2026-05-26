@@ -61,6 +61,11 @@ produce. A function with only `Exn` effects cannot crash (barring bugs). A
 function that calls `crash!` or performs I/O that might fail at the resource
 level has that visible in its type or its calling context.
 
+## Task sequence
+
+1. [ ] [hir-xbs5](hir-xbs5.md) — Supervisor declarations and type validation
+2. [ ] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and supervisor codegen
+
 ## Open design question resolved in this phase
 
 - **OD1 (Crash vs error boundary)**: Resolve the exact mechanism. Document in

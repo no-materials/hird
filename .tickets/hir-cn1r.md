@@ -41,6 +41,11 @@ convention.
 early, simpler diagnostics) or post-parse (more context for error messages).
 Flag in the implementation; lean toward lex-time for simplicity in v0.1.
 
+## Task sequence
+
+1. [x] [hir-2upi](hir-2upi.md) — Token enum and Unicode normalization
+2. [ ] [hir-p78v](hir-p78v.md) — Lexer snapshot tests and error recovery
+
 ## Out of scope
 
 - Parsing (Phase 2).

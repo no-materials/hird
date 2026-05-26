@@ -41,6 +41,11 @@ of it.
   - Opaque-capability discipline for stateful resources.
   - Unicode canonicalization at the lexer.
 
+## Task sequence
+
+1. [x] [hir-8unj](hir-8unj.md) — Scaffold compiler crate topology
+2. [ ] [hir-jg95](hir-jg95.md) — Project documentation skeletons
+
 ## Out of scope
 
 - No compiler logic in any crate (just `lib.rs` stubs).

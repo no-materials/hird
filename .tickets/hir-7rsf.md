@@ -57,6 +57,15 @@ inspectable).
 - `hird emit-ast` — dump typed AST as JSON.
 - `hird emit-effect-graph` — dump actor/effect graph as JSON.
 
+## Task sequence
+
+1. [ ] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
+2. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
+3. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
+4. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
+
+Steps 2 and 3 are independent after step 1. Step 4 requires both.
+
 ## Out of scope
 
 - Erlang abstract forms backend (v0.2).

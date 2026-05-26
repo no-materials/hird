@@ -48,6 +48,11 @@ Key properties:
   equivalent to the original (modulo whitespace and syntactic sugar desugaring).
   This is a property test, not just a design aspiration.
 
+## Task sequence
+
+1. [ ] [hir-ee8k](hir-ee8k.md) — IR data structures and lowering
+2. [ ] [hir-a6lz](hir-a6lz.md) — IR pretty-printer and round-trip tests
+
 ## Out of scope
 
 - Effect rows in the IR (those are added when Phase 5 extends the IR).
