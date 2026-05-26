@@ -1,0 +1,9 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"1 + 2.5 * 3\")"
+---
+Int                                0..1   "1"
+Plus                               2..3   "+"
+Float                              4..7   "2.5"
+Star                               8..9   "*"
+Int                               10..11  "3"

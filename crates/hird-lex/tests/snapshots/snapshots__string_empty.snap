@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(r#\"\"\"\"#)"
+---
+Str                                0..2   "\"\""

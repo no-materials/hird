@@ -1,0 +1,9 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"letter fns matching types actors\")"
+---
+Ident                              0..6   "letter"
+Ident                              7..10  "fns"
+Ident                             11..19  "matching"
+Ident                             20..25  "types"
+Ident                             26..32  "actors"

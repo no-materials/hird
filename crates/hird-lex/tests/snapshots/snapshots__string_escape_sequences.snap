@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(r#\"\"tab\\there\\nnewline\\\\backslash\\\"\"\"#)"
+---
+Str                                0..33  "\"tab\\there\\nnewline\\\\backslash\\\"\""

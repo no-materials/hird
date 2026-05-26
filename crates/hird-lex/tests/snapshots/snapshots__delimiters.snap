@@ -1,0 +1,12 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"( ) { } [ ] , ;\")"
+---
+LParen                             0..1   "("
+RParen                             2..3   ")"
+LBrace                             4..5   "{"
+RBrace                             6..7   "}"
+LBracket                           8..9   "["
+RBracket                          10..11  "]"
+Comma                             12..13  ","
+Semicolon                         14..15  ";"

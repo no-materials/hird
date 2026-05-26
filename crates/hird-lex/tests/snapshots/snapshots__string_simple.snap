@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(r#\"\"hello world\"\"#)"
+---
+Str                                0..13  "\"hello world\""

@@ -1,0 +1,12 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"let x = @ + # * 42\")"
+---
+Let                                0..3   "let"
+Ident                              4..5   "x"
+Eq                                 6..7   "="
+Error(UnexpectedChar)              8..9   "@"
+Plus                              10..11  "+"
+Error(UnexpectedChar)             12..13  "#"
+Star                              14..15  "*"
+Int                               16..18  "42"

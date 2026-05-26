@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"/* block comment */\")"
+---
+BlockComment                       0..19  "/* block comment */"

@@ -1,0 +1,11 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"-> => <= >= == != ::\")"
+---
+Arrow                              0..2   "->"
+FatArrow                           3..5   "=>"
+Le                                 6..8   "<="
+Ge                                 9..11  ">="
+EqEq                              12..14  "=="
+BangEq                            15..17  "!="
+ColonColon                        18..20  "::"

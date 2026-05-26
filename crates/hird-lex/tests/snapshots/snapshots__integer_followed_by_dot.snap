@@ -1,0 +1,9 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"42. 42.x\")"
+---
+Int                                0..2   "42"
+Dot                                2..3   "."
+Int                                4..6   "42"
+Dot                                6..7   "."
+Ident                              7..8   "x"

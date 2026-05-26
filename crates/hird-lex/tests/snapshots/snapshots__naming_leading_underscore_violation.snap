@@ -1,0 +1,7 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"_fooBar _Foo_Bar __camelCase\")"
+---
+Error(NonCanonicalName)            0..7   "_fooBar"
+Error(NonCanonicalName)            8..16  "_Foo_Bar"
+Error(NonCanonicalName)           17..28  "__camelCase"

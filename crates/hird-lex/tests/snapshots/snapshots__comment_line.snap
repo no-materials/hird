@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"// this is a comment\")"
+---
+LineComment                        0..20  "// this is a comment"

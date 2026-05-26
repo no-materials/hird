@@ -1,0 +1,7 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"a \\u{2192} b\")"
+---
+Ident                              0..1   "a"
+Arrow                              2..5   "→"
+Ident                              6..7   "b"

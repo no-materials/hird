@@ -1,6 +1,6 @@
 ---
 id: hir-p78v
-status: open
+status: closed
 deps: [hir-2upi]
 links: []
 created: 2026-05-22T21:36:15Z

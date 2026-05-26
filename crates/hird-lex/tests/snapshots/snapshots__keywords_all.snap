@@ -1,0 +1,23 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"let fn match type actor supervisor effect tool \\\n         handle spawn send request use module pub extern if then else\",)"
+---
+Let                                0..3   "let"
+Fn                                 4..6   "fn"
+Match                              7..12  "match"
+Type                              13..17  "type"
+Actor                             18..23  "actor"
+Supervisor                        24..34  "supervisor"
+Effect                            35..41  "effect"
+Tool                              42..46  "tool"
+Handle                            47..53  "handle"
+Spawn                             54..59  "spawn"
+Send                              60..64  "send"
+Request                           65..72  "request"
+Use                               73..76  "use"
+Module                            77..83  "module"
+Pub                               84..87  "pub"
+Extern                            88..94  "extern"
+If                                95..97  "if"
+Then                              98..102 "then"
+Else                             103..107 "else"

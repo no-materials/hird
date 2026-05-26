@@ -1,0 +1,15 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"+ - * / < > = | ! . :\")"
+---
+Plus                               0..1   "+"
+Minus                              2..3   "-"
+Star                               4..5   "*"
+Slash                              6..7   "/"
+Lt                                 8..9   "<"
+Gt                                10..11  ">"
+Eq                                12..13  "="
+Pipe                              14..15  "|"
+Bang                              16..17  "!"
+Dot                               18..19  "."
+Colon                             20..21  ":"

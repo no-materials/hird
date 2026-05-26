@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"/* oops\")"
+---
+Error(UnterminatedBlockComment)    0..7   "/* oops"

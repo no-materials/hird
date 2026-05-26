@@ -1,0 +1,7 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"0.0 3.14 100.5\")"
+---
+Float                              0..3   "0.0"
+Float                              4..8   "3.14"
+Float                              9..14  "100.5"

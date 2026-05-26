@@ -1,6 +1,6 @@
 ---
 id: hir-cn1r
-status: open
+status: closed
 deps: [hir-b9gf]
 links: []
 created: 2026-05-22T21:31:53Z
@@ -44,7 +44,7 @@ Flag in the implementation; lean toward lex-time for simplicity in v0.1.
 ## Task sequence
 
 1. [x] [hir-2upi](hir-2upi.md) — Token enum and Unicode normalization
-2. [ ] [hir-p78v](hir-p78v.md) — Lexer snapshot tests and error recovery
+2. [x] [hir-p78v](hir-p78v.md) — Lexer snapshot tests and error recovery
 
 ## Out of scope
 

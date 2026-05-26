@@ -1,0 +1,13 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"let x = if y then 1 else 0\")"
+---
+Let                                0..3   "let"
+Ident                              4..5   "x"
+Eq                                 6..7   "="
+If                                 8..10  "if"
+Ident                             11..12  "y"
+Then                              13..17  "then"
+Int                               18..19  "1"
+Else                              20..24  "else"
+Int                               25..26  "0"

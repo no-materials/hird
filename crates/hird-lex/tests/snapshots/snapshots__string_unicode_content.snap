@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"\\\"caf\\u{00e9} \\u{03bb}\\u{2192}\\u{21d2}\\\"\")"
+---
+Str                                0..16  "\"café λ→⇒\""

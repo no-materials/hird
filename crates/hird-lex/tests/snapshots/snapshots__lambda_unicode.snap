@@ -1,0 +1,6 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"\\u{03bb}x\")"
+---
+Lambda                             0..2   "λ"
+Ident                              2..3   "x"

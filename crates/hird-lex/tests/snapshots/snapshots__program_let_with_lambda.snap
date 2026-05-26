@@ -1,0 +1,13 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"let double = \\u{03bb}x \\u{2192} x + x\")"
+---
+Let                                0..3   "let"
+Ident                              4..10  "double"
+Eq                                11..12  "="
+Lambda                            13..15  "λ"
+Ident                             15..16  "x"
+Arrow                             17..20  "→"
+Ident                             21..22  "x"
+Plus                              23..24  "+"
+Ident                             25..26  "x"

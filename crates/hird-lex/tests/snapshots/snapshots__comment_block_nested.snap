@@ -1,0 +1,5 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"/* outer /* inner */ still outer */\")"
+---
+BlockComment                       0..35  "/* outer /* inner */ still outer */"

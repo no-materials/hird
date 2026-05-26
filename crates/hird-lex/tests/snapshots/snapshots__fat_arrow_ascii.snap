@@ -1,0 +1,7 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"x => y\")"
+---
+Ident                              0..1   "x"
+FatArrow                           2..4   "=>"
+Ident                              5..6   "y"

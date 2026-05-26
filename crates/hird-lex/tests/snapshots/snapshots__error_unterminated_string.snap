@@ -1,0 +1,12 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"let x = \\\"oops\\nlet y = 1\")"
+---
+Let                                0..3   "let"
+Ident                              4..5   "x"
+Eq                                 6..7   "="
+Error(UnterminatedString)          8..13  "\"oops"
+Let                               14..17  "let"
+Ident                             18..19  "y"
+Eq                                20..21  "="
+Int                               22..23  "1"

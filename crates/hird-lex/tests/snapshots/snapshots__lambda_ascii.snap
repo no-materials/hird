@@ -1,0 +1,6 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"\\\\x\")"
+---
+Lambda                             0..1   "\\"
+Ident                              1..2   "x"

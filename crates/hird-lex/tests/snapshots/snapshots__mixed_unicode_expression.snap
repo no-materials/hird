@@ -1,0 +1,10 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"\\u{03bb}x \\u{2192} x + x\")"
+---
+Lambda                             0..2   "λ"
+Ident                              2..3   "x"
+Arrow                              4..7   "→"
+Ident                              8..9   "x"
+Plus                              10..11  "+"
+Ident                             12..13  "x"

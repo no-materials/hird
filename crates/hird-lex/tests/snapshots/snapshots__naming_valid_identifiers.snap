@@ -1,0 +1,10 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"foo_bar FooBar x _ __ _x\")"
+---
+Ident                              0..7   "foo_bar"
+Ident                              8..14  "FooBar"
+Ident                             15..16  "x"
+Ident                             17..18  "_"
+Ident                             19..21  "__"
+Ident                             22..24  "_x"

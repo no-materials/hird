@@ -1,0 +1,7 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"0 42 123456\")"
+---
+Int                                0..1   "0"
+Int                                2..4   "42"
+Int                                5..11  "123456"

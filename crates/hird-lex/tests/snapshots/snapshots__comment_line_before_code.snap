@@ -1,0 +1,9 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"// comment\\nlet x = 1\")"
+---
+LineComment                        0..10  "// comment"
+Let                               11..14  "let"
+Ident                             15..16  "x"
+Eq                                17..18  "="
+Int                               19..20  "1"

@@ -1,0 +1,9 @@
+---
+source: crates/hird-lex/tests/snapshots.rs
+expression: "snapshot(\"x + \\u{20ac} * y\")"
+---
+Ident                              0..1   "x"
+Plus                               2..3   "+"
+Error(UnexpectedChar)              4..7   "€"
+Star                               8..9   "*"
+Ident                             10..11  "y"
