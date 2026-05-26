@@ -35,9 +35,12 @@ Two deliverables in this ticket:
    conforming code from it.
 
 2. **Parser infrastructure**: set up a hand-rolled recursive descent parser with
-   cstree-backed CST in hird-parse. Define the SyntaxKind enum mapping token
-   kinds to CST node kinds. Set up the CST-to-AST projection in hird-ast.
-   Configure miette for diagnostic rendering.
+   cstree-backed CST in hird-parse. `cstree` with `default-features = false`
+   (no_std); `hird-parse` stays `#![no_std]`. Define the SyntaxKind enum
+   (flat `u16`-repr enum covering both token kinds and node kinds) mapping
+   from hird-lex's TokenKind. Set up the CST-to-AST projection in hird-ast.
+   Diagnostics: plain structs in hird-parse (no_std); miette rendering behind
+   an `std` feature flag or in downstream crates.
 
    This ticket establishes the parsing framework. The actual grammar productions
    are implemented in the next ticket.
@@ -46,10 +49,12 @@ Two deliverables in this ticket:
 
 - docs/grammar.md exists with complete BNF-ish grammar for v0.1 syntax.
 - Grammar covers all constructs listed above.
-- Recursive descent parser infrastructure compiles in hird-parse.
-- SyntaxKind enum defined with node kinds for all grammar productions.
-- cstree GreenNode/SyntaxNode types configured.
-- Diagnostic infrastructure (miette) integrated: can render an error with
-  source span to terminal.
+- Recursive descent parser infrastructure compiles in hird-parse (`#![no_std]`).
+- SyntaxKind enum (flat, `u16`-repr) defined with token kinds and node kinds
+  for all grammar productions. `From<TokenKind>` conversion implemented.
+- cstree GreenNode/SyntaxNode types configured (`default-features = false`).
+- Plain diagnostic structs defined in hird-parse (no_std-compatible).
+- miette rendering: either behind `std` feature flag or smoke-tested from
+  a `#[cfg(feature = "std")]` test / downstream crate.
 - One smoke test: parse a trivial expression, verify CST structure.
 

@@ -29,9 +29,14 @@ annotations, and module imports.
 
 The parser is a hand-rolled recursive descent parser with explicit error
 recovery. The AST is projected from a `cstree`-backed concrete syntax tree
-(CST) that
-preserves all source information including whitespace and comments — this is
-necessary for tooling-grade IDE support and the IR round-trip property.
+(CST) that preserves all source information including whitespace and
+comments — this is necessary for tooling-grade IDE support and the IR
+round-trip property. `cstree` is used with `default-features = false`
+(no_std-compatible); `hird-parse` stays `#![no_std]`.
+
+Diagnostics are split: `hird-parse` produces plain diagnostic structs
+(error code, span, message). `miette` rendering lives behind an `std`
+feature flag on `hird-parse` (or in downstream crates like `hird-cli`).
 
 The grammar specification lives in `docs/grammar.md` in BNF-ish notation. This
 document is a first-class project artifact: it will be included in LLM context
@@ -70,8 +75,9 @@ as syntax — semantic analysis happens in later phases.
   MatchExpr, ModuleDecl, UseDecl, ExternDecl, EffectDecl (syntax only),
   ActorDecl (syntax only), SupervisorDecl (syntax only), ToolDecl (syntax only).
 - Every AST node carries a source span.
-- Diagnostic infrastructure using `miette`: errors and warnings with source
-  spans, colored terminal output, and structured diagnostic codes.
+- Diagnostic infrastructure: `hird-parse` emits plain diagnostic structs
+  (no_std); `miette` rendering available behind `std` feature flag or in
+  downstream crates. Colored terminal output and structured diagnostic codes.
 - Error recovery: parser produces partial AST + diagnostics list on malformed input.
   Snapshot tests confirm partial parse results for at least 5 distinct error patterns
   (missing delimiter, unexpected token, incomplete expression, malformed type

@@ -27,8 +27,9 @@ The parser should never panic or abort. Every input produces an AST (possibly
 with error nodes) plus a diagnostic list.
 
 **Diagnostic quality**: each error has a unique code (E0001, E0002, ...), a
-primary message, a source span, and ideally a help suggestion. Use miette or
-miette for rendering.
+primary message, a source span, and ideally a help suggestion. Plain diagnostic
+structs in hird-parse (no_std); miette rendering behind `std` feature flag or
+in downstream crates.
 
 **Test suite**:
 - Snapshot tests for at least 5 distinct error patterns:
