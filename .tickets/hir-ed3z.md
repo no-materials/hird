@@ -1,6 +1,6 @@
 ---
 id: hir-ed3z
-status: open
+status: closed
 deps: [hir-p78v]
 links: []
 created: 2026-05-22T21:36:30Z

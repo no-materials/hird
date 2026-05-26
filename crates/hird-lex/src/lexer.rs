@@ -226,6 +226,7 @@ impl<'src> Lexer<'src> {
             "if" => TokenKind::If,
             "then" => TokenKind::Then,
             "else" => TokenKind::Else,
+            "in" => TokenKind::In,
             _ => {
                 if has_naming_violation(text) {
                     return self.tok(TokenKind::Error(LexError::NonCanonicalName), start);
@@ -432,6 +433,7 @@ mod tests {
             ("if", If),
             ("then", Then),
             ("else", Else),
+            ("in", In),
         ];
         for (src, expected) in kws {
             assert_eq!(kinds(src), vec![expected], "keyword: {src}");

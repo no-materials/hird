@@ -79,6 +79,8 @@ clippy.wildcard_dependencies = "warn"
 clippy.allow_attributes = "warn"
 
 [workspace.dependencies]
+cstree = { version = "0.14", default-features = false }
+
 hird-lex = { path = "crates/hird-lex" }
 hird-parse = { path = "crates/hird-parse" }
 hird-ast = { path = "crates/hird-ast" }

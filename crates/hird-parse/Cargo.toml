@@ -9,7 +9,11 @@ description = "Hirð parser and CST construction"
 publish = false
 
 [dependencies]
+cstree.workspace = true
 hird-lex.workspace = true
+
+[dev-dependencies]
+cstree.workspace = true
 
 [lints]
 workspace = true

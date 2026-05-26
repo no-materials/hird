@@ -30,7 +30,7 @@ fn snapshot(source: &str) -> String {
 fn keywords_all() {
     insta::assert_snapshot!(snapshot(
         "let fn match type actor supervisor effect tool \
-         handle spawn send request use module pub extern if then else",
+         handle spawn send request use module pub extern if then else in",
     ));
 }
 

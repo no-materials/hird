@@ -99,6 +99,8 @@ pub enum TokenKind {
     Then,
     /// `else`
     Else,
+    /// `in`
+    In,
 
     // --- Identifiers and literals ---
     /// An identifier that passed keyword lookup and naming checks.
@@ -219,6 +221,7 @@ impl TokenKind {
                 | Self::If
                 | Self::Then
                 | Self::Else
+                | Self::In
         )
     }
 
