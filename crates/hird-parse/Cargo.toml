@@ -12,8 +12,5 @@ publish = false
 cstree.workspace = true
 hird-lex.workspace = true
 
-[dev-dependencies]
-cstree.workspace = true
-
 [lints]
 workspace = true

@@ -6,8 +6,6 @@
 //! Consumes a token stream from [`hird_lex::Lexer`], synthesises
 //! whitespace tokens for gaps, and builds a cstree green tree.
 
-extern crate alloc;
-
 use alloc::vec::Vec;
 
 use cstree::build::{Checkpoint, GreenNodeBuilder};

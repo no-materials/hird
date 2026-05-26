@@ -323,8 +323,9 @@ impl cstree::Syntax for SyntaxKind {
             "invalid SyntaxKind discriminant: {}",
             raw.0
         );
-        // SAFETY: SyntaxKind is #[repr(u32)] and we checked bounds.
         #[expect(unsafe_code, reason = "repr(u32) enum from checked discriminant")]
+        // SAFETY: SyntaxKind is #[repr(u32)] with contiguous discriminants
+        // starting at 0. The assert above guarantees the value is in range.
         unsafe {
             core::mem::transmute::<u32, Self>(raw.0)
         }
