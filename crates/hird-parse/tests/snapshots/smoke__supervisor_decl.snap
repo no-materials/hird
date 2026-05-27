@@ -1,0 +1,27 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 153
+expression: "render_cst(\"supervisor MySup { strategy: one_for_one, intensity: 5 }\")"
+---
+SOURCE_FILE
+  SUPERVISOR_DECL
+    SUPERVISOR_KW "supervisor"
+    WHITESPACE " "
+    IDENT "MySup"
+    WHITESPACE " "
+    L_BRACE "{"
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "strategy"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "one_for_one"
+    COMMA ","
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "intensity"
+      COLON ":"
+      WHITESPACE " "
+      INT "5"
+    WHITESPACE " "
+    R_BRACE "}"

@@ -1,0 +1,29 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 137
+expression: "render_cst(\"type Pair<A, B> = Pair(A, B)\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Pair"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "A"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "B"
+      GT ">"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Pair"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "A"
+        COMMA ","
+        WHITESPACE " "
+        IDENT "B"
+      R_PAREN ")"

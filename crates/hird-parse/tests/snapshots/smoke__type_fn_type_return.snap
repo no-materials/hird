@@ -1,0 +1,26 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 220
+expression: "render_cst(\"fn f() -> Int -> Bool = x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      FN_TYPE
+        WHITESPACE " "
+        IDENT "Int"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "Bool"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"

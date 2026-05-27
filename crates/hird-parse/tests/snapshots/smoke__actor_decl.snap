@@ -1,0 +1,27 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 144
+expression: "render_cst(\"actor MyActor { state: Int, init: create }\")"
+---
+SOURCE_FILE
+  ACTOR_DECL
+    ACTOR_KW "actor"
+    WHITESPACE " "
+    IDENT "MyActor"
+    WHITESPACE " "
+    L_BRACE "{"
+    ACTOR_FIELD
+      WHITESPACE " "
+      IDENT "state"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "Int"
+    COMMA ","
+    ACTOR_FIELD
+      WHITESPACE " "
+      IDENT "init"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "create"
+    WHITESPACE " "
+    R_BRACE "}"

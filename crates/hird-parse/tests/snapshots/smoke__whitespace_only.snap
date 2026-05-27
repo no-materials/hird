@@ -1,0 +1,7 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 64
+expression: "render_cst(\"  \\n  \")"
+---
+SOURCE_FILE
+  WHITESPACE "  \n  "

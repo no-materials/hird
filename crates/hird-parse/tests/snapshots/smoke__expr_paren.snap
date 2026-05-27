@@ -1,0 +1,19 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 213
+expression: "render_cst(\"fn f() = (42)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    PAREN_EXPR
+      WHITESPACE " "
+      L_PAREN "("
+      INT "42"
+      R_PAREN ")"

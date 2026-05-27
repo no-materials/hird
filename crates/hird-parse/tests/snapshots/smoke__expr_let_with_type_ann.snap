@@ -1,0 +1,32 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 193
+expression: "render_cst(\"fn f() = let x : Int = 42 in x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    LET_EXPR
+      WHITESPACE " "
+      LET_KW "let"
+      WHITESPACE " "
+      IDENT "x"
+      TYPE_ANN
+        WHITESPACE " "
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Int"
+      WHITESPACE " "
+      EQ "="
+      WHITESPACE " "
+      INT "42"
+      WHITESPACE " "
+      IN_KW "in"
+      WHITESPACE " "
+      IDENT "x"

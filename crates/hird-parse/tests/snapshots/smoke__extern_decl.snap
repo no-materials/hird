@@ -1,0 +1,25 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 181
+expression: "render_cst(\"extern fn print(s: String) -> Unit\")"
+---
+SOURCE_FILE
+  EXTERN_DECL
+    EXTERN_KW "extern"
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "print"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "s"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "String"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Unit"

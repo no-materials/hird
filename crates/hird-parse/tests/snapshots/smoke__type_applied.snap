@@ -1,0 +1,26 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 225
+expression: "render_cst(\"fn f(x: List<Int>) = x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "List"
+        TYPE_ARGS
+          LT "<"
+          IDENT "Int"
+          GT ">"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"

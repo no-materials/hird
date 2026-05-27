@@ -3,111 +3,254 @@
 
 #![expect(missing_docs, reason = "test suite")]
 
+use std::fmt::Write;
+
 use hird_parse::SyntaxKind;
 
-#[test]
-fn parse_trivial_let() {
-    let result = hird_parse::parse("let x = 42", 0);
-    assert!(result.is_ok());
-
+fn render_cst(source: &str) -> String {
+    let result = hird_parse::parse(source, 0);
     let root = cstree::syntax::SyntaxNode::<SyntaxKind>::new_root(result.green().clone());
-    assert_eq!(root.kind(), SyntaxKind::SOURCE_FILE);
+    let mut out = String::new();
+    render_node(&root, source, &mut out, 0);
+    if !result.is_ok() {
+        writeln!(out, "---").unwrap();
+        for d in result.diagnostics() {
+            writeln!(
+                out,
+                "{} {}..{}: {}",
+                d.code.as_str(),
+                d.span.start,
+                d.span.end,
+                d.message
+            )
+            .unwrap();
+        }
+    }
+    out
+}
 
-    // Flat structure for now: SOURCE_FILE contains tokens + whitespace.
-    // Verify all source bytes are accounted for.
-    let children: Vec<_> = root.children_with_tokens().collect();
+fn render_node(
+    node: &cstree::syntax::SyntaxNode<SyntaxKind>,
+    source: &str,
+    out: &mut String,
+    indent: usize,
+) {
+    let pad = "  ".repeat(indent);
+    writeln!(out, "{pad}{:?}", node.kind()).unwrap();
+    for child in node.children_with_tokens() {
+        match child {
+            cstree::util::NodeOrToken::Node(n) => render_node(n, source, out, indent + 1),
+            cstree::util::NodeOrToken::Token(t) => {
+                let range = t.text_range();
+                let start = usize::from(range.start());
+                let end = usize::from(range.end());
+                let text = &source[start..end];
+                let pad2 = "  ".repeat(indent + 1);
+                writeln!(out, "{pad2}{:?} {:?}", t.kind(), text).unwrap();
+            }
+        }
+    }
+}
 
-    // "let x = 42" should produce:
-    // LET_KW "let", WS " ", IDENT "x", WS " ", EQ "=", WS " ", INT "42"
-    let kinds: Vec<_> = children
-        .iter()
-        .map(|c| match c {
-            cstree::util::NodeOrToken::Node(n) => n.kind(),
-            cstree::util::NodeOrToken::Token(t) => t.kind(),
-        })
-        .collect();
+// ── basics ──────────────────────────────────────────────────────
 
-    assert_eq!(
-        kinds,
-        vec![
-            SyntaxKind::LET_KW,
-            SyntaxKind::WHITESPACE,
-            SyntaxKind::IDENT,
-            SyntaxKind::WHITESPACE,
-            SyntaxKind::EQ,
-            SyntaxKind::WHITESPACE,
-            SyntaxKind::INT,
-        ]
-    );
+#[test]
+fn empty_source() {
+    insta::assert_snapshot!(render_cst(""));
 }
 
 #[test]
-fn parse_empty_source() {
-    let result = hird_parse::parse("", 0);
-    assert!(result.is_ok());
+fn whitespace_only() {
+    insta::assert_snapshot!(render_cst("  \n  "));
+}
 
-    let root = cstree::syntax::SyntaxNode::<SyntaxKind>::new_root(result.green().clone());
-    assert_eq!(root.kind(), SyntaxKind::SOURCE_FILE);
-    assert_eq!(root.children_with_tokens().count(), 0);
+// ── module declaration ──────────────────────────────────────────
+
+#[test]
+fn module_decl() {
+    insta::assert_snapshot!(render_cst("module Foo"));
+}
+
+// ── use declarations ────────────────────────────────────────────
+
+#[test]
+fn use_simple() {
+    insta::assert_snapshot!(render_cst("use Foo"));
 }
 
 #[test]
-fn parse_whitespace_only() {
-    let result = hird_parse::parse("  \n  ", 0);
-    assert!(result.is_ok());
-
-    let root = cstree::syntax::SyntaxNode::<SyntaxKind>::new_root(result.green().clone());
-    let kinds: Vec<_> = root
-        .children_with_tokens()
-        .map(|c| match c {
-            cstree::util::NodeOrToken::Node(n) => n.kind(),
-            cstree::util::NodeOrToken::Token(t) => t.kind(),
-        })
-        .collect();
-
-    // All whitespace, no real tokens — but the parser should still emit
-    // the trailing whitespace.
-    assert_eq!(kinds, vec![SyntaxKind::WHITESPACE]);
+fn use_path() {
+    insta::assert_snapshot!(render_cst("use Foo::Bar::Baz"));
 }
 
 #[test]
-fn parse_preserves_comments() {
-    let result = hird_parse::parse("// hello\nlet x = 1", 0);
-    assert!(result.is_ok());
+fn use_alias() {
+    insta::assert_snapshot!(render_cst("use Foo::Bar as B"));
+}
 
-    let root = cstree::syntax::SyntaxNode::<SyntaxKind>::new_root(result.green().clone());
-    let kinds: Vec<_> = root
-        .children_with_tokens()
-        .map(|c| match c {
-            cstree::util::NodeOrToken::Node(n) => n.kind(),
-            cstree::util::NodeOrToken::Token(t) => t.kind(),
-        })
-        .collect();
+// ── function declarations ───────────────────────────────────────
 
-    assert_eq!(
-        kinds,
-        vec![
-            SyntaxKind::LINE_COMMENT, // "// hello"
-            SyntaxKind::WHITESPACE,   // "\n"
-            SyntaxKind::LET_KW,       // "let"
-            SyntaxKind::WHITESPACE,   // " "
-            SyntaxKind::IDENT,        // "x"
-            SyntaxKind::WHITESPACE,   // " "
-            SyntaxKind::EQ,           // "="
-            SyntaxKind::WHITESPACE,   // " "
-            SyntaxKind::INT,          // "1"
-        ]
-    );
+#[test]
+fn fn_minimal() {
+    insta::assert_snapshot!(render_cst("fn foo() = 42"));
 }
 
 #[test]
-fn parse_ascii_unicode_operators() {
-    // Regression: static_text must not assume a fixed representation
-    // for operators that the lexer normalises (ASCII and Unicode forms
-    // produce the same TokenKind).
-    let ascii = hird_parse::parse("\\x -> x => y", 0);
-    assert!(ascii.is_ok());
+fn fn_with_params() {
+    insta::assert_snapshot!(render_cst("fn add(x: Int, y: Int) = x"));
+}
 
-    let unicode = hird_parse::parse("\u{03bb}x \u{2192} x \u{21d2} y", 0);
-    assert!(unicode.is_ok());
+#[test]
+fn fn_with_return_type() {
+    insta::assert_snapshot!(render_cst("fn id(x: Int) -> Int = x"));
+}
+
+#[test]
+fn fn_with_effect() {
+    insta::assert_snapshot!(render_cst("fn log(msg: String) -> Unit ! {Log} = msg"));
+}
+
+#[test]
+fn fn_pub() {
+    insta::assert_snapshot!(render_cst("pub fn foo() = 42"));
+}
+
+#[test]
+fn fn_trailing_comma_params() {
+    insta::assert_snapshot!(render_cst("fn f(x: Int, y: Int,) = x"));
+}
+
+// ── type declarations ───────────────────────────────────────────
+
+#[test]
+fn type_simple_adt() {
+    insta::assert_snapshot!(render_cst("type Bool = True | False"));
+}
+
+#[test]
+fn type_with_params_and_fields() {
+    insta::assert_snapshot!(render_cst("type Option<A> = Some(A) | None"));
+}
+
+#[test]
+fn type_multi_field_constructor() {
+    insta::assert_snapshot!(render_cst("type Pair<A, B> = Pair(A, B)"));
+}
+
+// ── actor declarations ──────────────────────────────────────────
+
+#[test]
+fn actor_decl() {
+    insta::assert_snapshot!(render_cst("actor MyActor { state: Int, init: create }"));
+}
+
+// ── supervisor declarations ─────────────────────────────────────
+
+#[test]
+fn supervisor_decl() {
+    insta::assert_snapshot!(render_cst(
+        "supervisor MySup { strategy: one_for_one, intensity: 5 }"
+    ));
+}
+
+// ── effect declarations ─────────────────────────────────────────
+
+#[test]
+fn effect_simple() {
+    insta::assert_snapshot!(render_cst("effect Log"));
+}
+
+#[test]
+fn effect_with_params() {
+    insta::assert_snapshot!(render_cst("effect State<S>"));
+}
+
+// ── tool declarations ───────────────────────────────────────────
+
+#[test]
+fn tool_decl() {
+    insta::assert_snapshot!(render_cst("tool Fetch : Url -> Response"));
+}
+
+// ── extern declarations ─────────────────────────────────────────
+
+#[test]
+fn extern_decl() {
+    insta::assert_snapshot!(render_cst("extern fn print(s: String) -> Unit"));
+}
+
+// ── expressions ─────────────────────────────────────────────────
+
+#[test]
+fn expr_let() {
+    insta::assert_snapshot!(render_cst("fn f() = let x = 42 in x"));
+}
+
+#[test]
+fn expr_let_with_type_ann() {
+    insta::assert_snapshot!(render_cst("fn f() = let x : Int = 42 in x"));
+}
+
+#[test]
+fn expr_lambda() {
+    insta::assert_snapshot!(render_cst("fn f() = \\x -> x"));
+}
+
+#[test]
+fn expr_lambda_multi_param() {
+    insta::assert_snapshot!(render_cst("fn f() = \\x y -> x"));
+}
+
+#[test]
+fn expr_if() {
+    insta::assert_snapshot!(render_cst("fn f() = if true then 1 else 0"));
+}
+
+#[test]
+fn expr_paren() {
+    insta::assert_snapshot!(render_cst("fn f() = (42)"));
+}
+
+// ── type expressions ────────────────────────────────────────────
+
+#[test]
+fn type_fn_type_return() {
+    insta::assert_snapshot!(render_cst("fn f() -> Int -> Bool = x"));
+}
+
+#[test]
+fn type_applied() {
+    insta::assert_snapshot!(render_cst("fn f(x: List<Int>) = x"));
+}
+
+#[test]
+fn type_tuple() {
+    insta::assert_snapshot!(render_cst("fn f(x: (Int, Bool)) = x"));
+}
+
+// ── comments preserved ──────────────────────────────────────────
+
+#[test]
+fn comment_before_decl() {
+    insta::assert_snapshot!(render_cst("// a function\nfn foo() = 42"));
+}
+
+// ── multi-declaration module ────────────────────────────────────
+
+#[test]
+fn multi_decl_module() {
+    insta::assert_snapshot!(render_cst(
+        "\
+module Planner
+
+use Actors::Base
+
+effect Log
+
+type Result<A> = Ok(A) | Err(String)
+
+pub fn identity(x: Int) -> Int = x
+
+extern fn print(s: String) -> Unit"
+    ));
 }

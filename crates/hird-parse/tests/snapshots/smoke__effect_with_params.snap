@@ -1,0 +1,14 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 167
+expression: "render_cst(\"effect State<S>\")"
+---
+SOURCE_FILE
+  EFFECT_DECL
+    EFFECT_KW "effect"
+    WHITESPACE " "
+    IDENT "State"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "S"
+      GT ">"

@@ -1,0 +1,20 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 127
+expression: "render_cst(\"type Bool = True | False\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Bool"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "True"
+    WHITESPACE " "
+    PIPE "|"
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "False"

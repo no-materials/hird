@@ -1,0 +1,10 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 71
+expression: "render_cst(\"module Foo\")"
+---
+SOURCE_FILE
+  MODULE_DECL
+    MODULE_KW "module"
+    WHITESPACE " "
+    IDENT "Foo"

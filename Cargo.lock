@@ -378,6 +378,7 @@ version = "0.1.0"
 dependencies = [
  "cstree",
  "hird-lex",
+ "insta",
 ]
 
 [[package]]

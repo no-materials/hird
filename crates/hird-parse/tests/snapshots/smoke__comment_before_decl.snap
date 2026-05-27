@@ -1,0 +1,18 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 237
+expression: "render_cst(\"// a function\\nfn foo() = 42\")"
+---
+SOURCE_FILE
+  FN_DECL
+    LINE_COMMENT "// a function"
+    WHITESPACE "\n"
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "foo"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "42"

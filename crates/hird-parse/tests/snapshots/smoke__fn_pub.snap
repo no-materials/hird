@@ -1,0 +1,19 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 115
+expression: "render_cst(\"pub fn foo() = 42\")"
+---
+SOURCE_FILE
+  FN_DECL
+    VISIBILITY
+      PUB_KW "pub"
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "foo"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "42"

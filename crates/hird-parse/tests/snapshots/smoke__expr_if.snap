@@ -1,0 +1,27 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 208
+expression: "render_cst(\"fn f() = if true then 1 else 0\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    IF_EXPR
+      WHITESPACE " "
+      IF_KW "if"
+      WHITESPACE " "
+      IDENT "true"
+      WHITESPACE " "
+      THEN_KW "then"
+      WHITESPACE " "
+      INT "1"
+      WHITESPACE " "
+      ELSE_KW "else"
+      WHITESPACE " "
+      INT "0"

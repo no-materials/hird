@@ -1,0 +1,15 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 83
+expression: "render_cst(\"use Foo::Bar::Baz\")"
+---
+SOURCE_FILE
+  USE_DECL
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Foo"
+      COLON_COLON "::"
+      IDENT "Bar"
+      COLON_COLON "::"
+      IDENT "Baz"

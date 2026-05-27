@@ -1,0 +1,29 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 100
+expression: "render_cst(\"fn add(x: Int, y: Int) = x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "add"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Int"
+      COMMA ","
+      PARAM
+        WHITESPACE " "
+        IDENT "y"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Int"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"

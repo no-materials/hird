@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 132
+expression: "render_cst(\"type Option<A> = Some(A) | None\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Option"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "A"
+      GT ">"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Some"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "A"
+      R_PAREN ")"
+    WHITESPACE " "
+    PIPE "|"
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "None"

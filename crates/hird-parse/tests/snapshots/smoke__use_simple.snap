@@ -1,0 +1,11 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 78
+expression: "render_cst(\"use Foo\")"
+---
+SOURCE_FILE
+  USE_DECL
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Foo"

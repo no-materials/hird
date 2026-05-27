@@ -1,0 +1,34 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 110
+expression: "render_cst(\"fn log(msg: String) -> Unit ! {Log} = msg\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "log"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "msg"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "String"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Unit"
+    EFFECT_ANN
+      WHITESPACE " "
+      BANG "!"
+      WHITESPACE " "
+      L_BRACE "{"
+      IDENT "Log"
+      R_BRACE "}"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "msg"

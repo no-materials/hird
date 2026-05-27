@@ -11,7 +11,7 @@
 //! # Quick start
 //!
 //! ```
-//! let result = hird_parse::parse("let x = 42", 0);
+//! let result = hird_parse::parse("fn main() = 42", 0);
 //! assert!(result.is_ok());
 //! ```
 

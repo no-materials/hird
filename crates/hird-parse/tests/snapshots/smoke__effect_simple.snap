@@ -1,0 +1,10 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 162
+expression: "render_cst(\"effect Log\")"
+---
+SOURCE_FILE
+  EFFECT_DECL
+    EFFECT_KW "effect"
+    WHITESPACE " "
+    IDENT "Log"

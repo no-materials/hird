@@ -1,0 +1,95 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 244
+expression: "render_cst(\"\\\nmodule Planner\n\nuse Actors::Base\n\neffect Log\n\ntype Result<A> = Ok(A) | Err(String)\n\npub fn identity(x: Int) -> Int = x\n\nextern fn print(s: String) -> Unit\")"
+---
+SOURCE_FILE
+  MODULE_DECL
+    MODULE_KW "module"
+    WHITESPACE " "
+    IDENT "Planner"
+  USE_DECL
+    WHITESPACE "\n\n"
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Actors"
+      COLON_COLON "::"
+      IDENT "Base"
+  EFFECT_DECL
+    WHITESPACE "\n\n"
+    EFFECT_KW "effect"
+    WHITESPACE " "
+    IDENT "Log"
+  TYPE_DECL
+    WHITESPACE "\n\n"
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Result"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "A"
+      GT ">"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Ok"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "A"
+      R_PAREN ")"
+    WHITESPACE " "
+    PIPE "|"
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Err"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "String"
+      R_PAREN ")"
+  FN_DECL
+    VISIBILITY
+      WHITESPACE "\n\n"
+      PUB_KW "pub"
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "identity"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Int"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Int"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"
+  EXTERN_DECL
+    WHITESPACE "\n\n"
+    EXTERN_KW "extern"
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "print"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "s"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "String"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Unit"

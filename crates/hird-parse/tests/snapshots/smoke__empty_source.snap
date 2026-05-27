@@ -1,0 +1,6 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 59
+expression: "render_cst(\"\")"
+---
+SOURCE_FILE

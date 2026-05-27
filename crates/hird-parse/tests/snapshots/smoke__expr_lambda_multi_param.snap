@@ -1,0 +1,24 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 203
+expression: "render_cst(\"fn f() = \\\\x y -> x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    LAMBDA_EXPR
+      WHITESPACE " "
+      LAMBDA "\\"
+      IDENT "x"
+      WHITESPACE " "
+      IDENT "y"
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "x"
