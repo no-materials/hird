@@ -35,6 +35,8 @@ pub enum DiagnosticCode {
     P0004,
     /// Malformed type annotation.
     P0005,
+    /// Nesting depth limit exceeded.
+    P0006,
 }
 
 impl DiagnosticCode {
@@ -47,6 +49,7 @@ impl DiagnosticCode {
             Self::P0003 => "P0003",
             Self::P0004 => "P0004",
             Self::P0005 => "P0005",
+            Self::P0006 => "P0006",
         }
     }
 }

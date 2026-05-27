@@ -60,12 +60,15 @@ pub fn parse(source: &str, source_id: u32) -> ParseResult {
     }
 }
 
+const MAX_NESTING: u32 = 256;
+
 struct Parser<'src, 'tok> {
     source: &'src str,
     source_id: u32,
     tokens: &'tok [Token],
     pos: usize,
     prev_end: u32,
+    depth: u32,
     builder: GreenNodeBuilder<'static, 'static, SyntaxKind>,
     diagnostics: Vec<ParseDiagnostic>,
 }
@@ -78,6 +81,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             tokens,
             pos: 0,
             prev_end: 0,
+            depth: 0,
             builder: GreenNodeBuilder::new(),
             diagnostics: Vec::new(),
         }
@@ -216,6 +220,18 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         });
         self.bump();
         self.finish_node();
+    }
+
+    fn too_deep(&mut self) -> bool {
+        if self.depth >= MAX_NESTING {
+            self.diagnostics.push(ParseDiagnostic {
+                code: DiagnosticCode::P0006,
+                span: self.current_span(),
+                message: "nesting depth limit reached",
+            });
+            return true;
+        }
+        false
     }
 
     // ── tree construction ───────────────────────────────────────
@@ -554,7 +570,12 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     // ── type expressions ────────────────────────────────────────
 
     fn parse_type_expr(&mut self) {
+        if self.too_deep() {
+            return;
+        }
+        self.depth += 1;
         self.parse_fn_type();
+        self.depth -= 1;
     }
 
     fn parse_fn_type(&mut self) {
@@ -630,12 +651,17 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     // ── expressions ─────────────────────────────────────────────
 
     fn parse_expr(&mut self) {
+        if self.too_deep() {
+            return;
+        }
+        self.depth += 1;
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
             SyntaxKind::LAMBDA => self.parse_lambda_expr(),
             SyntaxKind::IF_KW => self.parse_if_expr(),
             _ => self.parse_atom_expr(),
         }
+        self.depth -= 1;
     }
 
     fn parse_let_expr(&mut self) {

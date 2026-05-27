@@ -127,6 +127,32 @@ fn invalid_type_not_misread_as_effect() {
     insta::assert_snapshot!(render_cst("fn f(x: !) = x"));
 }
 
+#[test]
+fn deep_nesting_produces_diagnostic() {
+    let depth = 300;
+    let mut src = String::from("fn f() = ");
+    for _ in 0..depth {
+        src.push_str("if ");
+    }
+    src.push('x');
+    for _ in 0..depth {
+        src.push_str(" then x else x");
+    }
+    let result = hird_parse::parse(&src, 0);
+    assert!(
+        !result.is_ok(),
+        "deeply nested input should produce a diagnostic"
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|d| d.message == "nesting depth limit reached"),
+        "expected nesting-depth diagnostic, got: {:?}",
+        result.diagnostics()
+    );
+}
+
 // ── type declarations ───────────────────────────────────────────
 
 #[test]
