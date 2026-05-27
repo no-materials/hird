@@ -1,0 +1,25 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 127
+expression: "render_cst(\"fn f(x: !) = x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        ERROR
+          WHITESPACE " "
+          BANG "!"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"
+---
+P0002 8..9: expected type

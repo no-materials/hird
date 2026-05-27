@@ -608,11 +608,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 }
             }
             _ => {
-                self.diagnostics.push(ParseDiagnostic {
-                    code: DiagnosticCode::P0005,
-                    span: self.current_span(),
-                    message: "expected type",
-                });
+                self.error_bump("expected type");
             }
         }
     }

@@ -120,6 +120,13 @@ fn fn_trailing_comma_params() {
     insta::assert_snapshot!(render_cst("fn f(x: Int, y: Int,) = x"));
 }
 
+// ── error recovery ──────────────────────────────────────────────
+
+#[test]
+fn invalid_type_not_misread_as_effect() {
+    insta::assert_snapshot!(render_cst("fn f(x: !) = x"));
+}
+
 // ── type declarations ───────────────────────────────────────────
 
 #[test]
