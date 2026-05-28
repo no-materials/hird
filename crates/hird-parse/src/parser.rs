@@ -225,7 +225,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn too_deep(&mut self) -> bool {
         if self.depth >= MAX_NESTING {
             self.diagnostics.push(ParseDiagnostic {
-                code: DiagnosticCode::P0006,
+                code: DiagnosticCode::P0004,
                 span: self.current_span(),
                 message: "nesting depth limit reached",
             });
