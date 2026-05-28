@@ -244,6 +244,36 @@ fn expr_paren() {
     insta::assert_snapshot!(render_cst("fn f() = (42)"));
 }
 
+#[test]
+fn expr_binary_precedence() {
+    insta::assert_snapshot!(render_cst("fn f() = x + y * z"));
+}
+
+#[test]
+fn expr_binary_paren_precedence() {
+    insta::assert_snapshot!(render_cst("fn f() = (x + y) * z"));
+}
+
+#[test]
+fn expr_application_chain() {
+    insta::assert_snapshot!(render_cst("fn f() = f x y"));
+}
+
+#[test]
+fn expr_application_binds_tighter_than_binary() {
+    insta::assert_snapshot!(render_cst("fn f() = f x + g y"));
+}
+
+#[test]
+fn expr_field_chain() {
+    insta::assert_snapshot!(render_cst("fn f() = x.y.z"));
+}
+
+#[test]
+fn expr_application_with_field_arg() {
+    insta::assert_snapshot!(render_cst("fn f() = f x.y"));
+}
+
 // ── type expressions ────────────────────────────────────────────
 
 #[test]

@@ -662,13 +662,84 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             return;
         }
         self.depth += 1;
+        self.parse_expr_bp(0);
+        self.depth -= 1;
+    }
+
+    fn parse_expr_bp(&mut self, min_bp: u8) {
+        let lhs = self.checkpoint();
+        self.parse_prefix_expr();
+
+        loop {
+            if Self::field_bp() >= min_bp && self.at(SyntaxKind::DOT) {
+                self.start_node_at(lhs, SyntaxKind::FIELD_EXPR);
+                self.bump();
+                self.expect(SyntaxKind::IDENT);
+                self.finish_node();
+                continue;
+            }
+
+            if Self::app_bp() >= min_bp && self.at_app_arg_start() {
+                self.start_node_at(lhs, SyntaxKind::APP_EXPR);
+                self.parse_expr_bp(Self::app_bp() + 1);
+                self.finish_node();
+                continue;
+            }
+
+            let Some((left_bp, right_bp)) = Self::infix_bp(self.current()) else {
+                break;
+            };
+            if left_bp < min_bp {
+                break;
+            }
+
+            self.start_node_at(lhs, SyntaxKind::BIN_EXPR);
+            self.bump();
+            self.parse_expr_bp(right_bp);
+            self.finish_node();
+        }
+    }
+
+    fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
             SyntaxKind::LAMBDA => self.parse_lambda_expr(),
             SyntaxKind::IF_KW => self.parse_if_expr(),
             _ => self.parse_atom_expr(),
         }
-        self.depth -= 1;
+    }
+
+    const fn field_bp() -> u8 {
+        50
+    }
+
+    const fn app_bp() -> u8 {
+        40
+    }
+
+    const fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8)> {
+        match kind {
+            SyntaxKind::STAR | SyntaxKind::SLASH => Some((30, 31)),
+            SyntaxKind::PLUS | SyntaxKind::MINUS => Some((20, 21)),
+            SyntaxKind::LT
+            | SyntaxKind::LE
+            | SyntaxKind::GT
+            | SyntaxKind::GE
+            | SyntaxKind::EQ_EQ
+            | SyntaxKind::BANG_EQ => Some((10, 11)),
+            _ => None,
+        }
+    }
+
+    fn at_app_arg_start(&self) -> bool {
+        matches!(
+            self.current(),
+            SyntaxKind::IDENT
+                | SyntaxKind::INT
+                | SyntaxKind::FLOAT
+                | SyntaxKind::STRING
+                | SyntaxKind::L_PAREN
+        )
     }
 
     fn parse_let_expr(&mut self) {
