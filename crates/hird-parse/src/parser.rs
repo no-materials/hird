@@ -595,9 +595,12 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     fn parse_app_type(&mut self) {
+        let cp = self.checkpoint();
         self.parse_atom_type();
         if self.at(SyntaxKind::LT) {
+            self.start_node_at(cp, SyntaxKind::APP_TYPE);
             self.parse_type_args();
+            self.finish_node();
         }
     }
 

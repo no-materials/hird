@@ -231,6 +231,8 @@ pub enum SyntaxKind {
     TYPE_ANN,
     /// Type argument list (`<A, B>`).
     TYPE_ARGS,
+    /// Applied type (`List<Int>`).
+    APP_TYPE,
     /// Function type (`A → B`).
     FN_TYPE,
     /// Tuple type (`(A, B)`).
