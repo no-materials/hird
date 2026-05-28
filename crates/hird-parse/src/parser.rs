@@ -736,6 +736,7 @@ fn expected_msg(kind: SyntaxKind) -> &'static str {
         SyntaxKind::EQ => "expected `=`",
         SyntaxKind::ARROW => "expected `\u{2192}`",
         SyntaxKind::COLON => "expected `:`",
+        SyntaxKind::COLON_COLON => "expected `::`",
         SyntaxKind::L_PAREN => "expected `(`",
         SyntaxKind::R_PAREN => "expected `)`",
         SyntaxKind::L_BRACE => "expected `{`",
