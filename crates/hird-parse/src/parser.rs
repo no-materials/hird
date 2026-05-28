@@ -613,7 +613,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 let cp = self.checkpoint();
                 self.bump();
                 if self.at(SyntaxKind::R_PAREN) {
+                    self.start_node_at(cp, SyntaxKind::TUPLE_TYPE);
                     self.bump();
+                    self.finish_node();
                     return;
                 }
                 self.parse_type_expr();
@@ -628,7 +630,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                     self.expect(SyntaxKind::R_PAREN);
                     self.finish_node();
                 } else {
+                    self.start_node_at(cp, SyntaxKind::PAREN_TYPE);
                     self.expect(SyntaxKind::R_PAREN);
+                    self.finish_node();
                 }
             }
             _ => {

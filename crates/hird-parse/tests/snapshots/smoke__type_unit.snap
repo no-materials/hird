@@ -1,0 +1,24 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 266
+expression: "render_cst(\"fn f(x: ()) = x\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        TUPLE_TYPE
+          WHITESPACE " "
+          L_PAREN "("
+          R_PAREN ")"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    IDENT "x"

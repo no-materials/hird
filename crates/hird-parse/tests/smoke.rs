@@ -257,6 +257,16 @@ fn type_applied() {
 }
 
 #[test]
+fn type_paren() {
+    insta::assert_snapshot!(render_cst("fn f(x: (Int)) = x"));
+}
+
+#[test]
+fn type_unit() {
+    insta::assert_snapshot!(render_cst("fn f(x: ()) = x"));
+}
+
+#[test]
 fn type_tuple() {
     insta::assert_snapshot!(render_cst("fn f(x: (Int, Bool)) = x"));
 }

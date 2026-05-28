@@ -235,6 +235,8 @@ pub enum SyntaxKind {
     APP_TYPE,
     /// Function type (`A → B`).
     FN_TYPE,
+    /// Parenthesised type (`(T)`).
+    PAREN_TYPE,
     /// Tuple type (`(A, B)`).
     TUPLE_TYPE,
     /// Constructor pattern (`Foo(a, b)`).
