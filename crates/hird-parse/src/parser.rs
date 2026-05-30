@@ -658,19 +658,24 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     // ── expressions ─────────────────────────────────────────────
 
     fn parse_expr(&mut self) {
+        self.parse_expr_bp(0);
+    }
+
+    fn parse_expr_bp(&mut self, min_bp: u8) {
         if self.too_deep() {
             return;
         }
         self.depth += 1;
-        self.parse_expr_bp(0);
-        self.depth -= 1;
-    }
-
-    fn parse_expr_bp(&mut self, min_bp: u8) {
         let lhs = self.checkpoint();
         self.parse_prefix_expr();
 
         loop {
+            // Bound operator recursion: the application branch consumes no
+            // token before recursing, so without this it spins at the limit.
+            if self.depth >= MAX_NESTING {
+                break;
+            }
+
             if Self::field_bp() >= min_bp && self.at(SyntaxKind::DOT) {
                 self.start_node_at(lhs, SyntaxKind::FIELD_EXPR);
                 self.bump();
@@ -698,6 +703,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             self.parse_expr_bp(right_bp);
             self.finish_node();
         }
+        self.depth -= 1;
     }
 
     fn parse_prefix_expr(&mut self) {

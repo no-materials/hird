@@ -153,6 +153,34 @@ fn deep_nesting_produces_diagnostic() {
     );
 }
 
+#[test]
+fn deep_application_nesting_produces_diagnostic() {
+    // Covers the operator/application recursion path; the test above covers
+    // prefix recursion. Both must terminate with a diagnostic, not hang.
+    let depth = 1000;
+    let mut src = String::from("fn f() = ");
+    for _ in 0..depth {
+        src.push_str("f (");
+    }
+    src.push('x');
+    for _ in 0..depth {
+        src.push(')');
+    }
+    let result = hird_parse::parse(&src, 0);
+    assert!(
+        !result.is_ok(),
+        "deeply nested application should produce a diagnostic"
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|d| d.message == "nesting depth limit reached"),
+        "expected nesting-depth diagnostic, got: {:?}",
+        result.diagnostics()
+    );
+}
+
 // ── type declarations ───────────────────────────────────────────
 
 #[test]
