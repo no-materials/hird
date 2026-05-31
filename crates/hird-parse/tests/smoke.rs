@@ -302,6 +302,58 @@ fn expr_application_with_field_arg() {
     insta::assert_snapshot!(render_cst("fn f() = f x.y"));
 }
 
+// ── literals ────────────────────────────────────────────────────
+
+#[test]
+fn expr_tuple() {
+    insta::assert_snapshot!(render_cst("fn f() = (a, b)"));
+}
+
+#[test]
+fn expr_tuple_trailing_comma() {
+    insta::assert_snapshot!(render_cst("fn f() = (a, b,)"));
+}
+
+#[test]
+fn expr_unit() {
+    insta::assert_snapshot!(render_cst("fn f() = ()"));
+}
+
+#[test]
+fn expr_list() {
+    insta::assert_snapshot!(render_cst("fn f() = [a, b, c]"));
+}
+
+#[test]
+fn expr_list_empty() {
+    insta::assert_snapshot!(render_cst("fn f() = []"));
+}
+
+#[test]
+fn expr_record() {
+    insta::assert_snapshot!(render_cst("fn f() = { x: 1, y: 2 }"));
+}
+
+#[test]
+fn expr_record_empty() {
+    insta::assert_snapshot!(render_cst("fn f() = {}"));
+}
+
+#[test]
+fn expr_list_of_records() {
+    insta::assert_snapshot!(render_cst("fn f() = [{ x: 1 }, { x: 2 }]"));
+}
+
+#[test]
+fn expr_record_of_lists() {
+    insta::assert_snapshot!(render_cst("fn f() = { xs: [1, 2], ys: [3] }"));
+}
+
+#[test]
+fn expr_application_list_arg() {
+    insta::assert_snapshot!(render_cst("fn f() = g [1, 2]"));
+}
+
 // ── type expressions ────────────────────────────────────────────
 
 #[test]

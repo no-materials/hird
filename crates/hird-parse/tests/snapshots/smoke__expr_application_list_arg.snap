@@ -1,0 +1,24 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = g [1, 2]\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    APP_EXPR
+      WHITESPACE " "
+      IDENT "g"
+      LIST_LIT
+        WHITESPACE " "
+        L_BRACKET "["
+        INT "1"
+        COMMA ","
+        WHITESPACE " "
+        INT "2"
+        R_BRACKET "]"

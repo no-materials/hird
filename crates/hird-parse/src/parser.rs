@@ -738,6 +738,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     fn at_app_arg_start(&self) -> bool {
+        // `{` is excluded: a record literal is not a juxtaposition argument,
+        // which keeps `{` free to disambiguate against a future block form.
         matches!(
             self.current(),
             SyntaxKind::IDENT
@@ -745,6 +747,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 | SyntaxKind::FLOAT
                 | SyntaxKind::STRING
                 | SyntaxKind::L_PAREN
+                | SyntaxKind::L_BRACKET
         )
     }
 
@@ -793,17 +796,83 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::IDENT | SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
                 self.bump();
             }
-            SyntaxKind::L_PAREN => {
-                self.start_node(SyntaxKind::PAREN_EXPR);
-                self.bump();
-                self.parse_expr();
-                self.expect(SyntaxKind::R_PAREN);
-                self.finish_node();
-            }
+            SyntaxKind::L_PAREN => self.parse_paren_or_tuple_expr(),
+            SyntaxKind::L_BRACKET => self.parse_list_lit(),
+            SyntaxKind::L_BRACE => self.parse_record_lit(),
             _ => {
                 self.error_bump("expected expression");
             }
         }
+    }
+
+    /// `(e)` is parenthesised, `(a, b, ...)` is a tuple, and `()` is unit.
+    fn parse_paren_or_tuple_expr(&mut self) {
+        let cp = self.checkpoint();
+        self.bump();
+        if self.at(SyntaxKind::R_PAREN) {
+            self.start_node_at(cp, SyntaxKind::TUPLE_LIT);
+            self.bump();
+            self.finish_node();
+            return;
+        }
+        self.parse_expr();
+        if self.at(SyntaxKind::COMMA) {
+            self.start_node_at(cp, SyntaxKind::TUPLE_LIT);
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_PAREN) {
+                    break;
+                }
+                self.parse_expr();
+            }
+            self.expect(SyntaxKind::R_PAREN);
+            self.finish_node();
+        } else {
+            self.start_node_at(cp, SyntaxKind::PAREN_EXPR);
+            self.expect(SyntaxKind::R_PAREN);
+            self.finish_node();
+        }
+    }
+
+    fn parse_list_lit(&mut self) {
+        self.start_node(SyntaxKind::LIST_LIT);
+        self.expect(SyntaxKind::L_BRACKET);
+        if !self.at(SyntaxKind::R_BRACKET) {
+            self.parse_expr();
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACKET) {
+                    break;
+                }
+                self.parse_expr();
+            }
+        }
+        self.expect(SyntaxKind::R_BRACKET);
+        self.finish_node();
+    }
+
+    /// `{` always begins a record literal here; there is no block-expression
+    /// form to disambiguate against. Fields use `name: expr`.
+    fn parse_record_lit(&mut self) {
+        self.start_node(SyntaxKind::RECORD_LIT);
+        self.expect(SyntaxKind::L_BRACE);
+        if !self.at(SyntaxKind::R_BRACE) {
+            self.parse_record_field();
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACE) {
+                    break;
+                }
+                self.parse_record_field();
+            }
+        }
+        self.expect(SyntaxKind::R_BRACE);
+        self.finish_node();
+    }
+
+    fn parse_record_field(&mut self) {
+        self.start_node(SyntaxKind::RECORD_FIELD);
+        self.expect(SyntaxKind::IDENT);
+        self.expect(SyntaxKind::COLON);
+        self.parse_expr();
+        self.finish_node();
     }
 }
 
