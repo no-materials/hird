@@ -711,6 +711,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::LET_KW => self.parse_let_expr(),
             SyntaxKind::LAMBDA => self.parse_lambda_expr(),
             SyntaxKind::IF_KW => self.parse_if_expr(),
+            SyntaxKind::MATCH_KW => self.parse_match_expr(),
             _ => self.parse_atom_expr(),
         }
     }
@@ -787,6 +788,32 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::THEN_KW);
         self.parse_expr();
         self.expect(SyntaxKind::ELSE_KW);
+        self.parse_expr();
+        self.finish_node();
+    }
+
+    fn parse_match_expr(&mut self) {
+        self.start_node(SyntaxKind::MATCH_EXPR);
+        self.expect(SyntaxKind::MATCH_KW);
+        self.parse_expr();
+        self.expect(SyntaxKind::L_BRACE);
+        if !self.at(SyntaxKind::R_BRACE) {
+            self.parse_match_arm();
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACE) {
+                    break;
+                }
+                self.parse_match_arm();
+            }
+        }
+        self.expect(SyntaxKind::R_BRACE);
+        self.finish_node();
+    }
+
+    fn parse_match_arm(&mut self) {
+        self.start_node(SyntaxKind::MATCH_ARM);
+        self.parse_pattern();
+        self.expect(SyntaxKind::ARROW);
         self.parse_expr();
         self.finish_node();
     }
@@ -873,6 +900,104 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::COLON);
         self.parse_expr();
         self.finish_node();
+    }
+
+    // ── patterns ────────────────────────────────────────────────
+
+    fn parse_pattern(&mut self) {
+        if self.too_deep() {
+            return;
+        }
+        self.depth += 1;
+        self.parse_pattern_inner();
+        self.depth -= 1;
+    }
+
+    fn parse_pattern_inner(&mut self) {
+        match self.current() {
+            SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
+                self.start_node(SyntaxKind::LITERAL_PAT);
+                self.bump();
+                self.finish_node();
+            }
+            SyntaxKind::L_PAREN => self.parse_tuple_pattern(),
+            SyntaxKind::IDENT => {
+                if self.current_ident_text() == "_" {
+                    self.start_node(SyntaxKind::WILDCARD_PAT);
+                    self.bump();
+                    self.finish_node();
+                } else if self.current_ident_is_ctor() {
+                    self.parse_constructor_pattern();
+                } else {
+                    self.start_node(SyntaxKind::BIND_PAT);
+                    self.bump();
+                    self.finish_node();
+                }
+            }
+            _ => {
+                self.error_bump("expected pattern");
+            }
+        }
+    }
+
+    /// `(p)` is a grouped pattern (no wrapper node), `(a, b, ...)` is a tuple
+    /// pattern, and `()` is the empty tuple pattern.
+    fn parse_tuple_pattern(&mut self) {
+        let cp = self.checkpoint();
+        self.bump();
+        if self.at(SyntaxKind::R_PAREN) {
+            self.start_node_at(cp, SyntaxKind::TUPLE_PAT);
+            self.bump();
+            self.finish_node();
+            return;
+        }
+        self.parse_pattern();
+        if self.at(SyntaxKind::COMMA) {
+            self.start_node_at(cp, SyntaxKind::TUPLE_PAT);
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_PAREN) {
+                    break;
+                }
+                self.parse_pattern();
+            }
+            self.expect(SyntaxKind::R_PAREN);
+            self.finish_node();
+        } else {
+            self.expect(SyntaxKind::R_PAREN);
+        }
+    }
+
+    fn parse_constructor_pattern(&mut self) {
+        self.start_node(SyntaxKind::CONSTRUCTOR_PAT);
+        self.bump();
+        if self.eat(SyntaxKind::L_PAREN) {
+            if !self.at(SyntaxKind::R_PAREN) {
+                self.parse_pattern();
+                while self.eat(SyntaxKind::COMMA) {
+                    if self.at(SyntaxKind::R_PAREN) {
+                        break;
+                    }
+                    self.parse_pattern();
+                }
+            }
+            self.expect(SyntaxKind::R_PAREN);
+        }
+        self.finish_node();
+    }
+
+    fn current_ident_text(&self) -> &str {
+        self.current_span().text(self.source)
+    }
+
+    /// Whether the current identifier is `PascalCase` (constructor-shaped).
+    ///
+    /// Classification is by the first non-underscore byte, mirroring the
+    /// lexer's naming rule; all-underscore identifiers are not constructors.
+    fn current_ident_is_ctor(&self) -> bool {
+        self.current_ident_text()
+            .bytes()
+            .find(|b| *b != b'_')
+            .is_some_and(|b| b.is_ascii_uppercase())
     }
 }
 

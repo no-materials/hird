@@ -1,0 +1,39 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match n { 0 -> a, 1 -> b }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "n"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        LITERAL_PAT
+          WHITESPACE " "
+          INT "0"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "a"
+      COMMA ","
+      MATCH_ARM
+        LITERAL_PAT
+          WHITESPACE " "
+          INT "1"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "b"
+      WHITESPACE " "
+      R_BRACE "}"

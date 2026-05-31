@@ -203,13 +203,13 @@ pub enum SyntaxKind {
     LAMBDA_EXPR,
     /// Match expression.
     MATCH_EXPR,
-    /// Single match arm (`pattern ⇒ expr`).
+    /// Single match arm (`pattern → expr`).
     MATCH_ARM,
     /// If-then-else expression.
     IF_EXPR,
     /// Handle expression.
     HANDLE_EXPR,
-    /// Single handle arm (`Effect ⇒ impl`).
+    /// Single handle arm (`Effect → impl`).
     HANDLE_ARM,
     /// Binary operator expression.
     BIN_EXPR,

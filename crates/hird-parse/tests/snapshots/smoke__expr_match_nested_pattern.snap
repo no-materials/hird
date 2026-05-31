@@ -1,0 +1,42 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match x { Foo(Bar(y), _) -> y }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "x"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        CONSTRUCTOR_PAT
+          WHITESPACE " "
+          IDENT "Foo"
+          L_PAREN "("
+          CONSTRUCTOR_PAT
+            IDENT "Bar"
+            L_PAREN "("
+            BIND_PAT
+              IDENT "y"
+            R_PAREN ")"
+          COMMA ","
+          WILDCARD_PAT
+            WHITESPACE " "
+            IDENT "_"
+          R_PAREN ")"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "y"
+      WHITESPACE " "
+      R_BRACE "}"

@@ -1,0 +1,43 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match msg { PlanRepo(path) -> path, Shutdown -> x }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "msg"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        CONSTRUCTOR_PAT
+          WHITESPACE " "
+          IDENT "PlanRepo"
+          L_PAREN "("
+          BIND_PAT
+            IDENT "path"
+          R_PAREN ")"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "path"
+      COMMA ","
+      MATCH_ARM
+        CONSTRUCTOR_PAT
+          WHITESPACE " "
+          IDENT "Shutdown"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "x"
+      WHITESPACE " "
+      R_BRACE "}"

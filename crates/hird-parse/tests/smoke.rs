@@ -354,6 +354,80 @@ fn expr_application_list_arg() {
     insta::assert_snapshot!(render_cst("fn f() = g [1, 2]"));
 }
 
+// ── match expressions ───────────────────────────────────────────
+
+#[test]
+fn expr_match_basic() {
+    insta::assert_snapshot!(render_cst("fn f() = match x { Foo -> 1, Bar -> 2 }"));
+}
+
+#[test]
+fn expr_match_constructor_args() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = match msg { PlanRepo(path) -> path, Shutdown -> x }"
+    ));
+}
+
+#[test]
+fn expr_match_ctor_vs_binding() {
+    // `None` is PascalCase -> CONSTRUCTOR_PAT; `y` is snake_case -> BIND_PAT.
+    insta::assert_snapshot!(render_cst("fn f() = match x { None -> 0, y -> y }"));
+}
+
+#[test]
+fn expr_match_wildcard() {
+    insta::assert_snapshot!(render_cst("fn f() = match x { _ -> 0 }"));
+}
+
+#[test]
+fn expr_match_literal() {
+    insta::assert_snapshot!(render_cst("fn f() = match n { 0 -> a, 1 -> b }"));
+}
+
+#[test]
+fn expr_match_tuple_pattern() {
+    insta::assert_snapshot!(render_cst("fn f() = match p { (a, b) -> a }"));
+}
+
+#[test]
+fn expr_match_nested_pattern() {
+    insta::assert_snapshot!(render_cst("fn f() = match x { Foo(Bar(y), _) -> y }"));
+}
+
+#[test]
+fn expr_match_trailing_comma() {
+    insta::assert_snapshot!(render_cst("fn f() = match x { A -> 1, }"));
+}
+
+#[test]
+fn deep_pattern_nesting_produces_diagnostic() {
+    // Patterns are a new recursion site; the depth guard must terminate them
+    // with a diagnostic rather than overflow the stack.
+    let depth = 1000;
+    let mut src = String::from("fn f() = match x { ");
+    for _ in 0..depth {
+        src.push_str("Foo(");
+    }
+    src.push('y');
+    for _ in 0..depth {
+        src.push(')');
+    }
+    src.push_str(" -> y }");
+    let result = hird_parse::parse(&src, 0);
+    assert!(
+        !result.is_ok(),
+        "deeply nested pattern should produce a diagnostic"
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|d| d.message == "nesting depth limit reached"),
+        "expected nesting-depth diagnostic, got: {:?}",
+        result.diagnostics()
+    );
+}
+
 // ── type expressions ────────────────────────────────────────────
 
 #[test]
