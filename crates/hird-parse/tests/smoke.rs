@@ -428,6 +428,32 @@ fn deep_pattern_nesting_produces_diagnostic() {
     );
 }
 
+// ── handle expressions ──────────────────────────────────────────
+
+#[test]
+fn expr_handle_basic() {
+    insta::assert_snapshot!(render_cst("fn f() = handle { Log -> capturing } in body"));
+}
+
+#[test]
+fn expr_handle_parametric_effect() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = handle { Tool<ReadRepo> -> mock_read } in run(config)"
+    ));
+}
+
+#[test]
+fn expr_handle_multi_arm() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = handle { Tool<ReadRepo> -> a, Log -> b } in planner_main(config)"
+    ));
+}
+
+#[test]
+fn expr_handle_trailing_comma() {
+    insta::assert_snapshot!(render_cst("fn f() = handle { Log -> a, } in m"));
+}
+
 // ── type expressions ────────────────────────────────────────────
 
 #[test]

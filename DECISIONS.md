@@ -237,6 +237,47 @@ README files in lockstep.
 
 ---
 
+## ADR-009: Expression bodies are bare; no block expressions in v0.1
+
+**Date**: 2026-05-31
+**Status**: Accepted
+
+### Context
+
+Many constructs have a body: `fn`, `let … in`, `if … then … else`,
+`match` arms, and `handle … in`. The surface syntax could brace-delimit
+those bodies (a block form) or treat each as a single bare expression.
+
+Brace-delimited bodies in expression position collide with record
+literals (`{ name: expr }`), forcing lookahead to tell a block from a
+record. That cost only buys something if the language has block
+expressions (statement sequences), which v0.1 does not.
+
+### Decision
+
+v0.1 is expression-oriented. Every expression body is a single bare
+expression introduced by the construct's own keyword or symbol:
+`fn … = e`, `let … in e`, `if … then e else e`, `match … → e`, and
+`handle … in e`. There are no block expressions.
+
+Braces `{ }` are reserved for non-expression positions: effect rows
+(`! { … }`), record literals and record types, and the member lists of
+`handle` and of declaration forms (`actor`, `supervisor`). They never
+wrap an expression body, so a `{` where an expression is expected is
+unambiguously a record literal. Sequencing within a body uses nested
+`let … in`, not statement blocks.
+
+### Consequences
+
+- One uniform rule for bodies; no per-construct bracing exceptions.
+- No block-vs-record lookahead is needed in the parser.
+- The actor/supervisor handler-body grammar (not yet implemented) follows
+  the same bare-body rule.
+- If block expressions are ever wanted, they are introduced uniformly
+  across all body positions in a single change that supersedes this ADR.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here

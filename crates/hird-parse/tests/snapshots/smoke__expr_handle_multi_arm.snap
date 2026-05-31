@@ -1,0 +1,49 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = handle { Tool<ReadRepo> -> a, Log -> b } in planner_main(config)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    HANDLE_EXPR
+      WHITESPACE " "
+      HANDLE_KW "handle"
+      WHITESPACE " "
+      L_BRACE "{"
+      HANDLE_ARM
+        APP_TYPE
+          WHITESPACE " "
+          IDENT "Tool"
+          TYPE_ARGS
+            LT "<"
+            IDENT "ReadRepo"
+            GT ">"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "a"
+      COMMA ","
+      HANDLE_ARM
+        WHITESPACE " "
+        IDENT "Log"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "b"
+      WHITESPACE " "
+      R_BRACE "}"
+      WHITESPACE " "
+      IN_KW "in"
+      APP_EXPR
+        WHITESPACE " "
+        IDENT "planner_main"
+        PAREN_EXPR
+          L_PAREN "("
+          IDENT "config"
+          R_PAREN ")"

@@ -34,17 +34,11 @@ Both forms lex identically. The canonical form is the Unicode version.
 ## Function Declarations
 
 ```
-fn add(x: Int, y: Int) → Int ! {} {
-  x + y
-}
+fn add(x: Int, y: Int) → Int ! {} = x + y
 
-fn read_config(path: Path) → Config ! {Tool<ReadFile>, Exn ParseError} {
-  ...
-}
+fn read_config(path: Path) → Config ! {Tool<ReadFile>, Exn ParseError} = ...
 
-fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} {
-  ...
-}
+fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ```
 
 - `! {}` is the empty effect row (pure). Elided in display.
@@ -178,9 +172,7 @@ handle {
   Tool<ReadRepo> → mock_read_repo,
   Tool<CreateTicket> → mock_create_ticket,
   Log → capturing_log,
-} in {
-  planner_main(config)
-}
+} in planner_main(config)
 ```
 
 Handlers replace effect implementations within the block scope.
@@ -221,9 +213,7 @@ module Planner
 use Ets.{Table, lookup}
 use Log as L
 
-pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Log} {
-  ...
-}
+pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Log} = ...
 ```
 
 - `pub` for exports. Unprefixed is module-private.

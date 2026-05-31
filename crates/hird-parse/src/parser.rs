@@ -712,6 +712,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::LAMBDA => self.parse_lambda_expr(),
             SyntaxKind::IF_KW => self.parse_if_expr(),
             SyntaxKind::MATCH_KW => self.parse_match_expr(),
+            SyntaxKind::HANDLE_KW => self.parse_handle_expr(),
             _ => self.parse_atom_expr(),
         }
     }
@@ -813,6 +814,33 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn parse_match_arm(&mut self) {
         self.start_node(SyntaxKind::MATCH_ARM);
         self.parse_pattern();
+        self.expect(SyntaxKind::ARROW);
+        self.parse_expr();
+        self.finish_node();
+    }
+
+    fn parse_handle_expr(&mut self) {
+        self.start_node(SyntaxKind::HANDLE_EXPR);
+        self.expect(SyntaxKind::HANDLE_KW);
+        self.expect(SyntaxKind::L_BRACE);
+        if !self.at(SyntaxKind::R_BRACE) {
+            self.parse_handle_arm();
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACE) {
+                    break;
+                }
+                self.parse_handle_arm();
+            }
+        }
+        self.expect(SyntaxKind::R_BRACE);
+        self.expect(SyntaxKind::IN_KW);
+        self.parse_expr();
+        self.finish_node();
+    }
+
+    fn parse_handle_arm(&mut self) {
+        self.start_node(SyntaxKind::HANDLE_ARM);
+        self.parse_app_type();
         self.expect(SyntaxKind::ARROW);
         self.parse_expr();
         self.finish_node();

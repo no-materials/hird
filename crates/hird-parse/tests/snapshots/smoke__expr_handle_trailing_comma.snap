@@ -1,0 +1,32 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = handle { Log -> a, } in m\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    HANDLE_EXPR
+      WHITESPACE " "
+      HANDLE_KW "handle"
+      WHITESPACE " "
+      L_BRACE "{"
+      HANDLE_ARM
+        WHITESPACE " "
+        IDENT "Log"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "a"
+      COMMA ","
+      WHITESPACE " "
+      R_BRACE "}"
+      WHITESPACE " "
+      IN_KW "in"
+      WHITESPACE " "
+      IDENT "m"
