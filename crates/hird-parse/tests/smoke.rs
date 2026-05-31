@@ -198,11 +198,48 @@ fn type_multi_field_constructor() {
     insta::assert_snapshot!(render_cst("type Pair<A, B> = Pair(A, B)"));
 }
 
+#[test]
+fn type_leading_pipe() {
+    insta::assert_snapshot!(render_cst("type PlannerMsg = | PlanRepo(Path) | Shutdown"));
+}
+
 // ── actor declarations ──────────────────────────────────────────
 
 #[test]
 fn actor_decl() {
     insta::assert_snapshot!(render_cst("actor MyActor { state: Int, init: create }"));
+}
+
+#[test]
+fn actor_message_leading_pipe() {
+    insta::assert_snapshot!(render_cst("actor A { message: M = | Foo | Bar }"));
+}
+
+#[test]
+fn actor_init_signature() {
+    insta::assert_snapshot!(render_cst("actor A { init: fn(c: Config) -> St ! {Log} }"));
+}
+
+#[test]
+fn actor_handler_clause() {
+    insta::assert_snapshot!(render_cst("actor A { handle Msg(x) -> St ! {Log} f(x) }"));
+}
+
+#[test]
+fn actor_full() {
+    insta::assert_snapshot!(render_cst(
+        "\
+actor Planner {
+  state: PlannerState,
+  message: PlannerMsg =
+    | PlanRepo(Path)
+    | GetStatus(ReplyTo<PlannerStatus>)
+    | Shutdown,
+  init: fn(config: PlannerConfig) -> PlannerState ! {Log},
+  handle PlanRepo(path) -> PlannerState ! {Tool<ReadRepo>, Log} update(path, state),
+  handle Shutdown -> PlannerState ! {} state,
+} ! {Tool<ReadRepo>, Log}"
+    ));
 }
 
 // ── supervisor declarations ─────────────────────────────────────
@@ -211,6 +248,15 @@ fn actor_decl() {
 fn supervisor_decl() {
     insta::assert_snapshot!(render_cst(
         "supervisor MySup { strategy: one_for_one, intensity: 5 }"
+    ));
+}
+
+#[test]
+fn supervisor_full() {
+    insta::assert_snapshot!(render_cst(
+        "supervisor PlannerSup { strategy: one_for_one, intensity: 5, period: 60, \
+         children: [ { id: planner, actor: Planner, start_args: default_config(), \
+         restart: permanent } ] }"
     ));
 }
 
@@ -337,6 +383,12 @@ fn expr_record() {
 #[test]
 fn expr_record_empty() {
     insta::assert_snapshot!(render_cst("fn f() = {}"));
+}
+
+#[test]
+fn expr_record_keyword_key() {
+    // Keyword spellings (`actor`, `type`) are valid record field names.
+    insta::assert_snapshot!(render_cst("fn f() = { actor: Planner, type: Foo }"));
 }
 
 #[test]

@@ -187,6 +187,10 @@ pub enum SyntaxKind {
     ACTOR_DECL,
     /// Actor body field.
     ACTOR_FIELD,
+    /// Actor message handler clause (`handle Pat → Type ! {E} body`).
+    ACTOR_HANDLER,
+    /// Unnamed function signature (`fn(params) → Ret ! {E}`), e.g. actor `init`.
+    FN_SIG,
     /// Supervisor declaration.
     SUPERVISOR_DECL,
     /// Supervisor body field.

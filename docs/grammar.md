@@ -72,7 +72,7 @@ type_decl    ::= visibility? 'type' IDENT type_params? '=' constructors
 
 type_params  ::= '<' IDENT ( ',' IDENT )* ','? '>'
 
-constructors ::= constructor ( '|' constructor )*
+constructors ::= '|'? constructor ( '|' constructor )*
 
 constructor  ::= IDENT ( '(' field_list ')' )?
 
@@ -84,11 +84,19 @@ field_list   ::= type_expr ( ',' type_expr )* ','?
 Semantic validation deferred to Phase 7.
 
 ```
-actor_decl   ::= visibility? 'actor' IDENT '{' actor_body '}'
+actor_decl    ::= visibility? 'actor' IDENT '{' actor_body? '}' effect_ann?
 
-actor_body   ::= actor_field ( ',' actor_field )* ','?
+actor_body    ::= actor_member ( ',' actor_member )* ','?
 
-actor_field  ::= IDENT ':' ( type_expr | expr )
+actor_member  ::= actor_field | actor_handler
+
+actor_field   ::= IDENT ':' actor_value
+
+actor_value   ::= fn_sig | type_expr ( '=' constructors )?
+
+fn_sig        ::= 'fn' '(' param_list? ')' return_type? effect_ann?
+
+actor_handler ::= 'handle' pattern return_type? effect_ann? expr
 ```
 
 ## Supervisor Declarations (syntax only)
@@ -96,11 +104,11 @@ actor_field  ::= IDENT ':' ( type_expr | expr )
 Semantic validation deferred to Phase 8.
 
 ```
-supervisor_decl ::= visibility? 'supervisor' IDENT '{' supervisor_body '}'
+supervisor_decl  ::= visibility? 'supervisor' IDENT '{' supervisor_body? '}'
 
-supervisor_body ::= supervisor_field ( ',' supervisor_field )* ','?
+supervisor_body  ::= supervisor_field ( ',' supervisor_field )* ','?
 
-supervisor_field ::= IDENT ':' ( type_expr | expr )
+supervisor_field ::= IDENT ':' expr
 ```
 
 ## Effect Declarations (syntax only)
@@ -141,13 +149,13 @@ lambda_expr  ::= 'λ' IDENT+ '→' expr
 
 match_expr   ::= 'match' expr '{' match_arm* '}'
 
-match_arm    ::= pattern '⇒' expr ','?
+match_arm    ::= pattern '→' expr ','?
 
 if_expr      ::= 'if' expr 'then' expr 'else' expr
 
 handle_expr  ::= 'handle' '{' handle_arm* '}' 'in' expr
 
-handle_arm   ::= IDENT '⇒' expr ','?
+handle_arm   ::= app_type '→' expr ','?
 ```
 
 ## Infix Expressions (precedence climbing)
@@ -156,18 +164,17 @@ Precedence from lowest to highest:
 
 | Prec | Operators       | Assoc | Description         |
 |------|-----------------|-------|---------------------|
-| 1    | `\|`            | left  | pipe                |
-| 2    | `==` `!=`       | none  | equality            |
-| 3    | `<` `>` `<=` `>=` | none | comparison        |
-| 4    | `+` `-`         | left  | additive            |
-| 5    | `*` `/`         | left  | multiplicative      |
-| 6    | application     | left  | function application|
-| 7    | `.`             | left  | field access         |
+| 1    | `==` `!=`       | none  | equality            |
+| 2    | `<` `>` `<=` `>=` | none | comparison        |
+| 3    | `+` `-`         | left  | additive            |
+| 4    | `*` `/`         | left  | multiplicative      |
+| 5    | application     | left  | function application|
+| 6    | `.`             | left  | field access         |
 
 ```
 infix_expr   ::= prefix_expr ( bin_op prefix_expr )*
 
-bin_op       ::= '|' | '==' | '!=' | '<' | '>' | '<=' | '>='
+bin_op       ::= '==' | '!=' | '<' | '>' | '<=' | '>='
                | '+' | '-' | '*' | '/'
 
 prefix_expr  ::= app_expr
@@ -192,8 +199,13 @@ list_lit     ::= '[' ( expr ( ',' expr )* ','? )? ']'
 
 record_lit   ::= '{' ( record_field ( ',' record_field )* ','? )? '}'
 
-record_field ::= IDENT '=' expr
+record_field ::= field_name ':' expr
+
+field_name   ::= IDENT | keyword
 ```
+
+A `field_name` may be a keyword spelling (e.g. `actor: Planner` in a supervisor
+child spec); the `name :` shape leaves no ambiguity.
 
 ## Patterns
 

@@ -1,0 +1,25 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"type PlannerMsg = | PlanRepo(Path) | Shutdown\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "PlannerMsg"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    PIPE "|"
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "PlanRepo"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "Path"
+      R_PAREN ")"
+    WHITESPACE " "
+    PIPE "|"
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Shutdown"

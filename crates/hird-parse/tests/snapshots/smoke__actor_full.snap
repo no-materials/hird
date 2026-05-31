@@ -1,0 +1,161 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"\\\nactor Planner {\n  state: PlannerState,\n  message: PlannerMsg =\n    | PlanRepo(Path)\n    | GetStatus(ReplyTo<PlannerStatus>)\n    | Shutdown,\n  init: fn(config: PlannerConfig) -> PlannerState ! {Log},\n  handle PlanRepo(path) -> PlannerState ! {Tool<ReadRepo>, Log} update(path, state),\n  handle Shutdown -> PlannerState ! {} state,\n} ! {Tool<ReadRepo>, Log}\")"
+---
+SOURCE_FILE
+  ACTOR_DECL
+    ACTOR_KW "actor"
+    WHITESPACE " "
+    IDENT "Planner"
+    WHITESPACE " "
+    L_BRACE "{"
+    ACTOR_FIELD
+      WHITESPACE "\n  "
+      IDENT "state"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "PlannerState"
+    COMMA ","
+    ACTOR_FIELD
+      WHITESPACE "\n  "
+      IDENT "message"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "PlannerMsg"
+      WHITESPACE " "
+      EQ "="
+      WHITESPACE "\n    "
+      PIPE "|"
+      CONSTRUCTOR
+        WHITESPACE " "
+        IDENT "PlanRepo"
+        L_PAREN "("
+        FIELD_LIST
+          IDENT "Path"
+        R_PAREN ")"
+      WHITESPACE "\n    "
+      PIPE "|"
+      CONSTRUCTOR
+        WHITESPACE " "
+        IDENT "GetStatus"
+        L_PAREN "("
+        FIELD_LIST
+          APP_TYPE
+            IDENT "ReplyTo"
+            TYPE_ARGS
+              LT "<"
+              IDENT "PlannerStatus"
+              GT ">"
+        R_PAREN ")"
+      WHITESPACE "\n    "
+      PIPE "|"
+      CONSTRUCTOR
+        WHITESPACE " "
+        IDENT "Shutdown"
+    COMMA ","
+    ACTOR_FIELD
+      WHITESPACE "\n  "
+      IDENT "init"
+      COLON ":"
+      FN_SIG
+        WHITESPACE " "
+        FN_KW "fn"
+        L_PAREN "("
+        PARAM_LIST
+          PARAM
+            IDENT "config"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "PlannerConfig"
+        R_PAREN ")"
+        RETURN_TYPE
+          WHITESPACE " "
+          ARROW "->"
+          WHITESPACE " "
+          IDENT "PlannerState"
+        EFFECT_ANN
+          WHITESPACE " "
+          BANG "!"
+          WHITESPACE " "
+          L_BRACE "{"
+          IDENT "Log"
+          R_BRACE "}"
+    COMMA ","
+    ACTOR_HANDLER
+      WHITESPACE "\n  "
+      HANDLE_KW "handle"
+      CONSTRUCTOR_PAT
+        WHITESPACE " "
+        IDENT "PlanRepo"
+        L_PAREN "("
+        BIND_PAT
+          IDENT "path"
+        R_PAREN ")"
+      RETURN_TYPE
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "PlannerState"
+      EFFECT_ANN
+        WHITESPACE " "
+        BANG "!"
+        WHITESPACE " "
+        L_BRACE "{"
+        APP_TYPE
+          IDENT "Tool"
+          TYPE_ARGS
+            LT "<"
+            IDENT "ReadRepo"
+            GT ">"
+        COMMA ","
+        WHITESPACE " "
+        IDENT "Log"
+        R_BRACE "}"
+      APP_EXPR
+        WHITESPACE " "
+        IDENT "update"
+        TUPLE_LIT
+          L_PAREN "("
+          IDENT "path"
+          COMMA ","
+          WHITESPACE " "
+          IDENT "state"
+          R_PAREN ")"
+    COMMA ","
+    ACTOR_HANDLER
+      WHITESPACE "\n  "
+      HANDLE_KW "handle"
+      CONSTRUCTOR_PAT
+        WHITESPACE " "
+        IDENT "Shutdown"
+      RETURN_TYPE
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "PlannerState"
+      EFFECT_ANN
+        WHITESPACE " "
+        BANG "!"
+        WHITESPACE " "
+        L_BRACE "{"
+        R_BRACE "}"
+      WHITESPACE " "
+      IDENT "state"
+    COMMA ","
+    WHITESPACE "\n"
+    R_BRACE "}"
+    EFFECT_ANN
+      WHITESPACE " "
+      BANG "!"
+      WHITESPACE " "
+      L_BRACE "{"
+      APP_TYPE
+        IDENT "Tool"
+        TYPE_ARGS
+          LT "<"
+          IDENT "ReadRepo"
+          GT ">"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "Log"
+      R_BRACE "}"

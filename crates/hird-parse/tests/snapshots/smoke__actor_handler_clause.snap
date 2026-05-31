@@ -1,0 +1,42 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"actor A { handle Msg(x) -> St ! {Log} f(x) }\")"
+---
+SOURCE_FILE
+  ACTOR_DECL
+    ACTOR_KW "actor"
+    WHITESPACE " "
+    IDENT "A"
+    WHITESPACE " "
+    L_BRACE "{"
+    ACTOR_HANDLER
+      WHITESPACE " "
+      HANDLE_KW "handle"
+      CONSTRUCTOR_PAT
+        WHITESPACE " "
+        IDENT "Msg"
+        L_PAREN "("
+        BIND_PAT
+          IDENT "x"
+        R_PAREN ")"
+      RETURN_TYPE
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "St"
+      EFFECT_ANN
+        WHITESPACE " "
+        BANG "!"
+        WHITESPACE " "
+        L_BRACE "{"
+        IDENT "Log"
+        R_BRACE "}"
+      APP_EXPR
+        WHITESPACE " "
+        IDENT "f"
+        PAREN_EXPR
+          L_PAREN "("
+          IDENT "x"
+          R_PAREN ")"
+    WHITESPACE " "
+    R_BRACE "}"

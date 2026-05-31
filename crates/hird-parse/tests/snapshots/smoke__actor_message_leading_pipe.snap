@@ -1,0 +1,31 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"actor A { message: M = | Foo | Bar }\")"
+---
+SOURCE_FILE
+  ACTOR_DECL
+    ACTOR_KW "actor"
+    WHITESPACE " "
+    IDENT "A"
+    WHITESPACE " "
+    L_BRACE "{"
+    ACTOR_FIELD
+      WHITESPACE " "
+      IDENT "message"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "M"
+      WHITESPACE " "
+      EQ "="
+      WHITESPACE " "
+      PIPE "|"
+      CONSTRUCTOR
+        WHITESPACE " "
+        IDENT "Foo"
+      WHITESPACE " "
+      PIPE "|"
+      CONSTRUCTOR
+        WHITESPACE " "
+        IDENT "Bar"
+    WHITESPACE " "
+    R_BRACE "}"

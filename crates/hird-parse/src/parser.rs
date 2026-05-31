@@ -429,11 +429,18 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             self.parse_type_params();
         }
         self.expect(SyntaxKind::EQ);
+        self.parse_constructors();
+        self.finish_node();
+    }
+
+    /// A `|`-separated constructor list with an optional leading `|`. Shared by
+    /// `type` declarations and actor `message` fields.
+    fn parse_constructors(&mut self) {
+        self.eat(SyntaxKind::PIPE);
         self.parse_constructor();
         while self.eat(SyntaxKind::PIPE) {
             self.parse_constructor();
         }
-        self.finish_node();
     }
 
     fn parse_type_params(&mut self) {
@@ -481,23 +488,74 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::IDENT);
         self.expect(SyntaxKind::L_BRACE);
         if !self.at(SyntaxKind::R_BRACE) {
-            self.parse_actor_field();
+            self.parse_actor_member();
             while self.eat(SyntaxKind::COMMA) {
                 if self.at(SyntaxKind::R_BRACE) {
                     break;
                 }
-                self.parse_actor_field();
+                self.parse_actor_member();
             }
         }
         self.expect(SyntaxKind::R_BRACE);
+        if self.at(SyntaxKind::BANG) {
+            self.parse_effect_ann();
+        }
         self.finish_node();
     }
 
-    fn parse_actor_field(&mut self) {
+    /// An actor body member: a `handle` clause, or a `name:` field whose value
+    /// is a function signature (`init`), a type with an ADT tail (`message`), or
+    /// a plain type (`state`). Shape — not field name — selects the form.
+    fn parse_actor_member(&mut self) {
+        if self.at(SyntaxKind::HANDLE_KW) {
+            self.parse_actor_handler();
+            return;
+        }
         self.start_node(SyntaxKind::ACTOR_FIELD);
         self.expect(SyntaxKind::IDENT);
         self.expect(SyntaxKind::COLON);
+        if self.at(SyntaxKind::FN_KW) {
+            self.parse_fn_sig();
+        } else {
+            self.parse_type_expr();
+            if self.eat(SyntaxKind::EQ) {
+                self.parse_constructors();
+            }
+        }
+        self.finish_node();
+    }
+
+    /// `handle Pattern → ReturnType ! {Effects} body`. The body is a bare
+    /// expression; there is no brace-delimited block form.
+    fn parse_actor_handler(&mut self) {
+        self.start_node(SyntaxKind::ACTOR_HANDLER);
+        self.expect(SyntaxKind::HANDLE_KW);
+        self.parse_pattern();
+        if self.at(SyntaxKind::ARROW) {
+            self.parse_return_type();
+        }
+        if self.at(SyntaxKind::BANG) {
+            self.parse_effect_ann();
+        }
         self.parse_expr();
+        self.finish_node();
+    }
+
+    /// `fn ( params ) → Ret ! {Effects}` — an unnamed, bodyless signature.
+    fn parse_fn_sig(&mut self) {
+        self.start_node(SyntaxKind::FN_SIG);
+        self.expect(SyntaxKind::FN_KW);
+        self.expect(SyntaxKind::L_PAREN);
+        if !self.at(SyntaxKind::R_PAREN) {
+            self.parse_param_list();
+        }
+        self.expect(SyntaxKind::R_PAREN);
+        if self.at(SyntaxKind::ARROW) {
+            self.parse_return_type();
+        }
+        if self.at(SyntaxKind::BANG) {
+            self.parse_effect_ann();
+        }
         self.finish_node();
     }
 
@@ -924,10 +982,20 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     fn parse_record_field(&mut self) {
         self.start_node(SyntaxKind::RECORD_FIELD);
-        self.expect(SyntaxKind::IDENT);
+        self.expect_field_name();
         self.expect(SyntaxKind::COLON);
         self.parse_expr();
         self.finish_node();
+    }
+
+    /// Consume a record field name. A keyword spelling (e.g. `actor`) is a
+    /// valid field name here; the `name :` shape is unambiguous.
+    fn expect_field_name(&mut self) {
+        if self.at(SyntaxKind::IDENT) || is_keyword(self.current()) {
+            self.bump();
+        } else {
+            self.expect(SyntaxKind::IDENT);
+        }
     }
 
     // ── patterns ────────────────────────────────────────────────
@@ -1027,6 +1095,34 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             .find(|b| *b != b'_')
             .is_some_and(|b| b.is_ascii_uppercase())
     }
+}
+
+/// Whether `kind` is a reserved keyword token. Used to allow keyword spellings
+/// as record field names, where the `name :` shape leaves no ambiguity.
+fn is_keyword(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::LET_KW
+            | SyntaxKind::FN_KW
+            | SyntaxKind::MATCH_KW
+            | SyntaxKind::TYPE_KW
+            | SyntaxKind::ACTOR_KW
+            | SyntaxKind::SUPERVISOR_KW
+            | SyntaxKind::EFFECT_KW
+            | SyntaxKind::TOOL_KW
+            | SyntaxKind::HANDLE_KW
+            | SyntaxKind::SPAWN_KW
+            | SyntaxKind::SEND_KW
+            | SyntaxKind::REQUEST_KW
+            | SyntaxKind::USE_KW
+            | SyntaxKind::MODULE_KW
+            | SyntaxKind::PUB_KW
+            | SyntaxKind::EXTERN_KW
+            | SyntaxKind::IF_KW
+            | SyntaxKind::THEN_KW
+            | SyntaxKind::ELSE_KW
+            | SyntaxKind::IN_KW
+    )
 }
 
 fn expected_msg(kind: SyntaxKind) -> &'static str {

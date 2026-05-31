@@ -1,0 +1,40 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"actor A { init: fn(c: Config) -> St ! {Log} }\")"
+---
+SOURCE_FILE
+  ACTOR_DECL
+    ACTOR_KW "actor"
+    WHITESPACE " "
+    IDENT "A"
+    WHITESPACE " "
+    L_BRACE "{"
+    ACTOR_FIELD
+      WHITESPACE " "
+      IDENT "init"
+      COLON ":"
+      FN_SIG
+        WHITESPACE " "
+        FN_KW "fn"
+        L_PAREN "("
+        PARAM_LIST
+          PARAM
+            IDENT "c"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "Config"
+        R_PAREN ")"
+        RETURN_TYPE
+          WHITESPACE " "
+          ARROW "->"
+          WHITESPACE " "
+          IDENT "St"
+        EFFECT_ANN
+          WHITESPACE " "
+          BANG "!"
+          WHITESPACE " "
+          L_BRACE "{"
+          IDENT "Log"
+          R_BRACE "}"
+    WHITESPACE " "
+    R_BRACE "}"

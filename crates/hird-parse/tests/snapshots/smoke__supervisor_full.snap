@@ -1,0 +1,79 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"supervisor PlannerSup { strategy: one_for_one, intensity: 5, period: 60, \\\n         children: [ { id: planner, actor: Planner, start_args: default_config(), \\\n         restart: permanent } ] }\")"
+---
+SOURCE_FILE
+  SUPERVISOR_DECL
+    SUPERVISOR_KW "supervisor"
+    WHITESPACE " "
+    IDENT "PlannerSup"
+    WHITESPACE " "
+    L_BRACE "{"
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "strategy"
+      COLON ":"
+      WHITESPACE " "
+      IDENT "one_for_one"
+    COMMA ","
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "intensity"
+      COLON ":"
+      WHITESPACE " "
+      INT "5"
+    COMMA ","
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "period"
+      COLON ":"
+      WHITESPACE " "
+      INT "60"
+    COMMA ","
+    SUPERVISOR_FIELD
+      WHITESPACE " "
+      IDENT "children"
+      COLON ":"
+      LIST_LIT
+        WHITESPACE " "
+        L_BRACKET "["
+        RECORD_LIT
+          WHITESPACE " "
+          L_BRACE "{"
+          RECORD_FIELD
+            WHITESPACE " "
+            IDENT "id"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "planner"
+          COMMA ","
+          RECORD_FIELD
+            WHITESPACE " "
+            ACTOR_KW "actor"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "Planner"
+          COMMA ","
+          RECORD_FIELD
+            WHITESPACE " "
+            IDENT "start_args"
+            COLON ":"
+            APP_EXPR
+              WHITESPACE " "
+              IDENT "default_config"
+              TUPLE_LIT
+                L_PAREN "("
+                R_PAREN ")"
+          COMMA ","
+          RECORD_FIELD
+            WHITESPACE " "
+            IDENT "restart"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "permanent"
+          WHITESPACE " "
+          R_BRACE "}"
+        WHITESPACE " "
+        R_BRACKET "]"
+    WHITESPACE " "
+    R_BRACE "}"

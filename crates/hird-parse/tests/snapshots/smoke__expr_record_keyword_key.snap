@@ -1,0 +1,31 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = { actor: Planner, type: Foo }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    RECORD_LIT
+      WHITESPACE " "
+      L_BRACE "{"
+      RECORD_FIELD
+        WHITESPACE " "
+        ACTOR_KW "actor"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Planner"
+      COMMA ","
+      RECORD_FIELD
+        WHITESPACE " "
+        TYPE_KW "type"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Foo"
+      WHITESPACE " "
+      R_BRACE "}"
