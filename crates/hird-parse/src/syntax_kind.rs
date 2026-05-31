@@ -221,9 +221,9 @@ pub enum SyntaxKind {
     TUPLE_LIT,
     /// List literal (`[a, b, c]`).
     LIST_LIT,
-    /// Record literal (`{ x = 1, y = 2 }`).
+    /// Record literal (`{ x: 1, y: 2 }`).
     RECORD_LIT,
-    /// Record field (`name = expr`).
+    /// Record field (`name: expr`).
     RECORD_FIELD,
     /// Parenthesised expression.
     PAREN_EXPR,
