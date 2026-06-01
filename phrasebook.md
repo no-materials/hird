@@ -29,6 +29,10 @@ Both forms lex identically. The canonical form is the Unicode version.
 | `=>`  | `⇒`    | FatArrow |
 | `\`   | `λ`     | Lambda  |
 
+Relational operators (`==` `!=` `<` `>` `<=` `>=`) do not chain — they are
+one non-associative precedence tier. Write `(a == b) == c`, never
+`a == b == c`.
+
 ---
 
 ## Function Declarations

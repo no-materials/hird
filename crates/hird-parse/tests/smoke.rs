@@ -329,6 +329,24 @@ fn expr_binary_paren_precedence() {
 }
 
 #[test]
+fn expr_relational_chain_rejected() {
+    // Relational operators are one non-associative tier; chaining is a P0005.
+    insta::assert_snapshot!(render_cst("fn f() = a == b == c"));
+}
+
+#[test]
+fn expr_relational_mixed_chain_rejected() {
+    // Mixing operators within the tier is still a chain: `<` then `==`.
+    insta::assert_snapshot!(render_cst("fn f() = a < b == c"));
+}
+
+#[test]
+fn expr_relational_parenthesised_ok() {
+    // Parenthesising the left operand makes the comparison well-formed.
+    insta::assert_snapshot!(render_cst("fn f() = (a == b) == c"));
+}
+
+#[test]
 fn expr_application_chain() {
     insta::assert_snapshot!(render_cst("fn f() = f x y"));
 }

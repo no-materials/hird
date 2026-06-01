@@ -77,6 +77,15 @@ pub fn parse(source: &str, source_id: u32) -> ParseResult {
 
 const MAX_NESTING: u32 = 256;
 
+/// Associativity of an infix operator.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Assoc {
+    /// `a ⊕ b ⊕ c` groups as `(a ⊕ b) ⊕ c`.
+    Left,
+    /// `a ⊕ b ⊕ c` is rejected; the operands must be parenthesised.
+    None,
+}
+
 struct Parser<'src, 'tok> {
     source: &'src str,
     source_id: u32,
@@ -742,6 +751,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         let lhs = self.checkpoint();
         self.parse_prefix_expr();
 
+        // The binding power of the last non-associative operator consumed at
+        // this tier, if any. A second operator of the same tier is a forbidden
+        // chain (`a == b == c`); the operands must be parenthesised.
+        let mut prev_nonassoc_bp: Option<u8> = None;
+
         loop {
             // Bound operator recursion: the application branch consumes no
             // token before recursing, so without this it spins at the limit.
@@ -764,12 +778,24 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 continue;
             }
 
-            let Some((left_bp, right_bp)) = Self::infix_bp(self.current()) else {
+            let Some((left_bp, right_bp, assoc)) = Self::infix_bp(self.current()) else {
                 break;
             };
             if left_bp < min_bp {
                 break;
             }
+
+            if assoc == Assoc::None && prev_nonassoc_bp == Some(left_bp) {
+                self.diagnostics.push(ParseDiagnostic {
+                    code: DiagnosticCode::P0005,
+                    span: self.current_span(),
+                    message: "non-associative operator cannot be chained; parenthesise",
+                });
+            }
+            prev_nonassoc_bp = match assoc {
+                Assoc::None => Some(left_bp),
+                Assoc::Left => None,
+            };
 
             self.start_node_at(lhs, SyntaxKind::BIN_EXPR);
             self.bump();
@@ -798,16 +824,20 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         40
     }
 
-    const fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8)> {
+    /// Binding power and associativity of an infix operator, or `None` if
+    /// `kind` is not one. Left-associative operators bind tighter on the right
+    /// (`right_bp = left_bp + 1`); non-associative operators share that shape
+    /// but reject chaining at the same tier (see [`Self::parse_expr_bp`]).
+    const fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8, Assoc)> {
         match kind {
-            SyntaxKind::STAR | SyntaxKind::SLASH => Some((30, 31)),
-            SyntaxKind::PLUS | SyntaxKind::MINUS => Some((20, 21)),
+            SyntaxKind::STAR | SyntaxKind::SLASH => Some((30, 31, Assoc::Left)),
+            SyntaxKind::PLUS | SyntaxKind::MINUS => Some((20, 21, Assoc::Left)),
             SyntaxKind::LT
             | SyntaxKind::LE
             | SyntaxKind::GT
             | SyntaxKind::GE
             | SyntaxKind::EQ_EQ
-            | SyntaxKind::BANG_EQ => Some((10, 11)),
+            | SyntaxKind::BANG_EQ => Some((10, 11, Assoc::None)),
             _ => None,
         }
     }

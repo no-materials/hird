@@ -162,14 +162,17 @@ handle_arm   ::= app_type '→' expr ','?
 
 Precedence from lowest to highest:
 
-| Prec | Operators       | Assoc | Description         |
-|------|-----------------|-------|---------------------|
-| 1    | `==` `!=`       | none  | equality            |
-| 2    | `<` `>` `<=` `>=` | none | comparison        |
-| 3    | `+` `-`         | left  | additive            |
-| 4    | `*` `/`         | left  | multiplicative      |
-| 5    | application     | left  | function application|
-| 6    | `.`             | left  | field access         |
+| Prec | Operators                  | Assoc | Description          |
+|------|----------------------------|-------|----------------------|
+| 1    | `==` `!=` `<` `>` `<=` `>=` | none  | relational           |
+| 2    | `+` `-`                    | left  | additive             |
+| 3    | `*` `/`                    | left  | multiplicative       |
+| 4    | application                | left  | function application |
+| 5    | `.`                        | left  | field access         |
+
+The relational operators form a single non-associative tier: a chain such
+as `a == b == c` or `a < b == c` is a parse error (`P0005`). Compare
+chained results explicitly with parentheses: `(a == b) == c`.
 
 ```
 infix_expr   ::= prefix_expr ( bin_op prefix_expr )*

@@ -33,6 +33,8 @@ pub enum DiagnosticCode {
     P0003,
     /// Nesting depth limit exceeded.
     P0004,
+    /// Non-associative operator used in a chain.
+    P0005,
 }
 
 impl DiagnosticCode {
@@ -44,6 +46,7 @@ impl DiagnosticCode {
             Self::P0002 => "P0002",
             Self::P0003 => "P0003",
             Self::P0004 => "P0004",
+            Self::P0005 => "P0005",
         }
     }
 }
