@@ -9,6 +9,7 @@ description = "Hirð typed AST data structures"
 publish = false
 
 [dependencies]
+cstree.workspace = true
 hird-parse.workspace = true
 
 [lints]

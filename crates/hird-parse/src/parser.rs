@@ -10,6 +10,8 @@ use alloc::vec::Vec;
 
 use cstree::build::{Checkpoint, GreenNodeBuilder};
 use cstree::green::GreenNode;
+use cstree::interning::new_interner;
+use cstree::syntax::{ResolvedNode, SyntaxNode};
 use hird_lex::{Lexer, Span, Token};
 
 use crate::diagnostic::{DiagnosticCode, ParseDiagnostic};
@@ -18,17 +20,26 @@ use crate::syntax_kind::SyntaxKind;
 /// Result of parsing a source file.
 #[derive(Debug)]
 pub struct ParseResult {
-    /// Root green node of the CST.
-    green: GreenNode,
+    /// Resolved CST root. Owns the token interner, so token text resolves
+    /// without re-supplying the source.
+    syntax: ResolvedNode<SyntaxKind>,
     /// Diagnostics emitted during parsing.
     diagnostics: Vec<ParseDiagnostic>,
 }
 
 impl ParseResult {
+    /// Returns the resolved syntax tree root. Token text resolves directly
+    /// (e.g. [`cstree::syntax::ResolvedToken::text`]); this is the entry point
+    /// for typed AST projection.
+    #[must_use]
+    pub fn syntax(&self) -> &ResolvedNode<SyntaxKind> {
+        &self.syntax
+    }
+
     /// Returns the root green node.
     #[must_use]
     pub fn green(&self) -> &GreenNode {
-        &self.green
+        self.syntax.green()
     }
 
     /// Returns diagnostics emitted during parsing.
@@ -53,9 +64,13 @@ pub fn parse(source: &str, source_id: u32) -> ParseResult {
     let tokens: Vec<Token> = Lexer::new(source, source_id).collect();
     let mut parser = Parser::new(source, source_id, &tokens);
     parser.parse_source_file();
-    let (green, _cache) = parser.builder.finish();
+    let (green, cache) = parser.builder.finish();
+    let interner = cache
+        .and_then(|cache| cache.into_interner())
+        .unwrap_or_else(new_interner);
+    let syntax = SyntaxNode::<SyntaxKind>::new_root_with_resolver(green, interner);
     ParseResult {
-        green,
+        syntax,
         diagnostics: parser.diagnostics,
     }
 }
