@@ -1,6 +1,6 @@
 ---
 id: hir-va37
-status: open
+status: closed
 deps: [hir-ed3z]
 links: []
 created: 2026-05-22T21:36:45Z
