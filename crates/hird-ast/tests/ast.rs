@@ -22,13 +22,9 @@ fn first_fn(file: &SourceFile) -> FnDecl {
 
 /// Parse `fn f() = <expr>` and return the body expression.
 fn body(expr_src: &str) -> Expr {
-    let src = alloc_fn(expr_src);
+    let src = format!("fn f() = {expr_src}");
     let file = file(&src);
     first_fn(&file).body().expect("a fn body")
-}
-
-fn alloc_fn(expr_src: &str) -> String {
-    format!("fn f() = {expr_src}")
 }
 
 /// Collect an iterator of borrowed strings into owned ones.
