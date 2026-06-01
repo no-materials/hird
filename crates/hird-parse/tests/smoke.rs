@@ -347,6 +347,13 @@ fn expr_relational_parenthesised_ok() {
 }
 
 #[test]
+fn expr_arithmetic_then_comparison_ok() {
+    // A single comparison over an arithmetic operand is not a chain: the
+    // left-associative `+` resets the non-associative tracking.
+    insta::assert_snapshot!(render_cst("fn f() = a + b == c"));
+}
+
+#[test]
 fn expr_application_chain() {
     insta::assert_snapshot!(render_cst("fn f() = f x y"));
 }
