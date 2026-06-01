@@ -28,6 +28,11 @@ Both forms lex identically. The canonical form is the Unicode version.
 | `->`  | `→`     | Arrow   |
 | `=>`  | `⇒`    | FatArrow |
 | `\`   | `λ`     | Lambda  |
+| `&&`  | `∧`     | AmpAmp  |
+| `\|\|`  | `∨`     | PipePipe |
+
+Logical operators `&&` (`∧`) and `||` (`∨`) are left-associative and bind
+looser than comparisons: `a == b && c == d` means `(a == b) && (c == d)`.
 
 Relational operators (`==` `!=` `<` `>` `<=` `>=`) do not chain — they are
 one non-associative precedence tier. Write `(a == b) == c`, never

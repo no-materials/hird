@@ -68,8 +68,27 @@ impl<'src> Lexer<'src> {
             b';' => self.single(TokenKind::Semicolon, start),
             b'+' => self.single(TokenKind::Plus, start),
             b'*' => self.single(TokenKind::Star, start),
-            b'|' => self.single(TokenKind::Pipe, start),
             b'.' => self.single(TokenKind::Dot, start),
+
+            b'|' => {
+                self.pos += 1;
+                if bytes.get(self.pos) == Some(&b'|') {
+                    self.pos += 1;
+                    self.tok(TokenKind::PipePipe, start)
+                } else {
+                    self.tok(TokenKind::Pipe, start)
+                }
+            }
+
+            b'&' => {
+                self.pos += 1;
+                if bytes.get(self.pos) == Some(&b'&') {
+                    self.pos += 1;
+                    self.tok(TokenKind::AmpAmp, start)
+                } else {
+                    self.tok(TokenKind::Error(LexError::UnexpectedChar), start)
+                }
+            }
 
             b'-' => {
                 self.pos += 1;
@@ -191,6 +210,8 @@ impl<'src> Lexer<'src> {
             '→' => TokenKind::Arrow,
             '⇒' => TokenKind::FatArrow,
             'λ' => TokenKind::Lambda,
+            '∧' => TokenKind::AmpAmp,
+            '∨' => TokenKind::PipePipe,
             _ => TokenKind::Error(LexError::UnexpectedChar),
         };
         self.tok(kind, start)
@@ -598,6 +619,14 @@ mod tests {
         assert_eq!(kinds("=="), vec![EqEq]);
         assert_eq!(kinds("!="), vec![BangEq]);
         assert_eq!(kinds("::"), vec![ColonColon]);
+        assert_eq!(kinds("&&"), vec![AmpAmp]);
+        assert_eq!(kinds("||"), vec![PipePipe]);
+    }
+
+    #[test]
+    fn lone_pipe_is_pipe_lone_amp_is_error() {
+        assert_eq!(kinds("|"), vec![Pipe]);
+        assert_eq!(kinds("&"), vec![Error(LexError::UnexpectedChar)]);
     }
 
     #[test]
@@ -623,6 +652,18 @@ mod tests {
     fn unicode_lambda_normalisation() {
         assert_eq!(kinds("\u{03bb}"), vec![Lambda]);
         assert_eq!(kinds("\\"), kinds("\u{03bb}"));
+    }
+
+    #[test]
+    fn unicode_logical_and_normalisation() {
+        assert_eq!(kinds("\u{2227}"), vec![AmpAmp]);
+        assert_eq!(kinds("&&"), kinds("\u{2227}"));
+    }
+
+    #[test]
+    fn unicode_logical_or_normalisation() {
+        assert_eq!(kinds("\u{2228}"), vec![PipePipe]);
+        assert_eq!(kinds("||"), kinds("\u{2228}"));
     }
 
     #[test]

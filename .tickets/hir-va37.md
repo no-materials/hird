@@ -50,3 +50,15 @@ Each production feeds into a typed AST node defined in hird-ast.
 - Snapshot tests for each syntax construct in isolation.
 - At least one complete multi-declaration module parses successfully.
 
+
+## Notes
+
+**2026-06-01T07:36:03Z**
+
+Assessment: all enumerated productions, AST nodes, and snapshot tests are implemented and green (smoke 77 passed incl. comments + multi-decl module; hird-ast 17 passed). Comparison precedence resolved to a single non-associative relational tier.
+
+Remaining blocker for closing: logical operators are not yet implemented (no &&/|| /and/or tokens in the lexer, no entries in infix_bp). AC4 (precedence for logical ops) is unmet. Scope: lex the chosen forms, add two left-assoc tiers below the relational tier in infix_bp, extend hird-ast is_binop, update grammar.md precedence table + bin_op and phrasebook, add snapshots.
+
+**2026-06-01T07:45:23Z**
+
+Logical operators now implemented: && / || (canonical Unicode ∧ / ∨), lexed in hird-lex, two left-associative tiers below the relational tier in infix_bp, projected via hird-ast is_binop. grammar.md precedence table + bin_op and phrasebook updated; snapshots + AST tests added. AC4 (logical precedence) now met — all acceptance criteria satisfied. Ready to close.

@@ -105,6 +105,10 @@ pub enum SyntaxKind {
     LAMBDA,
     /// `|`
     PIPE,
+    /// `∧`
+    ANDAND,
+    /// `∨`
+    OROR,
     /// `!`
     BANG,
     /// `.`
@@ -299,6 +303,8 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::FatArrow => Self::FAT_ARROW,
             TokenKind::Lambda => Self::LAMBDA,
             TokenKind::Pipe => Self::PIPE,
+            TokenKind::AmpAmp => Self::ANDAND,
+            TokenKind::PipePipe => Self::OROR,
             TokenKind::Bang => Self::BANG,
             TokenKind::Dot => Self::DOT,
             TokenKind::Colon => Self::COLON,

@@ -354,6 +354,29 @@ fn expr_arithmetic_then_comparison_ok() {
 }
 
 #[test]
+fn expr_logical_and() {
+    insta::assert_snapshot!(render_cst("fn f() = a && b"));
+}
+
+#[test]
+fn expr_logical_or() {
+    insta::assert_snapshot!(render_cst("fn f() = a || b"));
+}
+
+#[test]
+fn expr_logical_precedence() {
+    // `&&` binds tighter than `||`: `a || b && c` is `a || (b && c)`.
+    insta::assert_snapshot!(render_cst("fn f() = a || b && c"));
+}
+
+#[test]
+fn expr_logical_looser_than_relational() {
+    // Relational binds tighter than logical, and a comparison on each side of
+    // `&&` is well-formed (no chain): `(a == b) && (c < d)`.
+    insta::assert_snapshot!(render_cst("fn f() = a == b && c < d"));
+}
+
+#[test]
 fn expr_application_chain() {
     insta::assert_snapshot!(render_cst("fn f() = f x y"));
 }

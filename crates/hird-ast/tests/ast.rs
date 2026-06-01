@@ -235,6 +235,20 @@ fn bin_op_precedence() {
 }
 
 #[test]
+fn bin_op_logical_precedence() {
+    // `a && b || c` parses as `(a && b) || c` — `||` binds looser than `&&`.
+    let Expr::BinOp(or) = body("a && b || c") else {
+        panic!("expected binop");
+    };
+    assert_eq!(or.op(), Some("||"));
+    assert!(matches!(or.rhs(), Some(Expr::Name(_))));
+    let Some(Expr::BinOp(and)) = or.lhs() else {
+        panic!("expected nested binop on the left");
+    };
+    assert_eq!(and.op(), Some("&&"));
+}
+
+#[test]
 fn app_expr_is_left_nested() {
     // `f x y` parses as `(f x) y`.
     let Expr::App(outer) = body("f x y") else {

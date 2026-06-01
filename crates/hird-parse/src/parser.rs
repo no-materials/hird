@@ -838,6 +838,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             | SyntaxKind::GE
             | SyntaxKind::EQ_EQ
             | SyntaxKind::BANG_EQ => Some((10, 11, Assoc::None)),
+            SyntaxKind::ANDAND => Some((8, 9, Assoc::Left)),
+            SyntaxKind::OROR => Some((6, 7, Assoc::Left)),
             _ => None,
         }
     }

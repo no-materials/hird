@@ -164,11 +164,17 @@ Precedence from lowest to highest:
 
 | Prec | Operators                  | Assoc | Description          |
 |------|----------------------------|-------|----------------------|
-| 1    | `==` `!=` `<` `>` `<=` `>=` | none  | relational           |
-| 2    | `+` `-`                    | left  | additive             |
-| 3    | `*` `/`                    | left  | multiplicative       |
-| 4    | application                | left  | function application |
-| 5    | `.`                        | left  | field access         |
+| 1    | `\|\|`                     | left  | logical or           |
+| 2    | `&&`                       | left  | logical and          |
+| 3    | `==` `!=` `<` `>` `<=` `>=` | none  | relational           |
+| 4    | `+` `-`                    | left  | additive             |
+| 5    | `*` `/`                    | left  | multiplicative       |
+| 6    | application                | left  | function application |
+| 7    | `.`                        | left  | field access         |
+
+The logical operators `&&` and `||` (canonical `∧` `∨`) are left-associative
+and bind looser than the relational tier, so `a == b && c == d` groups as
+`(a == b) && (c == d)`.
 
 The relational operators form a single non-associative tier: a chain such
 as `a == b == c` or `a < b == c` is a parse error (`P0005`). Compare
@@ -177,7 +183,8 @@ chained results explicitly with parentheses: `(a == b) == c`.
 ```
 infix_expr   ::= prefix_expr ( bin_op prefix_expr )*
 
-bin_op       ::= '==' | '!=' | '<' | '>' | '<=' | '>='
+bin_op       ::= '||' | '&&'
+               | '==' | '!=' | '<' | '>' | '<=' | '>='
                | '+' | '-' | '*' | '/'
 
 prefix_expr  ::= app_expr

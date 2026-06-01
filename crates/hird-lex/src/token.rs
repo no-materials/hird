@@ -143,6 +143,10 @@ pub enum TokenKind {
     Lambda,
     /// `|`
     Pipe,
+    /// `\u{2227}` (also written `&&`)
+    AmpAmp,
+    /// `\u{2228}` (also written `||`)
+    PipePipe,
     /// `!`
     Bang,
     /// `.`

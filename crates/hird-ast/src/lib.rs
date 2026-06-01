@@ -897,6 +897,8 @@ fn is_binop(kind: SyntaxKind) -> bool {
             | SyntaxKind::GE
             | SyntaxKind::EQ_EQ
             | SyntaxKind::BANG_EQ
+            | SyntaxKind::ANDAND
+            | SyntaxKind::OROR
     )
 }
 
