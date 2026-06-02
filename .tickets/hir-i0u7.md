@@ -50,3 +50,22 @@ the implementation suggests a deviation.
   imports, opaque type construction, opaque type destructure error.
 - At least 10 snapshot tests.
 
+
+## Notes
+
+**2026-06-01T13:54:44Z**
+
+Inbound from hir-of12: duplicate / conflicting top-level definition detection lands HERE (this
+ticket owns scope resolution and name binding). It was pulled out of the parser ticket (hir-of12)
+because a complete check must span the module system, not a single file.
+
+Cover the collision cases that only make sense with modules:
+- two top-level definitions sharing a name within a module,
+- an import that collides with a local definition,
+- import-vs-import collisions.
+Emit a clear diagnostic carrying both spans (original definition + redefinition). Namespace rules
+(e.g. whether `fn foo` and `type Foo` share a namespace) are an OD6 design call — pin them in
+hir-0s3s. Add snapshot tests for the duplicate/collision cases alongside the import/visibility tests.
+
+Note: hir-lhyh's "shadowing (warn, don't error)" is a DIFFERENT concern (inner let-bindings
+shadowing outer scopes), not top-level duplicate definitions.
