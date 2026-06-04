@@ -11,9 +11,19 @@ publish = false
 [dependencies]
 cstree.workspace = true
 hird-lex.workspace = true
+# Graphical diagnostic rendering. `fancy-no-syscall` pulls the report handler
+# without any terminal/tty syscalls, so rendering stays deterministic.
+miette = { version = "7", default-features = false, features = [
+    "fancy-no-syscall",
+], optional = true }
 
 [dev-dependencies]
 insta = "1"
 
 [lints]
 workspace = true
+
+[features]
+# Opt-in terminal rendering of diagnostics via `miette`. The crate is `no_std`
+# by default; enabling `std` pulls `miette` (which requires `std`).
+std = ["dep:miette"]

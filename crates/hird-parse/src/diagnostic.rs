@@ -18,6 +18,9 @@ pub struct ParseDiagnostic {
     pub span: Span,
     /// Human-readable error message.
     pub message: &'static str,
+    /// Optional suggestion shown beneath the message, e.g. how to fix the
+    /// error. `None` when there is no actionable hint.
+    pub help: Option<&'static str>,
 }
 
 /// Machine-readable diagnostic codes for parser errors.
@@ -50,3 +53,71 @@ impl DiagnosticCode {
         }
     }
 }
+
+#[cfg(feature = "std")]
+mod render {
+    use alloc::boxed::Box;
+    use alloc::string::String;
+    use core::fmt;
+
+    use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, LabeledSpan, SourceCode};
+
+    use super::ParseDiagnostic;
+
+    /// Internal adapter: a [`ParseDiagnostic`] paired with its source text,
+    /// made renderable by implementing [`miette::Diagnostic`].
+    #[derive(Debug)]
+    struct ParseReport<'a> {
+        diagnostic: &'a ParseDiagnostic,
+        source: &'a str,
+    }
+
+    impl fmt::Display for ParseReport<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(self.diagnostic.message)
+        }
+    }
+
+    impl core::error::Error for ParseReport<'_> {}
+
+    impl Diagnostic for ParseReport<'_> {
+        fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+            Some(Box::new(self.diagnostic.code.as_str()))
+        }
+
+        fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+            self.diagnostic
+                .help
+                .map(|help| Box::new(help) as Box<dyn fmt::Display + 'a>)
+        }
+
+        fn source_code(&self) -> Option<&dyn SourceCode> {
+            Some(&self.source)
+        }
+
+        fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+            let span = self.diagnostic.span;
+            let label = LabeledSpan::new_primary_with_span(
+                None,
+                (span.start as usize, span.len() as usize),
+            );
+            Some(Box::new(core::iter::once(label)))
+        }
+    }
+
+    /// Renders `diagnostic` against its `source` as a graphical report string,
+    /// using a deterministic, uncoloured Unicode theme. The output is stable
+    /// across environments — suitable for tests, logs, and non-terminal sinks.
+    #[must_use]
+    pub fn render(diagnostic: &ParseDiagnostic, source: &str) -> String {
+        let report = ParseReport { diagnostic, source };
+        let mut out = String::new();
+        GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor())
+            .render_report(&mut out, &report)
+            .expect("writing a report into an owned String is infallible");
+        out
+    }
+}
+
+#[cfg(feature = "std")]
+pub use render::render;

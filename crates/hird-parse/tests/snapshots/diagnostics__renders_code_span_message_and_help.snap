@@ -1,0 +1,12 @@
+---
+source: crates/hird-parse/tests/diagnostics.rs
+expression: rendered
+---
+P0005
+
+  × non-associative operator cannot be chained; parenthesise
+   ╭────
+ 1 │ fn f() = a == b == c
+   ·                 ──
+   ╰────
+  help: group the comparisons, e.g. `(a == b) == c`

@@ -221,6 +221,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 code: DiagnosticCode::P0001,
                 span: self.current_span(),
                 message: expected_msg(kind),
+                help: None,
             });
             false
         }
@@ -233,6 +234,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 code: DiagnosticCode::P0002,
                 span,
                 message,
+                help: None,
             });
             return;
         }
@@ -241,6 +243,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             code: DiagnosticCode::P0002,
             span,
             message,
+            help: None,
         });
         self.bump();
         self.finish_node();
@@ -252,6 +255,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 code: DiagnosticCode::P0004,
                 span: self.current_span(),
                 message: "nesting depth limit reached",
+                help: None,
             });
             return true;
         }
@@ -790,6 +794,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                     code: DiagnosticCode::P0005,
                     span: self.current_span(),
                     message: "non-associative operator cannot be chained; parenthesise",
+                    help: None,
                 });
             }
             prev_nonassoc_bp = match assoc {
