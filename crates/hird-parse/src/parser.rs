@@ -217,46 +217,122 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             self.bump();
             true
         } else {
-            self.diagnostics.push(ParseDiagnostic {
-                code: DiagnosticCode::P0001,
-                span: self.current_span(),
-                message: expected_msg(kind),
-                help: None,
-            });
+            self.emit(DiagnosticCode::P0001, expected_msg(kind), None);
             false
         }
     }
 
-    fn error_bump(&mut self, message: &'static str) {
-        let span = self.current_span();
-        if self.current() == SyntaxKind::EOF {
-            self.diagnostics.push(ParseDiagnostic {
-                code: DiagnosticCode::P0002,
-                span,
-                message,
-                help: None,
-            });
+    /// Push a diagnostic anchored at the current token's span.
+    fn emit(&mut self, code: DiagnosticCode, message: &'static str, help: Option<&'static str>) {
+        self.diagnostics.push(ParseDiagnostic {
+            code,
+            span: self.current_span(),
+            message,
+            help,
+        });
+    }
+
+    /// Whether `kind` begins a top-level declaration.
+    fn is_decl_keyword(kind: SyntaxKind) -> bool {
+        matches!(
+            kind,
+            SyntaxKind::FN_KW
+                | SyntaxKind::TYPE_KW
+                | SyntaxKind::ACTOR_KW
+                | SyntaxKind::SUPERVISOR_KW
+                | SyntaxKind::EFFECT_KW
+                | SyntaxKind::TOOL_KW
+                | SyntaxKind::EXTERN_KW
+                | SyntaxKind::USE_KW
+                | SyntaxKind::PUB_KW
+        )
+    }
+
+    /// Whether the current token begins a top-level declaration.
+    fn at_decl_keyword(&self) -> bool {
+        Self::is_decl_keyword(self.current())
+    }
+
+    /// Whether the current token is a recovery synchronisation point: a
+    /// declaration keyword, a closing delimiter, a list-separating comma, or
+    /// end of input. Recovery skips *up to* one of these so an enclosing
+    /// production can resume on the token.
+    fn at_sync_point(&self) -> bool {
+        let kind = self.current();
+        Self::is_decl_keyword(kind)
+            || matches!(
+                kind,
+                SyntaxKind::R_PAREN
+                    | SyntaxKind::R_BRACE
+                    | SyntaxKind::R_BRACKET
+                    | SyntaxKind::COMMA
+                    | SyntaxKind::EOF
+            )
+    }
+
+    /// Report an error at the current token and, unless already at a
+    /// synchronisation point (see `at_sync_point`), skip exactly that token into
+    /// an `ERROR` node. Used where skipping a longer run would consume a
+    /// delimiter a caller still needs — type and pattern positions; expression
+    /// and declaration positions use `recover_to_sync` / `recover_decl`.
+    fn error_bump(
+        &mut self,
+        code: DiagnosticCode,
+        message: &'static str,
+        help: Option<&'static str>,
+    ) {
+        self.emit(code, message, help);
+        if self.at_sync_point() {
             return;
         }
         self.start_node(SyntaxKind::ERROR);
-        self.diagnostics.push(ParseDiagnostic {
-            code: DiagnosticCode::P0002,
-            span,
-            message,
-            help: None,
-        });
         self.bump();
+        self.finish_node();
+    }
+
+    /// Recover from an unexpected token where an expression is expected: report
+    /// the error, then skip a run of stray tokens into a single `ERROR` node up
+    /// to the next synchronisation point (see `at_sync_point`). When already at
+    /// a sync point, only the diagnostic is emitted — no tokens are consumed —
+    /// so the enclosing delimited production (or the declaration loop) resumes
+    /// on that token.
+    fn recover_to_sync(
+        &mut self,
+        code: DiagnosticCode,
+        message: &'static str,
+        help: Option<&'static str>,
+    ) {
+        self.emit(code, message, help);
+        if self.at_sync_point() {
+            return;
+        }
+        self.start_node(SyntaxKind::ERROR);
+        self.bump();
+        while !self.at_sync_point() {
+            self.bump();
+        }
+        self.finish_node();
+    }
+
+    /// Recover from an unexpected token where a top-level declaration is
+    /// expected: report the error, then skip the malformed run into a single
+    /// `ERROR` node up to the next declaration keyword (or end of input). A
+    /// stray closing delimiter or comma is consumed as junk here — at the top
+    /// level no enclosing production owns it — so the declaration loop always
+    /// makes progress.
+    fn recover_decl(&mut self, message: &'static str, help: Option<&'static str>) {
+        self.emit(DiagnosticCode::P0002, message, help);
+        self.start_node(SyntaxKind::ERROR);
+        self.bump();
+        while !self.at_decl_keyword() && self.current() != SyntaxKind::EOF {
+            self.bump();
+        }
         self.finish_node();
     }
 
     fn too_deep(&mut self) -> bool {
         if self.depth >= MAX_NESTING {
-            self.diagnostics.push(ParseDiagnostic {
-                code: DiagnosticCode::P0004,
-                span: self.current_span(),
-                message: "nesting depth limit reached",
-                help: None,
-            });
+            self.emit(DiagnosticCode::P0004, "nesting depth limit reached", None);
             return true;
         }
         false
@@ -340,9 +416,18 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 SyntaxKind::SUPERVISOR_KW => self.parse_supervisor_decl(),
                 SyntaxKind::EFFECT_KW => self.parse_effect_decl(),
                 SyntaxKind::TOOL_KW => self.parse_tool_decl(),
-                _ => self.error_bump("expected declaration after `pub`"),
+                _ => self.recover_decl(
+                    "expected declaration after `pub`",
+                    Some("`pub` must be followed by a declaration"),
+                ),
             },
-            _ => self.error_bump("expected declaration"),
+            _ => self.recover_decl(
+                "expected declaration",
+                Some(
+                    "expected one of `fn`, `type`, `actor`, `supervisor`, `effect`, `tool`, \
+                     `extern`, `use`, or `pub`",
+                ),
+            ),
         }
     }
 
@@ -399,7 +484,16 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         if self.at(SyntaxKind::BANG) {
             self.parse_effect_ann();
         }
-        self.expect(SyntaxKind::EQ);
+        // The body follows a single `=`. Report a missing `=` with a tailored
+        // hint instead of the generic "expected token", then parse the body
+        // anyway so the rest of the declaration still projects.
+        if !self.eat(SyntaxKind::EQ) {
+            self.emit(
+                DiagnosticCode::P0001,
+                "missing `=` before function body",
+                Some("insert `=` between the signature and the body"),
+            );
+        }
         self.parse_expr();
         self.finish_node();
     }
@@ -722,7 +816,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 }
             }
             _ => {
-                self.error_bump("expected type");
+                self.error_bump(
+                    DiagnosticCode::P0003,
+                    "expected type",
+                    Some("expected a type, e.g. `Int`, `List<a>`, or `(A, B)`"),
+                );
             }
         }
     }
@@ -790,12 +888,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             }
 
             if assoc == Assoc::None && prev_nonassoc_bp == Some(left_bp) {
-                self.diagnostics.push(ParseDiagnostic {
-                    code: DiagnosticCode::P0005,
-                    span: self.current_span(),
-                    message: "non-associative operator cannot be chained; parenthesise",
-                    help: None,
-                });
+                self.emit(
+                    DiagnosticCode::P0005,
+                    "non-associative operator cannot be chained; parenthesise",
+                    None,
+                );
             }
             prev_nonassoc_bp = match assoc {
                 Assoc::None => Some(left_bp),
@@ -965,7 +1062,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::L_BRACKET => self.parse_list_lit(),
             SyntaxKind::L_BRACE => self.parse_record_lit(),
             _ => {
-                self.error_bump("expected expression");
+                self.recover_to_sync(DiagnosticCode::P0002, "expected expression", None);
             }
         }
     }
@@ -1083,7 +1180,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 }
             }
             _ => {
-                self.error_bump("expected pattern");
+                self.error_bump(DiagnosticCode::P0002, "expected pattern", None);
             }
         }
     }

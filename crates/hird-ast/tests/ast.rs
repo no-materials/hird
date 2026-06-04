@@ -299,3 +299,70 @@ fn tuple_list_paren() {
     };
     assert!(matches!(p.inner(), Some(Expr::Name(_))));
 }
+
+// ── partial-AST recovery ────────────────────────────────────────
+
+/// Parse `src` into a `SourceFile` without requiring a clean parse. Used by the
+/// recovery tests, where diagnostics are expected but the good declarations
+/// must still project.
+fn recovered(src: &str) -> SourceFile {
+    let parsed = hird_parse::parse(src, 0);
+    assert!(!parsed.is_ok(), "expected diagnostics for: {src}");
+    SourceFile::cast(parsed.syntax().clone()).expect("source file root")
+}
+
+#[test]
+fn recovery_isolates_garbage_between_declarations() {
+    // The stray `99 88` is wrapped in an error node, not a declaration, so it
+    // is skipped by `declarations()`; the effect and function around it project
+    // normally.
+    let file = recovered("effect Alpha\n99 88\nfn beta() = 1");
+
+    let kinds: Vec<&str> = file
+        .declarations()
+        .map(|d| match d {
+            Decl::Effect(_) => "effect",
+            Decl::Fn(_) => "fn",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(kinds, ["effect", "fn"]);
+
+    let names: Vec<String> = file
+        .declarations()
+        .filter_map(|d| match d {
+            Decl::Effect(e) => e.name().map(str::to_owned),
+            Decl::Fn(f) => f.name().map(str::to_owned),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names, ["Alpha", "beta"]);
+}
+
+#[test]
+fn recovery_keeps_neighbours_of_malformed_declaration() {
+    // The middle function has a malformed parameter type (`x:` with no type),
+    // yet it still projects — name, parameter, and body — alongside its
+    // well-formed neighbours.
+    let file = recovered("fn alpha() = 1\nfn broken(x: ) = 2\nfn beta() = 3");
+
+    let fns: Vec<FnDecl> = file
+        .declarations()
+        .filter_map(|d| match d {
+            Decl::Fn(f) => Some(f),
+            _ => None,
+        })
+        .collect();
+    let names: Vec<String> = fns
+        .iter()
+        .filter_map(|f| f.name().map(str::to_owned))
+        .collect();
+    assert_eq!(names, ["alpha", "broken", "beta"]);
+
+    let params: Vec<String> = fns[1]
+        .params()
+        .filter_map(|p| p.name().map(str::to_owned))
+        .collect();
+    assert_eq!(params, ["x"]);
+    assert!(matches!(fns[1].body(), Some(Expr::Literal(_))));
+}

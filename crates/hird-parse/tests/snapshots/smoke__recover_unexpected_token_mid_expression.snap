@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = (a + * b)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    PAREN_EXPR
+      WHITESPACE " "
+      L_PAREN "("
+      BIN_EXPR
+        IDENT "a"
+        WHITESPACE " "
+        PLUS "+"
+        ERROR
+          WHITESPACE " "
+          STAR "*"
+          WHITESPACE " "
+          IDENT "b"
+      R_PAREN ")"
+---
+P0002 14..15: expected expression

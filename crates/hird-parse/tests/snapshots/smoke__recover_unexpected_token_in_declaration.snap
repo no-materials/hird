@@ -1,0 +1,32 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"type T = A\\n99 88\\nfn g() = 2\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "T"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "A"
+  ERROR
+    WHITESPACE "\n"
+    INT "99"
+    WHITESPACE " "
+    INT "88"
+  FN_DECL
+    WHITESPACE "\n"
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "g"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "2"
+---
+P0002 11..13: expected declaration

@@ -607,3 +607,106 @@ pub fn identity(x: Int) -> Int = x
 extern fn print(s: String) -> Unit"
     ));
 }
+
+// ── error recovery: the five recovery patterns ──────────────────
+//
+// Each snapshot shows the recovered CST followed by the diagnostics
+// (code, span, message). Recovery never drops the rest of the input:
+// where a trailing declaration is present it still parses.
+
+#[test]
+fn recover_missing_closing_delimiter() {
+    // The `(` is never closed. The parser reports the missing `)` and finishes
+    // the `PAREN_EXPR` in place (a synthetic close — no bytes are invented), so
+    // the following declaration still parses.
+    insta::assert_snapshot!(render_cst("fn f() = (a + b\nfn g() = 3"));
+}
+
+#[test]
+fn recover_unexpected_token_mid_expression() {
+    // `*` cannot start an operand. Recovery skips the stray run (`* b`) into an
+    // `ERROR` node up to the synchronisation point `)`, which then closes the
+    // parenthesised expression.
+    insta::assert_snapshot!(render_cst("fn f() = (a + * b)"));
+}
+
+#[test]
+fn recover_incomplete_declaration() {
+    // The function name is missing. The parser records the error, parses what
+    // remains of the declaration, and continues to the next one.
+    insta::assert_snapshot!(render_cst("fn () = 1\nfn g() = 2"));
+}
+
+#[test]
+fn recover_malformed_type_annotation() {
+    // A literal is not a type. The annotation falls back to an `ERROR` node and
+    // the rest of the declaration (`)`, `=`, body) still parses.
+    insta::assert_snapshot!(render_cst("fn f(x: 1) = x"));
+}
+
+#[test]
+fn recover_missing_eq_before_fn_body() {
+    // `fn foo() 42` omits the `=` before the body. The parser reports it and
+    // parses `42` as the body anyway.
+    insta::assert_snapshot!(render_cst("fn foo() 42"));
+}
+
+#[test]
+fn recover_unexpected_token_in_declaration() {
+    // Stray tokens where a declaration is expected are skipped as a run into a
+    // single `ERROR` node up to the next declaration keyword; the surrounding
+    // declarations are untouched.
+    insta::assert_snapshot!(render_cst("type T = A\n99 88\nfn g() = 2"));
+}
+
+#[test]
+fn recovery_terminates_and_stays_lossless() {
+    // Pathological inputs must terminate (no panic, no hang — the harness
+    // `timeout` guards the latter) and the CST must still reproduce the
+    // original bytes exactly, error nodes included.
+    let inputs = [
+        "",
+        "   ",
+        "}",
+        "]",
+        ")",
+        ",",
+        ") ) )",
+        "} } }",
+        "fn",
+        "fn f(",
+        "fn f()",
+        "fn f() =",
+        "fn f() = (",
+        "fn f() = (a + * b",
+        "fn f() = [1,",
+        "fn f() = { x:",
+        "fn f() = )",
+        "fn f() = ) ] } fn g() = 1",
+        "fn f() = if",
+        "fn f() = match x {",
+        "fn f() = handle {",
+        "fn f(x: ) = x",
+        "fn f(x: <) = x",
+        "fn f(x: List<) = x",
+        "pub",
+        "pub pub",
+        "pub 42",
+        "type",
+        "type T =",
+        "type T = |",
+        "effect",
+        "effect E<",
+        "use",
+        "42 99",
+        "+ + +",
+        "99 88 fn g() = 1",
+    ];
+    for src in inputs {
+        let parsed = hird_parse::parse(src, 0);
+        assert!(
+            parsed.syntax().text() == src,
+            "CST is not lossless for {src:?}"
+        );
+    }
+}

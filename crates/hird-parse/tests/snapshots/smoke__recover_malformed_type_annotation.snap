@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"fn f(x: !) = x\")"
+expression: "render_cst(\"fn f(x: 1) = x\")"
 ---
 SOURCE_FILE
   FN_DECL
@@ -14,7 +14,7 @@ SOURCE_FILE
         COLON ":"
         ERROR
           WHITESPACE " "
-          BANG "!"
+          INT "1"
     R_PAREN ")"
     WHITESPACE " "
     EQ "="

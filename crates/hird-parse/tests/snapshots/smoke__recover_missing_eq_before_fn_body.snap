@@ -1,0 +1,15 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn foo() 42\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "foo"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    INT "42"
+---
+P0001 9..11: missing `=` before function body

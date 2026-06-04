@@ -1,0 +1,35 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = (a + b\\nfn g() = 3\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    PAREN_EXPR
+      WHITESPACE " "
+      L_PAREN "("
+      BIN_EXPR
+        IDENT "a"
+        WHITESPACE " "
+        PLUS "+"
+        WHITESPACE " "
+        IDENT "b"
+  FN_DECL
+    WHITESPACE "\n"
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "g"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "3"
+---
+P0001 16..18: expected `)`

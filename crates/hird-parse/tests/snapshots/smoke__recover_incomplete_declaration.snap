@@ -1,0 +1,27 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn () = 1\\nfn g() = 2\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "1"
+  FN_DECL
+    WHITESPACE "\n"
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "g"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "2"
+---
+P0001 3..4: expected identifier
