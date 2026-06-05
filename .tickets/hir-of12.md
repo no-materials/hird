@@ -1,6 +1,6 @@
 ---
 id: hir-of12
-status: open
+status: closed
 deps: [hir-va37]
 links: []
 created: 2026-05-22T21:36:57Z
