@@ -78,6 +78,10 @@ clippy.wildcard_dependencies = "warn"
 # `#[expect(...)]` warns when the suppressed lint no longer fires.
 clippy.allow_attributes = "warn"
 
+# Require documentation on private items too, not just the public API that
+# `rust.missing_docs` covers.
+clippy.missing_docs_in_private_items = "warn"
+
 [workspace.dependencies]
 cstree = { version = "0.14", default-features = false }
 

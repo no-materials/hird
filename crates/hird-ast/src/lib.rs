@@ -84,6 +84,7 @@ fn is_pub(node: &SyntaxNode) -> bool {
     node.children().any(|c| c.kind() == SyntaxKind::VISIBILITY)
 }
 
+/// The kind of a node-or-token element.
 fn element_kind(element: ResolvedElementRef<'_, SyntaxKind>) -> SyntaxKind {
     match element {
         NodeOrToken::Node(n) => n.kind(),
@@ -720,6 +721,7 @@ pub enum Expr {
 }
 
 impl Expr {
+    /// Casts a node to its matching `Expr` variant, or `None`.
     fn cast_node(node: SyntaxNode) -> Option<Self> {
         let expr = match node.kind() {
             SyntaxKind::LET_EXPR => Self::Let(LetExpr(node)),
@@ -739,6 +741,8 @@ impl Expr {
         Some(expr)
     }
 
+    /// Casts a token to its matching `Expr` variant — a literal or name — or
+    /// `None`.
     fn cast_token(tok: SyntaxToken) -> Option<Self> {
         match tok.kind() {
             SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
@@ -749,6 +753,7 @@ impl Expr {
         }
     }
 
+    /// Casts a node-or-token element to its matching `Expr` variant, or `None`.
     fn cast_element(element: ResolvedElementRef<'_, SyntaxKind>) -> Option<Self> {
         match element {
             NodeOrToken::Node(n) => Self::cast_node(n.clone()),
@@ -884,6 +889,7 @@ fn params(node: &SyntaxNode) -> impl Iterator<Item = Param> + '_ {
 
 // ── token-kind predicates ───────────────────────────────────────
 
+/// Whether `kind` is a binary-operator token.
 fn is_binop(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -902,6 +908,7 @@ fn is_binop(kind: SyntaxKind) -> bool {
     )
 }
 
+/// Whether `kind` is trivia: whitespace or a comment.
 fn is_trivia(kind: SyntaxKind) -> bool {
     matches!(
         kind,

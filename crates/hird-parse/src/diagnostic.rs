@@ -54,6 +54,8 @@ impl DiagnosticCode {
     }
 }
 
+/// `std`-only rendering of `ParseDiagnostic` values as graphical `miette`
+/// reports.
 #[cfg(feature = "std")]
 mod render {
     use alloc::boxed::Box;
@@ -68,7 +70,9 @@ mod render {
     /// made renderable by implementing [`miette::Diagnostic`].
     #[derive(Debug)]
     struct ParseReport<'a> {
+        /// The diagnostic being rendered.
         diagnostic: &'a ParseDiagnostic,
+        /// Full source text the diagnostic's span points into.
         source: &'a str,
     }
 

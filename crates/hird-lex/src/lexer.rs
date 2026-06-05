@@ -19,8 +19,11 @@ use crate::token::{LexError, Span, Token, TokenKind};
 /// [`TokenKind::Eof`]).
 #[derive(Debug)]
 pub struct Lexer<'src> {
+    /// The source text being lexed.
     source: &'src str,
+    /// File identifier stamped into every emitted [`Span`].
     source_id: u32,
+    /// Byte offset of the cursor into `source`.
     pos: usize,
 }
 
@@ -176,6 +179,7 @@ impl<'src> Lexer<'src> {
 
     // ---- internal helpers ------------------------------------------------
 
+    /// Builds a `kind` token spanning `start..pos`.
     #[expect(
         clippy::cast_possible_truncation,
         reason = "source files cannot exceed u32::MAX bytes"
@@ -187,15 +191,18 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// Advances one byte and builds a single-byte `kind` token.
     fn single(&mut self, kind: TokenKind, start: usize) -> Token {
         self.pos += 1;
         self.tok(kind, start)
     }
 
+    /// The byte at the cursor, or `None` at end of input.
     fn peek(&self) -> Option<u8> {
         self.source.as_bytes().get(self.pos).copied()
     }
 
+    /// Advances past ASCII whitespace.
     fn skip_whitespace(&mut self) {
         let bytes = self.source.as_bytes();
         while self.pos < bytes.len() && bytes[self.pos].is_ascii_whitespace() {
@@ -203,6 +210,8 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// Lexes a non-ASCII operator (such as `→` or `λ`), or an error token for
+    /// an unexpected character.
     fn lex_unicode_or_error(&mut self, start: usize) -> Token {
         let ch = self.source[self.pos..].chars().next().expect("non-empty");
         self.pos += ch.len_utf8();
@@ -217,6 +226,7 @@ impl<'src> Lexer<'src> {
         self.tok(kind, start)
     }
 
+    /// Lexes an identifier or keyword, rejecting non-canonical names.
     fn lex_ident(&mut self, start: usize) -> Token {
         let bytes = self.source.as_bytes();
         while self.pos < bytes.len()
@@ -259,6 +269,7 @@ impl<'src> Lexer<'src> {
         self.tok(kind, start)
     }
 
+    /// Lexes an integer, or a float when a `.` is followed by a digit.
     fn lex_number(&mut self, start: usize) -> Token {
         let bytes = self.source.as_bytes();
         while self.pos < bytes.len() && bytes[self.pos].is_ascii_digit() {
@@ -279,6 +290,8 @@ impl<'src> Lexer<'src> {
         self.tok(TokenKind::Int, start)
     }
 
+    /// Lexes a `"`-delimited string with escapes; errors if unterminated or
+    /// broken by a newline.
     fn lex_string(&mut self, start: usize) -> Token {
         self.pos += 1; // opening quote
         loop {
@@ -308,6 +321,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// Lexes a `//` line comment to end of line.
     fn lex_line_comment(&mut self, start: usize) -> Token {
         self.pos += 1; // second /
         let bytes = self.source.as_bytes();
@@ -317,6 +331,7 @@ impl<'src> Lexer<'src> {
         self.tok(TokenKind::LineComment, start)
     }
 
+    /// Lexes a `/* ... */` block comment, honouring nesting.
     fn lex_block_comment(&mut self, start: usize) -> Token {
         self.pos += 1; // opening *
         let mut depth: u32 = 1;

@@ -7,6 +7,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
+/// Placeholder benchmark exercising an empty iteration.
 fn bench_placeholder(c: &mut Criterion) {
     c.bench_function("placeholder", |b| b.iter(|| {}));
 }

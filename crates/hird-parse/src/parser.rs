@@ -75,6 +75,8 @@ pub fn parse(source: &str, source_id: u32) -> ParseResult {
     }
 }
 
+/// Maximum recursion depth for nested types, expressions, and patterns
+/// before parsing aborts with [`DiagnosticCode::P0004`].
 const MAX_NESTING: u32 = 256;
 
 /// Associativity of an infix operator.
@@ -86,18 +88,29 @@ enum Assoc {
     None,
 }
 
+/// Recursive-descent parser over a lexed token stream, building a cstree
+/// green tree.
 struct Parser<'src, 'tok> {
+    /// The source text, for slicing token and whitespace runs.
     source: &'src str,
+    /// File identifier stamped into emitted [`Span`]s.
     source_id: u32,
+    /// The full token stream, including trivia.
     tokens: &'tok [Token],
+    /// Index of the next unconsumed token in `tokens`.
     pos: usize,
+    /// End offset of the last emitted token, for synthesising whitespace.
     prev_end: u32,
+    /// Current recursion depth, bounded by [`MAX_NESTING`].
     depth: u32,
+    /// Accumulates the green tree.
     builder: GreenNodeBuilder<'static, 'static, SyntaxKind>,
+    /// Errors collected during parsing.
     diagnostics: Vec<ParseDiagnostic>,
 }
 
 impl<'src, 'tok> Parser<'src, 'tok> {
+    /// Creates a parser positioned at the first token.
     fn new(source: &'src str, source_id: u32, tokens: &'tok [Token]) -> Self {
         Self {
             source,
@@ -113,6 +126,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── trivia helpers ──────────────────────────────────────────
 
+    /// Whether `kind` is trivia (a comment) skipped between significant tokens.
     fn is_trivia(kind: SyntaxKind) -> bool {
         matches!(kind, SyntaxKind::LINE_COMMENT | SyntaxKind::BLOCK_COMMENT)
     }
@@ -139,10 +153,13 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         SyntaxKind::EOF
     }
 
+    /// Whether the current token is `kind`.
     fn at(&self, kind: SyntaxKind) -> bool {
         self.current() == kind
     }
 
+    /// Whether the current token is an identifier spelled `text` (a contextual
+    /// keyword such as `as`).
     fn at_contextual(&self, text: &str) -> bool {
         let mut pos = self.pos;
         while pos < self.tokens.len() {
@@ -156,6 +173,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         false
     }
 
+    /// Span of the current token, or an empty span at end of input.
     fn current_span(&self) -> Span {
         let mut pos = self.pos;
         while pos < self.tokens.len() {
@@ -175,6 +193,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── token consumption ───────────────────────────────────────
 
+    /// Emits the current token verbatim with its leading whitespace and
+    /// advances, without skipping trivia first.
     fn bump_raw(&mut self) {
         if self.pos >= self.tokens.len() {
             return;
@@ -187,6 +207,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.pos += 1;
     }
 
+    /// Emits the run of trivia tokens at the cursor.
     fn eat_trivia(&mut self) {
         while self.pos < self.tokens.len() {
             let kind = SyntaxKind::from(self.tokens[self.pos].kind);
@@ -203,6 +224,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.bump_raw();
     }
 
+    /// Consumes the current token if it is `kind`; returns whether it matched.
     fn eat(&mut self, kind: SyntaxKind) -> bool {
         if self.at(kind) {
             self.bump();
@@ -212,6 +234,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Consumes `kind` if present, otherwise emits an "expected" diagnostic.
+    /// Returns whether it matched.
     fn expect(&mut self, kind: SyntaxKind) -> bool {
         if self.at(kind) {
             self.bump();
@@ -330,6 +354,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// Whether the [`MAX_NESTING`] limit is reached, emitting
+    /// [`DiagnosticCode::P0004`] when it is.
     fn too_deep(&mut self) -> bool {
         if self.depth >= MAX_NESTING {
             self.emit(DiagnosticCode::P0004, "nesting depth limit reached", None);
@@ -340,24 +366,32 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── tree construction ───────────────────────────────────────
 
+    /// Opens a new CST node of `kind`.
     fn start_node(&mut self, kind: SyntaxKind) {
         self.builder.start_node(kind);
     }
 
+    /// Closes the most recently opened node.
     fn finish_node(&mut self) {
         self.builder.finish_node();
     }
 
+    /// Marks the current position so a node can later wrap the children parsed
+    /// after it (see [`Self::start_node_at`]).
     fn checkpoint(&mut self) -> Checkpoint {
         self.builder.checkpoint()
     }
 
+    /// Retroactively opens a `kind` node at `checkpoint`, wrapping the children
+    /// parsed since.
     fn start_node_at(&mut self, checkpoint: Checkpoint, kind: SyntaxKind) {
         self.builder.start_node_at(checkpoint, kind);
     }
 
     // ── whitespace ──────────────────────────────────────────────
 
+    /// Emits a [`SyntaxKind::WHITESPACE`] token for the gap before `next_start`,
+    /// if any.
     fn emit_whitespace_before(&mut self, next_start: u32) {
         if next_start > self.prev_end {
             let ws = &self.source[self.prev_end as usize..next_start as usize];
@@ -366,6 +400,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Emits any whitespace between the last token and end of source.
     fn emit_trailing_whitespace(&mut self) {
         #[expect(
             clippy::cast_possible_truncation,
@@ -375,6 +410,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.emit_whitespace_before(source_len);
     }
 
+    /// Flushes any leftover tokens and trailing whitespace into the tree.
     fn drain_remaining(&mut self) {
         while self.pos < self.tokens.len() {
             self.bump_raw();
@@ -384,6 +420,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── source file ─────────────────────────────────────────────
 
+    /// Parses a whole file: an optional `module` header then top-level items,
+    /// into a [`SyntaxKind::SOURCE_FILE`] node.
     fn parse_source_file(&mut self) {
         self.start_node(SyntaxKind::SOURCE_FILE);
 
@@ -399,6 +437,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// Parses one top-level declaration, dispatching on the leading keyword (or
+    /// `pub` and its successor); recovers on anything else.
     fn parse_top_item(&mut self) {
         match self.current() {
             SyntaxKind::USE_KW => self.parse_use_decl(),
@@ -431,6 +471,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Parses an optional leading `pub` into a [`SyntaxKind::VISIBILITY`] node.
     fn parse_visibility(&mut self) {
         if self.at(SyntaxKind::PUB_KW) {
             self.start_node(SyntaxKind::VISIBILITY);
@@ -441,6 +482,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── declarations ────────────────────────────────────────────
 
+    /// `module Name`.
     fn parse_module_decl(&mut self) {
         self.start_node(SyntaxKind::MODULE_DECL);
         self.expect(SyntaxKind::MODULE_KW);
@@ -448,6 +490,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `use a::b::c`, with an optional `as` alias.
     fn parse_use_decl(&mut self) {
         self.start_node(SyntaxKind::USE_DECL);
         self.expect(SyntaxKind::USE_KW);
@@ -459,6 +502,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// A `::`-separated path of identifiers (`a::b::c`).
     fn parse_path(&mut self) {
         self.start_node(SyntaxKind::PATH);
         self.expect(SyntaxKind::IDENT);
@@ -468,6 +512,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `fn name(params) → Ret ! {Effects} = body`.
     fn parse_fn_decl(&mut self) {
         self.start_node(SyntaxKind::FN_DECL);
         self.parse_visibility();
@@ -498,6 +543,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// A comma-separated parameter list.
     fn parse_param_list(&mut self) {
         self.start_node(SyntaxKind::PARAM_LIST);
         self.parse_param();
@@ -510,6 +556,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `name: Type`.
     fn parse_param(&mut self) {
         self.start_node(SyntaxKind::PARAM);
         self.expect(SyntaxKind::IDENT);
@@ -518,6 +565,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `→ Type`.
     fn parse_return_type(&mut self) {
         self.start_node(SyntaxKind::RETURN_TYPE);
         self.expect(SyntaxKind::ARROW);
@@ -525,6 +573,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `! { Effect, ... }` — an effect-row annotation.
     fn parse_effect_ann(&mut self) {
         self.start_node(SyntaxKind::EFFECT_ANN);
         self.expect(SyntaxKind::BANG);
@@ -542,6 +591,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `type Name<params> = Ctor | ...`.
     fn parse_type_decl(&mut self) {
         self.start_node(SyntaxKind::TYPE_DECL);
         self.parse_visibility();
@@ -565,6 +615,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// `<a, b, ...>` — a generic parameter list.
     fn parse_type_params(&mut self) {
         self.start_node(SyntaxKind::TYPE_PARAMS);
         self.expect(SyntaxKind::LT);
@@ -579,6 +630,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `Name` or `Name(Type, ...)`.
     fn parse_constructor(&mut self) {
         self.start_node(SyntaxKind::CONSTRUCTOR);
         self.expect(SyntaxKind::IDENT);
@@ -591,6 +643,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// A comma-separated list of constructor field types.
     fn parse_field_list(&mut self) {
         self.start_node(SyntaxKind::FIELD_LIST);
         self.parse_type_expr();
@@ -603,6 +656,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `actor Name { members } ! {Effects}`.
     fn parse_actor_decl(&mut self) {
         self.start_node(SyntaxKind::ACTOR_DECL);
         self.parse_visibility();
@@ -681,6 +735,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `supervisor Name { fields }`.
     fn parse_supervisor_decl(&mut self) {
         self.start_node(SyntaxKind::SUPERVISOR_DECL);
         self.parse_visibility();
@@ -700,6 +755,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `name: expr`.
     fn parse_supervisor_field(&mut self) {
         self.start_node(SyntaxKind::SUPERVISOR_FIELD);
         self.expect(SyntaxKind::IDENT);
@@ -708,6 +764,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `effect Name<params>`.
     fn parse_effect_decl(&mut self) {
         self.start_node(SyntaxKind::EFFECT_DECL);
         self.parse_visibility();
@@ -719,6 +776,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `tool Name: Input → Output`.
     fn parse_tool_decl(&mut self) {
         self.start_node(SyntaxKind::TOOL_DECL);
         self.parse_visibility();
@@ -731,6 +789,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `extern fn name(params) → Ret`.
     fn parse_extern_decl(&mut self) {
         self.start_node(SyntaxKind::EXTERN_DECL);
         self.expect(SyntaxKind::EXTERN_KW);
@@ -749,6 +808,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── type expressions ────────────────────────────────────────
 
+    /// Parses a type expression (depth-guarded entry point).
     fn parse_type_expr(&mut self) {
         if self.too_deep() {
             return;
@@ -758,6 +818,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.depth -= 1;
     }
 
+    /// Function type `A → B`, the lowest-precedence type form; a bare operand
+    /// when no `→` follows.
     fn parse_fn_type(&mut self) {
         let cp = self.checkpoint();
         self.parse_app_type();
@@ -774,6 +836,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Type application `Ctor<Args>`, or a bare atom when no `<` follows.
     fn parse_app_type(&mut self) {
         let cp = self.checkpoint();
         self.parse_atom_type();
@@ -784,6 +847,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// An atomic type: a name, or a parenthesised type, tuple, or `()`.
     fn parse_atom_type(&mut self) {
         match self.current() {
             SyntaxKind::IDENT => {
@@ -825,6 +889,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// `<A, B, ...>` — type-application arguments.
     fn parse_type_args(&mut self) {
         self.start_node(SyntaxKind::TYPE_ARGS);
         self.expect(SyntaxKind::LT);
@@ -841,10 +906,14 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── expressions ─────────────────────────────────────────────
 
+    /// Parses an expression.
     fn parse_expr(&mut self) {
         self.parse_expr_bp(0);
     }
 
+    /// Pratt loop: parses an expression whose operators bind at least as
+    /// tightly as `min_bp`, handling field access, application, and infix
+    /// operators.
     fn parse_expr_bp(&mut self, min_bp: u8) {
         if self.too_deep() {
             return;
@@ -907,6 +976,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.depth -= 1;
     }
 
+    /// A prefix-position expression: `let`, `λ`, `if`, `match`, or `handle`,
+    /// otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -918,10 +989,12 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Binding power of field access (`.`), the tightest-binding postfix form.
     const fn field_bp() -> u8 {
         50
     }
 
+    /// Binding power of function application (juxtaposition).
     const fn app_bp() -> u8 {
         40
     }
@@ -946,6 +1019,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// Whether the current token can begin an application argument.
     fn at_app_arg_start(&self) -> bool {
         // `{` is excluded: a record literal is not a juxtaposition argument,
         // which keeps `{` free to disambiguate against a future block form.
@@ -960,6 +1034,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         )
     }
 
+    /// `let name (: Type)? = value in body`.
     fn parse_let_expr(&mut self) {
         self.start_node(SyntaxKind::LET_EXPR);
         self.expect(SyntaxKind::LET_KW);
@@ -977,6 +1052,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `λ x y ... → body`.
     fn parse_lambda_expr(&mut self) {
         self.start_node(SyntaxKind::LAMBDA_EXPR);
         self.expect(SyntaxKind::LAMBDA);
@@ -989,6 +1065,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `if cond then a else b`.
     fn parse_if_expr(&mut self) {
         self.start_node(SyntaxKind::IF_EXPR);
         self.expect(SyntaxKind::IF_KW);
@@ -1000,6 +1077,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `match scrutinee { pat → expr, ... }`.
     fn parse_match_expr(&mut self) {
         self.start_node(SyntaxKind::MATCH_EXPR);
         self.expect(SyntaxKind::MATCH_KW);
@@ -1018,6 +1096,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `pattern → expr`.
     fn parse_match_arm(&mut self) {
         self.start_node(SyntaxKind::MATCH_ARM);
         self.parse_pattern();
@@ -1026,6 +1105,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `handle { Effect → handler, ... } in body`.
     fn parse_handle_expr(&mut self) {
         self.start_node(SyntaxKind::HANDLE_EXPR);
         self.expect(SyntaxKind::HANDLE_KW);
@@ -1045,6 +1125,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `Effect → handler`.
     fn parse_handle_arm(&mut self) {
         self.start_node(SyntaxKind::HANDLE_ARM);
         self.parse_app_type();
@@ -1053,6 +1134,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// An atomic expression: a literal, name, parenthesised or tuple
+    /// expression, list, or record literal.
     fn parse_atom_expr(&mut self) {
         match self.current() {
             SyntaxKind::IDENT | SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
@@ -1095,6 +1178,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// `[a, b, ...]` — a list literal.
     fn parse_list_lit(&mut self) {
         self.start_node(SyntaxKind::LIST_LIT);
         self.expect(SyntaxKind::L_BRACKET);
@@ -1129,6 +1213,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// `name: expr`.
     fn parse_record_field(&mut self) {
         self.start_node(SyntaxKind::RECORD_FIELD);
         self.expect_field_name();
@@ -1149,6 +1234,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── patterns ────────────────────────────────────────────────
 
+    /// Parses a pattern (depth-guarded entry point).
     fn parse_pattern(&mut self) {
         if self.too_deep() {
             return;
@@ -1158,6 +1244,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.depth -= 1;
     }
 
+    /// A pattern: a literal, tuple, wildcard `_`, constructor, or binding.
     fn parse_pattern_inner(&mut self) {
         match self.current() {
             SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
@@ -1212,6 +1299,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
+    /// `Ctor` or `Ctor(p, ...)`.
     fn parse_constructor_pattern(&mut self) {
         self.start_node(SyntaxKind::CONSTRUCTOR_PAT);
         self.bump();
@@ -1230,6 +1318,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
+    /// Text of the current token (assumed an identifier).
     fn current_ident_text(&self) -> &str {
         self.current_span().text(self.source)
     }
@@ -1274,6 +1363,7 @@ fn is_keyword(kind: SyntaxKind) -> bool {
     )
 }
 
+/// Static "expected ..." message for `kind`, used by [`Parser::expect`].
 fn expected_msg(kind: SyntaxKind) -> &'static str {
     match kind {
         SyntaxKind::IDENT => "expected identifier",
