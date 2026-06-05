@@ -381,6 +381,7 @@ dependencies = [
  "hird-lex",
  "insta",
  "miette",
+ "proptest",
 ]
 
 [[package]]

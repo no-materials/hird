@@ -19,6 +19,7 @@ miette = { version = "7", default-features = false, features = [
 
 [dev-dependencies]
 insta = "1"
+proptest = "1"
 
 [lints]
 workspace = true
