@@ -1,6 +1,6 @@
 ---
 id: hir-vm5s
-status: open
+status: closed
 deps: [hir-cn1r]
 links: []
 created: 2026-05-22T21:32:12Z
@@ -55,9 +55,9 @@ as syntax — semantic analysis happens in later phases.
 
 ## Task sequence
 
-1. [ ] [hir-ed3z](hir-ed3z.md) — Grammar specification and parser infrastructure
-2. [ ] [hir-va37](hir-va37.md) — Core syntax parsing
-3. [ ] [hir-of12](hir-of12.md) — Parser error recovery and diagnostics
+1. [x] [hir-ed3z](hir-ed3z.md) — Grammar specification and parser infrastructure
+2. [x] [hir-va37](hir-va37.md) — Core syntax parsing
+3. [x] [hir-of12](hir-of12.md) — Parser error recovery and diagnostics
 
 ## Out of scope
 
@@ -88,3 +88,9 @@ as syntax — semantic analysis happens in later phases.
   for well-formed inputs.
 - `cargo clippy` and `cargo test` pass for `hird-parse` and `hird-ast`.
 
+
+## Notes
+
+**2026-06-08T09:09:11Z**
+
+Acceptance verified complete: all 3 children closed (hir-ed3z, hir-va37, hir-of12); docs/grammar.md present; AST projection covers all 12 required node types (LetExpr, Lambda, FnDecl, TypeDecl, MatchExpr, ModuleDecl, UseDecl, ExternDecl, EffectDecl, ActorDecl, SupervisorDecl, ToolDecl); no_std diagnostics + std/miette rendering; error-recovery snapshots and round-trip property tests in place; clippy and full test suite pass. Closing epic.
