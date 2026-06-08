@@ -1,6 +1,6 @@
 ---
 id: hir-jj3l
-status: open
+status: closed
 deps: [hir-of12]
 links: []
 created: 2026-05-22T21:37:14Z
@@ -52,3 +52,11 @@ Fresh variables are allocated from a counter.
   (binds A), (A -> B) with (Int -> String) (binds both), occurs check triggers.
 - At least 15 unit tests covering the unification engine.
 
+
+## Notes
+
+**2026-06-08T10:59:24Z**
+
+Implemented in hird-types: Type enum (TyVar, TyCon, TyFn, TyTuple, TyRecord, TyForall); Vec-backed union-find Subst with path compression + union-by-rank and a monotonic fresh-var counter; occurs-checking unification across variables, constructors, functions, tuples, and structural records; spanned TypeError (TypeMismatch / InfiniteType / QuantifiedType); phrasebook-faithful Display. 33 unit tests; fmt, clippy (-D warnings), and full workspace tests pass.
+
+For review: Name and Label are placed in hird-types as newtypes over Box<str> (no interner) since they are the syntax-to-semantics boundary later passes consume. Movable to a lower shared crate later if needed. Crate dependency swapped from hird-ast to hird-lex (only Span is required here).

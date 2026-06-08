@@ -388,7 +388,7 @@ dependencies = [
 name = "hird-types"
 version = "0.1.0"
 dependencies = [
- "hird-ast",
+ "hird-lex",
 ]
 
 [[package]]

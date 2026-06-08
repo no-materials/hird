@@ -9,7 +9,7 @@ description = "Hirð type representation, unification, and inference"
 publish = false
 
 [dependencies]
-hird-ast.workspace = true
+hird-lex.workspace = true
 
 [lints]
 workspace = true
