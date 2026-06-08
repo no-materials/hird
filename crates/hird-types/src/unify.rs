@@ -22,16 +22,16 @@ use crate::ty::Type;
 pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Result<(), TypeError> {
     let a = subst.head(expected);
     let b = subst.head(got);
-    match (a, b) {
+    match (a.as_ref(), b.as_ref()) {
         // Quantified types must be instantiated before they reach unification.
         (Type::TyForall(..), _) | (_, Type::TyForall(..)) => {
             Err(TypeError::QuantifiedType { span })
         }
         (Type::TyVar(x), Type::TyVar(y)) => {
-            subst.union(x, y);
+            subst.union(*x, *y);
             Ok(())
         }
-        (Type::TyVar(x), other) | (other, Type::TyVar(x)) => subst.bind(x, other, span),
+        (Type::TyVar(x), other) | (other, Type::TyVar(x)) => subst.bind(*x, other.clone(), span),
         (Type::TyCon(n1, args1), Type::TyCon(n2, args2)) => {
             if n1 != n2 || args1.len() != args2.len() {
                 return Err(mismatch(subst, expected, got, span));
@@ -42,8 +42,8 @@ pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Resu
             Ok(())
         }
         (Type::TyFn(from1, to1), Type::TyFn(from2, to2)) => {
-            unify(subst, &from1, &from2, span)?;
-            unify(subst, &to1, &to2, span)
+            unify(subst, from1, from2, span)?;
+            unify(subst, to1, to2, span)
         }
         (Type::TyTuple(xs), Type::TyTuple(ys)) => {
             if xs.len() != ys.len() {

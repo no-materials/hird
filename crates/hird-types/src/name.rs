@@ -13,76 +13,56 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use core::fmt;
 
-/// Name of a type constructor (e.g. `Int`, `List`, `Option`).
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Name(Box<str>);
+/// Defines an owned-string newtype over `Box<str>` with the constructor,
+/// accessor, `From`, and `Display` impls shared by every identifier kind.
+macro_rules! str_newtype {
+    ($(#[$doc:meta])* $name:ident) => {
+        $(#[$doc])*
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+        pub struct $name(Box<str>);
 
-/// Field label of a record type (e.g. `age`, `name`).
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Label(Box<str>);
+        impl $name {
+            /// Wraps a string as this identifier.
+            #[must_use]
+            pub fn new(value: impl Into<Box<str>>) -> Self {
+                Self(value.into())
+            }
 
-impl Name {
-    /// Wraps a string as a constructor name.
-    #[must_use]
-    pub fn new(name: impl Into<Box<str>>) -> Self {
-        Self(name.into())
-    }
+            /// Borrows the underlying string.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
 
-    /// Borrows the underlying string.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self(value.into())
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self(value.into())
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+    };
 }
 
-impl Label {
-    /// Wraps a string as a record label.
-    #[must_use]
-    pub fn new(label: impl Into<Box<str>>) -> Self {
-        Self(label.into())
-    }
-
-    /// Borrows the underlying string.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+str_newtype! {
+    /// Name of a type constructor (e.g. `Int`, `List`, `Option`).
+    Name
 }
 
-impl From<&str> for Name {
-    fn from(value: &str) -> Self {
-        Self(value.into())
-    }
-}
-
-impl From<String> for Name {
-    fn from(value: String) -> Self {
-        Self(value.into())
-    }
-}
-
-impl From<&str> for Label {
-    fn from(value: &str) -> Self {
-        Self(value.into())
-    }
-}
-
-impl From<String> for Label {
-    fn from(value: String) -> Self {
-        Self(value.into())
-    }
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
+str_newtype! {
+    /// Field label of a record type (e.g. `age`, `name`).
+    Label
 }
 
 #[cfg(test)]
