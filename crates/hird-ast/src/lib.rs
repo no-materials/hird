@@ -9,9 +9,9 @@
 //! children. Token text resolves directly (the tree owns its interner), so
 //! accessors return `&str` without re-supplying the source.
 //!
-//! The projection covers declarations and expressions. Type expressions and
-//! patterns are not yet projected; where an accessor would return one, the
-//! underlying node is reachable through [`AstNode::syntax`].
+//! The projection covers declarations, expressions, type expressions, and
+//! patterns. A handful of nodes (actor and supervisor bodies) remain
+//! unprojected; reach their contents through [`AstNode::syntax`].
 //!
 //! # Entry point
 //!
@@ -108,6 +108,33 @@ fn expr_after(node: &SyntaxNode, kw: SyntaxKind) -> Option<Expr> {
         .skip_while(|e| element_kind(*e) != kw)
         .skip(1)
         .find_map(Expr::cast_element)
+}
+
+/// The first type operand among a node's children/tokens.
+fn first_type(node: &SyntaxNode) -> Option<TypeExpr> {
+    node.children_with_tokens().find_map(TypeExpr::cast_element)
+}
+
+/// Every type operand among a node's children/tokens, in source order.
+fn types(node: &SyntaxNode) -> impl Iterator<Item = TypeExpr> + '_ {
+    node.children_with_tokens()
+        .filter_map(TypeExpr::cast_element)
+}
+
+/// The first type operand appearing after the token `kw`.
+fn type_after(node: &SyntaxNode, kw: SyntaxKind) -> Option<TypeExpr> {
+    node.children_with_tokens()
+        .skip_while(|e| element_kind(*e) != kw)
+        .skip(1)
+        .find_map(TypeExpr::cast_element)
+}
+
+/// The type inside a node's `RETURN_TYPE` child (`→ Type`), if present.
+fn return_type(node: &SyntaxNode) -> Option<TypeExpr> {
+    let rt = node
+        .children()
+        .find(|c| c.kind() == SyntaxKind::RETURN_TYPE)?;
+    first_type(rt)
 }
 
 /// Defines a newtype over one node kind and its [`AstNode`] impl.
@@ -223,6 +250,12 @@ impl FnDecl {
         params(&self.0)
     }
 
+    /// The declared return type (after `→`), if annotated.
+    #[must_use]
+    pub fn return_type(&self) -> Option<TypeExpr> {
+        return_type(&self.0)
+    }
+
     /// The body expression (after `=`).
     #[must_use]
     pub fn body(&self) -> Option<Expr> {
@@ -246,6 +279,17 @@ impl TypeDecl {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The type parameter names (`<A, B>`), in order.
+    pub fn type_params(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
+            .flat_map(|list| list.children_with_tokens())
+            .filter_map(|e| e.into_token())
+            .filter(|t| t.kind() == SyntaxKind::IDENT)
+            .map(|t| t.text())
     }
 
     /// The constructors of the data type, in order.
@@ -307,6 +351,12 @@ impl ExternDecl {
     /// The declared parameters, in order.
     pub fn params(&self) -> impl Iterator<Item = Param> + '_ {
         params(&self.0)
+    }
+
+    /// The declared return type (after `→`), if annotated.
+    #[must_use]
+    pub fn return_type(&self) -> Option<TypeExpr> {
+        return_type(&self.0)
     }
 }
 
@@ -432,6 +482,16 @@ impl LetExpr {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The type annotation (`: Type`), if present.
+    #[must_use]
+    pub fn annotation(&self) -> Option<TypeExpr> {
+        let ann = self
+            .0
+            .children()
+            .find(|c| c.kind() == SyntaxKind::TYPE_ANN)?;
+        first_type(ann)
     }
 
     /// The bound value (after `=`).
@@ -783,6 +843,273 @@ impl Expr {
     }
 }
 
+// ── type expressions ────────────────────────────────────────────
+
+ast_node! {
+    /// An applied type (`List<Int>`).
+    AppType => APP_TYPE
+}
+
+impl AppType {
+    /// The applied constructor name.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+
+    /// The type arguments (`<..>`), in order.
+    pub fn args(&self) -> impl Iterator<Item = TypeExpr> + '_ {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TYPE_ARGS)
+            .flat_map(|args| args.children_with_tokens())
+            .filter_map(TypeExpr::cast_element)
+    }
+}
+
+ast_node! {
+    /// A function type (`A → B`). Effect annotations on the arrow are not
+    /// projected; reach them via [`AstNode::syntax`].
+    FnType => FN_TYPE
+}
+
+impl FnType {
+    /// The parameter types: every operand but the last.
+    pub fn params(&self) -> impl Iterator<Item = TypeExpr> + '_ {
+        let count = types(&self.0).count();
+        types(&self.0).take(count.saturating_sub(1))
+    }
+
+    /// The result type: the final operand.
+    #[must_use]
+    pub fn return_type(&self) -> Option<TypeExpr> {
+        types(&self.0).last()
+    }
+}
+
+ast_node! {
+    /// A tuple type (`(A, B)`), including unit (`()`).
+    TupleType => TUPLE_TYPE
+}
+
+impl TupleType {
+    /// The element types, in order.
+    pub fn elements(&self) -> impl Iterator<Item = TypeExpr> + '_ {
+        types(&self.0)
+    }
+}
+
+ast_node! {
+    /// A parenthesised type (`(T)`).
+    ParenType => PAREN_TYPE
+}
+
+impl ParenType {
+    /// The wrapped type.
+    #[must_use]
+    pub fn inner(&self) -> Option<TypeExpr> {
+        first_type(&self.0)
+    }
+}
+
+/// A bare type name: a named type (`Int`) or a type variable (`a`). The two are
+/// indistinguishable here; the checker classifies them.
+#[derive(Debug, Clone)]
+pub struct NameType(SyntaxToken);
+
+impl NameType {
+    /// The name's source text.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        self.0.text()
+    }
+}
+
+/// Any type expression.
+///
+/// A bare name ([`Name`](Self::Name)) is a token rather than a node, mirroring
+/// the atomic operands of [`Expr`].
+#[derive(Debug, Clone)]
+pub enum TypeExpr {
+    /// `C<..>`
+    App(AppType),
+    /// `A → B`
+    Fn(FnType),
+    /// `(.., ..)`
+    Tuple(TupleType),
+    /// `(T)`
+    Paren(ParenType),
+    /// A named type or type variable.
+    Name(NameType),
+}
+
+impl TypeExpr {
+    /// Casts a node to its matching `TypeExpr` variant, or `None`.
+    fn cast_node(node: SyntaxNode) -> Option<Self> {
+        let ty = match node.kind() {
+            SyntaxKind::APP_TYPE => Self::App(AppType(node)),
+            SyntaxKind::FN_TYPE => Self::Fn(FnType(node)),
+            SyntaxKind::TUPLE_TYPE => Self::Tuple(TupleType(node)),
+            SyntaxKind::PAREN_TYPE => Self::Paren(ParenType(node)),
+            _ => return None,
+        };
+        Some(ty)
+    }
+
+    /// Casts a token to its matching `TypeExpr` variant — a bare name — or
+    /// `None`.
+    fn cast_token(tok: SyntaxToken) -> Option<Self> {
+        match tok.kind() {
+            SyntaxKind::IDENT => Some(Self::Name(NameType(tok))),
+            _ => None,
+        }
+    }
+
+    /// Casts a node-or-token element to its matching `TypeExpr` variant, or
+    /// `None`.
+    fn cast_element(element: ResolvedElementRef<'_, SyntaxKind>) -> Option<Self> {
+        match element {
+            NodeOrToken::Node(n) => Self::cast_node(n.clone()),
+            NodeOrToken::Token(t) => Self::cast_token(t.clone()),
+        }
+    }
+
+    /// The underlying CST node, or `None` for a bare [`Name`](Self::Name), which
+    /// is a token.
+    #[must_use]
+    pub fn syntax(&self) -> Option<&SyntaxNode> {
+        match self {
+            Self::App(n) => Some(n.syntax()),
+            Self::Fn(n) => Some(n.syntax()),
+            Self::Tuple(n) => Some(n.syntax()),
+            Self::Paren(n) => Some(n.syntax()),
+            Self::Name(_) => None,
+        }
+    }
+}
+
+// ── patterns ─────────────────────────────────────────────────────
+
+ast_node! {
+    /// A constructor pattern (`Foo(a, b)` or nullary `Foo`).
+    ConstructorPat => CONSTRUCTOR_PAT
+}
+
+impl ConstructorPat {
+    /// The constructor name.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+
+    /// The sub-pattern for each constructor field, in order.
+    pub fn fields(&self) -> impl Iterator<Item = Pattern> + '_ {
+        children(&self.0)
+    }
+}
+
+ast_node! {
+    /// A tuple pattern (`(a, b)`), including the empty pattern (`()`).
+    TuplePat => TUPLE_PAT
+}
+
+impl TuplePat {
+    /// The element patterns, in order.
+    pub fn elements(&self) -> impl Iterator<Item = Pattern> + '_ {
+        children(&self.0)
+    }
+}
+
+ast_node! {
+    /// A literal pattern (`1`, `"hi"`).
+    LiteralPat => LITERAL_PAT
+}
+
+impl LiteralPat {
+    /// The matched literal (integer, float, or string).
+    #[must_use]
+    pub fn literal(&self) -> Option<Literal> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|e| e.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING
+                )
+            })
+            .map(|t| Literal(t.clone()))
+    }
+}
+
+ast_node! {
+    /// A wildcard pattern (`_`).
+    WildcardPat => WILDCARD_PAT
+}
+
+ast_node! {
+    /// A variable binding pattern (`x`).
+    BindPat => BIND_PAT
+}
+
+impl BindPat {
+    /// The bound name.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+}
+
+/// Any pattern.
+#[derive(Debug, Clone)]
+pub enum Pattern {
+    /// `Foo(..)`
+    Constructor(ConstructorPat),
+    /// `(.., ..)`
+    Tuple(TuplePat),
+    /// `1`, `"hi"`
+    Literal(LiteralPat),
+    /// `_`
+    Wildcard(WildcardPat),
+    /// `x`
+    Bind(BindPat),
+}
+
+impl AstNode for Pattern {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        matches!(
+            kind,
+            SyntaxKind::CONSTRUCTOR_PAT
+                | SyntaxKind::TUPLE_PAT
+                | SyntaxKind::LITERAL_PAT
+                | SyntaxKind::WILDCARD_PAT
+                | SyntaxKind::BIND_PAT
+        )
+    }
+
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        let pat = match syntax.kind() {
+            SyntaxKind::CONSTRUCTOR_PAT => Self::Constructor(ConstructorPat(syntax)),
+            SyntaxKind::TUPLE_PAT => Self::Tuple(TuplePat(syntax)),
+            SyntaxKind::LITERAL_PAT => Self::Literal(LiteralPat(syntax)),
+            SyntaxKind::WILDCARD_PAT => Self::Wildcard(WildcardPat(syntax)),
+            SyntaxKind::BIND_PAT => Self::Bind(BindPat(syntax)),
+            _ => return None,
+        };
+        Some(pat)
+    }
+
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Constructor(n) => n.syntax(),
+            Self::Tuple(n) => n.syntax(),
+            Self::Literal(n) => n.syntax(),
+            Self::Wildcard(n) => n.syntax(),
+            Self::Bind(n) => n.syntax(),
+        }
+    }
+}
+
 // ── structural children ─────────────────────────────────────────
 
 ast_node! {
@@ -795,6 +1122,12 @@ impl Param {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The declared type (after `:`).
+    #[must_use]
+    pub fn ty(&self) -> Option<TypeExpr> {
+        type_after(&self.0, SyntaxKind::COLON)
     }
 }
 
@@ -809,15 +1142,29 @@ impl Constructor {
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
     }
+
+    /// The field types, in order.
+    pub fn fields(&self) -> impl Iterator<Item = TypeExpr> + '_ {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::FIELD_LIST)
+            .flat_map(|list| list.children_with_tokens())
+            .filter_map(TypeExpr::cast_element)
+    }
 }
 
 ast_node! {
-    /// A match arm (`pattern → body`). The pattern is reachable via
-    /// [`AstNode::syntax`].
+    /// A match arm (`pattern → body`).
     MatchArm => MATCH_ARM
 }
 
 impl MatchArm {
+    /// The arm's pattern.
+    #[must_use]
+    pub fn pattern(&self) -> Option<Pattern> {
+        child(&self.0)
+    }
+
     /// The arm body (after `→`).
     #[must_use]
     pub fn body(&self) -> Option<Expr> {

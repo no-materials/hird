@@ -3,7 +3,7 @@
 
 #![expect(missing_docs, reason = "test suite")]
 
-use hird_ast::{AstNode, Decl, Expr, FnDecl, SourceFile};
+use hird_ast::{AstNode, Constructor, Decl, Expr, FnDecl, Pattern, SourceFile, TypeExpr};
 
 fn file(src: &str) -> SourceFile {
     let parsed = hird_parse::parse(src, 0);
@@ -365,4 +365,272 @@ fn recovery_keeps_neighbours_of_malformed_declaration() {
         .collect();
     assert_eq!(params, ["x"]);
     assert!(matches!(fns[1].body(), Some(Expr::Literal(_))));
+}
+
+// ── type expressions ────────────────────────────────────────────
+
+/// Parse `fn f(x: <ty_src>) = 0` and return the parameter's projected type.
+fn param_type(ty_src: &str) -> TypeExpr {
+    let src = format!("fn f(x: {ty_src}) = 0");
+    let file = file(&src);
+    first_fn(&file)
+        .params()
+        .next()
+        .expect("a param")
+        .ty()
+        .expect("a param type")
+}
+
+/// The named field types of a constructor (non-name fields ignored).
+fn ctor_field_names(c: &Constructor) -> Vec<String> {
+    c.fields()
+        .filter_map(|f| match f {
+            TypeExpr::Name(n) => Some(n.text().to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn type_name_and_variable() {
+    // A bare identifier projects as a name, whether a named type or a type
+    // variable — the two are indistinguishable at this layer.
+    let TypeExpr::Name(named) = param_type("Int") else {
+        panic!("expected name type");
+    };
+    assert_eq!(named.text(), "Int");
+
+    let TypeExpr::Name(var) = param_type("a") else {
+        panic!("expected name type");
+    };
+    assert_eq!(var.text(), "a");
+}
+
+#[test]
+fn type_applied() {
+    let TypeExpr::App(app) = param_type("List<Int>") else {
+        panic!("expected applied type");
+    };
+    assert_eq!(app.name(), Some("List"));
+    let args: Vec<String> = app
+        .args()
+        .filter_map(|a| match a {
+            TypeExpr::Name(n) => Some(n.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(args, ["Int"]);
+
+    // Several arguments.
+    let TypeExpr::App(table) = param_type("Table<UserId, User, Read>") else {
+        panic!("expected applied type");
+    };
+    assert_eq!(table.args().count(), 3);
+}
+
+#[test]
+fn type_function_is_flat_curried() {
+    // `a → b → c` flattens to operands [a, b, c]: params [a, b], result c.
+    let TypeExpr::Fn(f) = param_type("a -> b -> c") else {
+        panic!("expected function type");
+    };
+    let params: Vec<String> = f
+        .params()
+        .filter_map(|t| match t {
+            TypeExpr::Name(n) => Some(n.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(params, ["a", "b"]);
+    let Some(TypeExpr::Name(ret)) = f.return_type() else {
+        panic!("expected name result");
+    };
+    assert_eq!(ret.text(), "c");
+}
+
+#[test]
+fn type_tuple_and_paren() {
+    let TypeExpr::Tuple(t) = param_type("(A, B)") else {
+        panic!("expected tuple type");
+    };
+    assert_eq!(t.elements().count(), 2);
+
+    // `()` is the unit (empty tuple) type.
+    let TypeExpr::Tuple(unit) = param_type("()") else {
+        panic!("expected unit type");
+    };
+    assert_eq!(unit.elements().count(), 0);
+
+    // A single parenthesised type is a paren, not a one-tuple.
+    let TypeExpr::Paren(p) = param_type("(T)") else {
+        panic!("expected paren type");
+    };
+    assert!(matches!(p.inner(), Some(TypeExpr::Name(_))));
+}
+
+#[test]
+fn fn_signature_types() {
+    let file = file("fn add(x: Int, y: List<a>) -> Int = x");
+    let f = first_fn(&file);
+
+    let kinds: Vec<&str> = f
+        .params()
+        .map(|p| match p.ty() {
+            Some(TypeExpr::Name(_)) => "name",
+            Some(TypeExpr::App(_)) => "app",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(kinds, ["name", "app"]);
+
+    let Some(TypeExpr::Name(ret)) = f.return_type() else {
+        panic!("expected return type");
+    };
+    assert_eq!(ret.text(), "Int");
+}
+
+#[test]
+fn extern_signature_types() {
+    let file = file("extern fn print(s: String) -> Unit");
+    let ext = file
+        .declarations()
+        .find_map(|d| match d {
+            Decl::Extern(e) => Some(e),
+            _ => None,
+        })
+        .unwrap();
+
+    let Some(TypeExpr::Name(param)) = ext.params().next().and_then(|p| p.ty()) else {
+        panic!("expected param type");
+    };
+    assert_eq!(param.text(), "String");
+
+    let Some(TypeExpr::Name(ret)) = ext.return_type() else {
+        panic!("expected return type");
+    };
+    assert_eq!(ret.text(), "Unit");
+}
+
+#[test]
+fn type_decl_params_and_constructor_fields() {
+    let file = file("type Result<A, B> = Ok(A) | Err(B, String) | Pending");
+    let ty = file
+        .declarations()
+        .find_map(|d| match d {
+            Decl::Type(t) => Some(t),
+            _ => None,
+        })
+        .unwrap();
+
+    assert_eq!(owned(ty.type_params()), ["A", "B"]);
+
+    let ctors: Vec<_> = ty.constructors().collect();
+    assert_eq!(ctor_field_names(&ctors[0]), ["A"]);
+    assert_eq!(ctor_field_names(&ctors[1]), ["B", "String"]);
+    assert!(ctor_field_names(&ctors[2]).is_empty()); // `Pending` is nullary
+}
+
+#[test]
+fn let_annotation() {
+    let Expr::Let(annotated) = body("let x: Int = 42 in x") else {
+        panic!("expected let");
+    };
+    let Some(TypeExpr::Name(ann)) = annotated.annotation() else {
+        panic!("expected annotation");
+    };
+    assert_eq!(ann.text(), "Int");
+
+    let Expr::Let(bare) = body("let y = 1 in y") else {
+        panic!("expected let");
+    };
+    assert!(bare.annotation().is_none());
+}
+
+// ── patterns ─────────────────────────────────────────────────────
+
+/// Parse `fn f() = match m { <pat_src> → 0 }` and return the arm's pattern.
+fn arm_pattern(pat_src: &str) -> Pattern {
+    let src = format!("fn f() = match m {{ {pat_src} -> 0 }}");
+    let file = file(&src);
+    let Some(Expr::Match(m)) = first_fn(&file).body() else {
+        panic!("expected match body");
+    };
+    m.arms()
+        .next()
+        .expect("an arm")
+        .pattern()
+        .expect("a pattern")
+}
+
+#[test]
+fn pattern_bind_wildcard_literal() {
+    let Pattern::Bind(b) = arm_pattern("count") else {
+        panic!("expected bind pattern");
+    };
+    assert_eq!(b.name(), Some("count"));
+
+    assert!(matches!(arm_pattern("_"), Pattern::Wildcard(_)));
+
+    let Pattern::Literal(lit) = arm_pattern("42") else {
+        panic!("expected literal pattern");
+    };
+    assert_eq!(
+        lit.literal().map(|l| l.text().to_owned()).as_deref(),
+        Some("42")
+    );
+}
+
+#[test]
+fn pattern_tuple() {
+    let Pattern::Tuple(t) = arm_pattern("(x, _, 1)") else {
+        panic!("expected tuple pattern");
+    };
+    let kinds: Vec<&str> = t
+        .elements()
+        .map(|p| match p {
+            Pattern::Bind(_) => "bind",
+            Pattern::Wildcard(_) => "wild",
+            Pattern::Literal(_) => "lit",
+            Pattern::Constructor(_) => "ctor",
+            Pattern::Tuple(_) => "tuple",
+        })
+        .collect();
+    assert_eq!(kinds, ["bind", "wild", "lit"]);
+}
+
+#[test]
+fn pattern_constructor_nested() {
+    // `Some(Cons(x, _))`: a constructor whose field is itself a constructor
+    // pattern binding `x` and discarding the tail.
+    let Pattern::Constructor(some) = arm_pattern("Some(Cons(x, _))") else {
+        panic!("expected constructor pattern");
+    };
+    assert_eq!(some.name(), Some("Some"));
+
+    let outer: Vec<_> = some.fields().collect();
+    assert_eq!(outer.len(), 1);
+    let Pattern::Constructor(cons) = &outer[0] else {
+        panic!("expected nested constructor");
+    };
+    assert_eq!(cons.name(), Some("Cons"));
+
+    let sub: Vec<_> = cons.fields().collect();
+    assert!(matches!(sub[0], Pattern::Bind(_)));
+    assert!(matches!(sub[1], Pattern::Wildcard(_)));
+}
+
+#[test]
+fn match_arm_patterns() {
+    let Expr::Match(m) = body("match msg { PlanRepo(path) -> 1, Shutdown -> 2, _ -> 3 }") else {
+        panic!("expected match");
+    };
+    let names: Vec<String> = m
+        .arms()
+        .map(|a| match a.pattern() {
+            Some(Pattern::Constructor(c)) => c.name().unwrap_or("?").to_owned(),
+            Some(Pattern::Wildcard(_)) => "_".to_owned(),
+            _ => "other".to_owned(),
+        })
+        .collect();
+    assert_eq!(names, ["PlanRepo", "Shutdown", "_"]);
 }

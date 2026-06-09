@@ -51,7 +51,7 @@ Key design decisions in this phase:
 ## Task sequence
 
 1. [x] [hir-jj3l](hir-jj3l.md) — Type representation and unification engine
-2. [ ] [hir-h8qo](hir-h8qo.md) — Complete the hird-ast projection: type expressions and patterns
+2. [x] [hir-h8qo](hir-h8qo.md) — Complete the hird-ast projection: type expressions and patterns
 3. [ ] [hir-lhyh](hir-lhyh.md) — Let-polymorphism and ADT type checking
 4. [ ] [hir-n3si](hir-n3si.md) — Pattern match exhaustiveness checking
 5. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types

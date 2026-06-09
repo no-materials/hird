@@ -1,6 +1,6 @@
 ---
 id: hir-h8qo
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-06-09T06:52:41Z
