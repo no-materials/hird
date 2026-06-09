@@ -1,7 +1,7 @@
 ---
 id: hir-lhyh
 status: open
-deps: [hir-jj3l]
+deps: [hir-jj3l, hir-h8qo]
 links: []
 created: 2026-05-22T21:37:29Z
 type: task
