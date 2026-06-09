@@ -129,12 +129,18 @@ fn type_after(node: &SyntaxNode, kw: SyntaxKind) -> Option<TypeExpr> {
         .find_map(TypeExpr::cast_element)
 }
 
-/// The type inside a node's `RETURN_TYPE` child (`→ Type`), if present.
-fn return_type(node: &SyntaxNode) -> Option<TypeExpr> {
-    let rt = node
-        .children()
-        .find(|c| c.kind() == SyntaxKind::RETURN_TYPE)?;
-    first_type(rt)
+/// The first type inside a node's `wrapper` child (`→ Type`, `: Type`).
+fn type_in(node: &SyntaxNode, wrapper: SyntaxKind) -> Option<TypeExpr> {
+    let w = node.children().find(|c| c.kind() == wrapper)?;
+    first_type(w)
+}
+
+/// Every type operand inside a node's `wrapper` list child, in source order.
+fn types_in(node: &SyntaxNode, wrapper: SyntaxKind) -> impl Iterator<Item = TypeExpr> + '_ {
+    node.children()
+        .filter(move |c| c.kind() == wrapper)
+        .flat_map(|list| list.children_with_tokens())
+        .filter_map(TypeExpr::cast_element)
 }
 
 /// Defines a newtype over one node kind and its [`AstNode`] impl.
@@ -253,7 +259,7 @@ impl FnDecl {
     /// The declared return type (after `→`), if annotated.
     #[must_use]
     pub fn return_type(&self) -> Option<TypeExpr> {
-        return_type(&self.0)
+        type_in(&self.0, SyntaxKind::RETURN_TYPE)
     }
 
     /// The body expression (after `=`).
@@ -356,7 +362,7 @@ impl ExternDecl {
     /// The declared return type (after `→`), if annotated.
     #[must_use]
     pub fn return_type(&self) -> Option<TypeExpr> {
-        return_type(&self.0)
+        type_in(&self.0, SyntaxKind::RETURN_TYPE)
     }
 }
 
@@ -487,11 +493,7 @@ impl LetExpr {
     /// The type annotation (`: Type`), if present.
     #[must_use]
     pub fn annotation(&self) -> Option<TypeExpr> {
-        let ann = self
-            .0
-            .children()
-            .find(|c| c.kind() == SyntaxKind::TYPE_ANN)?;
-        first_type(ann)
+        type_in(&self.0, SyntaxKind::TYPE_ANN)
     }
 
     /// The bound value (after `=`).
@@ -859,11 +861,7 @@ impl AppType {
 
     /// The type arguments (`<..>`), in order.
     pub fn args(&self) -> impl Iterator<Item = TypeExpr> + '_ {
-        self.0
-            .children()
-            .filter(|c| c.kind() == SyntaxKind::TYPE_ARGS)
-            .flat_map(|args| args.children_with_tokens())
-            .filter_map(TypeExpr::cast_element)
+        types_in(&self.0, SyntaxKind::TYPE_ARGS)
     }
 }
 
@@ -876,8 +874,10 @@ ast_node! {
 impl FnType {
     /// The parameter types: every operand but the last.
     pub fn params(&self) -> impl Iterator<Item = TypeExpr> + '_ {
-        let count = types(&self.0).count();
-        types(&self.0).take(count.saturating_sub(1))
+        // Lag by one: hold each operand back until the next arrives, so the
+        // final operand (the result type) is never yielded.
+        let mut prev = None;
+        types(&self.0).filter_map(move |t| prev.replace(t))
     }
 
     /// The result type: the final operand.
@@ -1145,11 +1145,7 @@ impl Constructor {
 
     /// The field types, in order.
     pub fn fields(&self) -> impl Iterator<Item = TypeExpr> + '_ {
-        self.0
-            .children()
-            .filter(|c| c.kind() == SyntaxKind::FIELD_LIST)
-            .flat_map(|list| list.children_with_tokens())
-            .filter_map(TypeExpr::cast_element)
+        types_in(&self.0, SyntaxKind::FIELD_LIST)
     }
 }
 
