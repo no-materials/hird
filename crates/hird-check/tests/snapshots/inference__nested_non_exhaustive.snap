@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 400
+expression: "check_str(\"type List<a> = Cons(a, List<a>) | Nil\\n\\\n         type Option<a> = Some(a) | None\\n\\\n         fn first(opt: Option<List<Int>>) -> Int = match opt {\\n\\\n           Some(Cons(x, _)) -> x,\\n\\\n           None -> 0,\\n\\\n         }\")"
+---
+Cons : ∀a. a → List<a> → List<a>
+Nil : ∀a. List<a>
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+first : Option<List<Int>> → Int
+error[C0015] 111..159: non-exhaustive match: missing case(s): `Some(Nil)`

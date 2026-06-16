@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 356
+expression: "check_str(\"fn describe(n: Int) -> String = match n {\\n\\\n           1 -> \\\"one\\\",\\n\\\n           2 -> \\\"two\\\",\\n\\\n         }\")"
+---
+describe : Int → String
+error[C0015] 31..67: non-exhaustive match: add a wildcard `_` arm to cover the remaining values

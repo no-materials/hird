@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 422
+expression: "check_str(\"fn f(p: (Bool, Bool)) -> Int = match p {\\n\\\n           (True, _) -> 1,\\n\\\n           (False, _) -> 0,\\n\\\n         }\")"
+---
+f : (Bool, Bool) → Int

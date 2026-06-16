@@ -298,6 +298,143 @@ fn bool_is_an_adt() {
     ));
 }
 
+// ── exhaustiveness & redundancy ──────────────────────────────────
+
+#[test]
+fn non_exhaustive_missing_constructor() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn unwrap(opt: Option<Int>) -> Int = match opt {\n\
+           Some(x) -> x,\n\
+         }"
+    ));
+}
+
+#[test]
+fn non_exhaustive_lists_all_missing() {
+    insta::assert_snapshot!(check_str(
+        "type Color = Red | Green | Blue\n\
+         fn code(c: Color) -> Int = match c {\n\
+           Red -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn non_exhaustive_bool() {
+    insta::assert_snapshot!(check_str(
+        "fn f(b: Bool) -> Int = match b {\n\
+           True -> 1,\n\
+         }"
+    ));
+}
+
+#[test]
+fn wildcard_arm_is_exhaustive() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn unwrap_or(opt: Option<Int>, d: Int) -> Int = match opt {\n\
+           Some(x) -> x,\n\
+           _ -> d,\n\
+         }"
+    ));
+}
+
+#[test]
+fn variable_arm_is_exhaustive() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn or_zero(opt: Option<Int>) -> Int = match opt {\n\
+           Some(x) -> x,\n\
+           rest -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn literals_need_a_wildcard() {
+    insta::assert_snapshot!(check_str(
+        "fn describe(n: Int) -> String = match n {\n\
+           1 -> \"one\",\n\
+           2 -> \"two\",\n\
+         }"
+    ));
+}
+
+#[test]
+fn redundant_duplicate_literal() {
+    insta::assert_snapshot!(check_str(
+        "fn describe(n: Int) -> String = match n {\n\
+           1 -> \"one\",\n\
+           1 -> \"uno\",\n\
+           _ -> \"many\",\n\
+         }"
+    ));
+}
+
+#[test]
+fn redundant_arm_after_wildcard() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn f(opt: Option<Int>) -> Int = match opt {\n\
+           _ -> 0,\n\
+           Some(x) -> x,\n\
+         }"
+    ));
+}
+
+#[test]
+fn redundant_constructor_arm() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn f(opt: Option<Int>) -> Int = match opt {\n\
+           Some(x) -> x,\n\
+           None -> 0,\n\
+           Some(y) -> y,\n\
+         }"
+    ));
+}
+
+#[test]
+fn nested_non_exhaustive() {
+    insta::assert_snapshot!(check_str(
+        "type List<a> = Cons(a, List<a>) | Nil\n\
+         type Option<a> = Some(a) | None\n\
+         fn first(opt: Option<List<Int>>) -> Int = match opt {\n\
+           Some(Cons(x, _)) -> x,\n\
+           None -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn tuple_missing_combination() {
+    insta::assert_snapshot!(check_str(
+        "fn f(p: (Bool, Bool)) -> Int = match p {\n\
+           (True, True) -> 1,\n\
+           (False, False) -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn tuple_components_exhaustive() {
+    insta::assert_snapshot!(check_str(
+        "fn f(p: (Bool, Bool)) -> Int = match p {\n\
+           (True, _) -> 1,\n\
+           (False, _) -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn empty_match_is_non_exhaustive() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn f(opt: Option<Int>) -> Int = match opt { }"
+    ));
+}
+
 // ── operators ───────────────────────────────────────────────────
 
 #[test]

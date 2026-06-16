@@ -41,6 +41,7 @@ mod checker;
 mod diag;
 mod elaborate;
 mod env;
+mod exhaustive;
 mod infer;
 mod registry;
 

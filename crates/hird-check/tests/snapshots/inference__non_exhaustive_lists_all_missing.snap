@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 315
+expression: "check_str(\"type Color = Red | Green | Blue\\n\\\n         fn code(c: Color) -> Int = match c {\\n\\\n           Red -> 0,\\n\\\n         }\")"
+---
+Blue : Color
+Green : Color
+Red : Color
+code : Color → Int
+error[C0015] 58..80: non-exhaustive match: missing case(s): `Blue`, `Green`

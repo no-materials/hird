@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 325
+expression: "check_str(\"fn f(b: Bool) -> Int = match b {\\n\\\n           True -> 1,\\n\\\n         }\")"
+---
+f : Bool → Int
+error[C0015] 22..45: non-exhaustive match: missing case(s): `False`

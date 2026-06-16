@@ -107,4 +107,16 @@ impl Registry {
             .iter()
             .map(|(name, info)| (name, &info.constructors))
     }
+
+    /// The constructor names of `name`, if it is a declared (or seeded) ADT.
+    ///
+    /// Returns `None` for non-ADT type constructors — the built-ins `Int`,
+    /// `Float`, `String`, and any `List`/`Option` that no declaration backs.
+    /// Their value space is open, so exhaustiveness over them is decided by a
+    /// catch-all rather than a constructor enumeration.
+    pub(crate) fn adt_constructors(&self, name: &str) -> Option<&[Name]> {
+        self.adts
+            .get(&Name::new(name))
+            .map(|info| info.constructors.as_slice())
+    }
 }

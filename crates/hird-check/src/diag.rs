@@ -55,6 +55,10 @@ pub enum CheckCode {
     C0013,
     /// An `extern` declaration is missing part of its signature.
     C0014,
+    /// A match does not cover every value of the scrutinee's type.
+    C0015,
+    /// A match arm is unreachable: earlier arms already cover it.
+    C0016,
 }
 
 /// A single type-checker diagnostic.

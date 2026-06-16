@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 334
+expression: "check_str(\"type Option<a> = Some(a) | None\\n\\\n         fn unwrap_or(opt: Option<Int>, d: Int) -> Int = match opt {\\n\\\n           Some(x) -> x,\\n\\\n           _ -> d,\\n\\\n         }\")"
+---
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+unwrap_or : Option<Int> → Int → Int

@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 388
+expression: "check_str(\"type Option<a> = Some(a) | None\\n\\\n         fn f(opt: Option<Int>) -> Int = match opt {\\n\\\n           Some(x) -> x,\\n\\\n           None -> 0,\\n\\\n           Some(y) -> y,\\n\\\n         }\")"
+---
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+f : Option<Int> → Int
+warning[C0016] 100..108: unreachable match arm: this pattern is already covered

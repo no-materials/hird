@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 412
+expression: "check_str(\"fn f(p: (Bool, Bool)) -> Int = match p {\\n\\\n           (True, True) -> 1,\\n\\\n           (False, False) -> 0,\\n\\\n         }\")"
+---
+f : (Bool, Bool) → Int
+error[C0015] 30..82: non-exhaustive match: missing case(s): `(False, True)`, `(True, False)`

@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 366
+expression: "check_str(\"fn describe(n: Int) -> String = match n {\\n\\\n           1 -> \\\"one\\\",\\n\\\n           1 -> \\\"uno\\\",\\n\\\n           _ -> \\\"many\\\",\\n\\\n         }\")"
+---
+describe : Int → String
+warning[C0016] 53..55: unreachable match arm: this pattern is already covered

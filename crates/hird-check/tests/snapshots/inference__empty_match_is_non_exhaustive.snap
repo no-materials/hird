@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 432
+expression: "check_str(\"type Option<a> = Some(a) | None\\n\\\n         fn f(opt: Option<Int>) -> Int = match opt { }\")"
+---
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+f : Option<Int> → Int
+error[C0015] 63..77: non-exhaustive match: missing case(s): `None`, `Some(_)`

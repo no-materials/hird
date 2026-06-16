@@ -220,6 +220,10 @@ impl Checker {
                 Some(first) => self.unify_at(first, &body_ty, body_span)?,
             }
         }
+        // Every arm checked cleanly: now decide coverage over the resolved
+        // scrutinee type, which the constructor patterns have pinned down.
+        let scrutinee_ty = self.subst.resolve(&scrutinee_ty);
+        self.check_match(me, &scrutinee_ty);
         Ok(result.unwrap_or_else(|| self.subst.fresh_type()))
     }
 
