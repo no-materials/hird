@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Pair<a, a> = P(a)\")"
+---
+P : ∀a. a → Pair<a>
+error[C0013] 5..9: type parameter `a` is declared twice

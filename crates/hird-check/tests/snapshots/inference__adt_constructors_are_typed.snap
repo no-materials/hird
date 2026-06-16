@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Option<a> = Some(a) | None\\n\\\n         fn some_one() = Some(1)\\n\\\n         fn none_val() = None\")"
+---
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+none_val : ∀a. () → Option<a>
+some_one : () → Option<Int>

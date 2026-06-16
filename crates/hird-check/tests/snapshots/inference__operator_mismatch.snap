@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn main() = 1 + \"one\"\"#)"
+---
+main : ∀a. a
+error[C0001] 16..21: type mismatch: expected `Int`, got `String`

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn main() = match 1 {\\n\\\n           1 -> 1,\\n\\\n           _ -> \\\"many\\\",\\n\\\n         }\")"
+---
+main : ∀a. a
+error[C0001] 35..41: type mismatch: expected `Int`, got `String`

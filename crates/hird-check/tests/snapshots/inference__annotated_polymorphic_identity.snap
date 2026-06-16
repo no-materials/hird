@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn id(x: a) -> a = x\\n\\\n         fn main() = (id(1), id(\\\"hi\\\"))\")"
+---
+id : ∀a. a → a
+main : () → (Int, String)

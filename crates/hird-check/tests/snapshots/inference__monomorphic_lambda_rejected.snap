@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn main() = \\f -> (f(1), f(\"hello\"))\"#)"
+---
+main : ∀a. a
+error[C0001] 26..35: type mismatch: expected `Int`, got `String`

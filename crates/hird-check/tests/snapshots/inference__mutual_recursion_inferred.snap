@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn is_even(n: Int) = if n == 0 then True else is_odd(n - 1)\\n\\\n         fn is_odd(n: Int) = if n == 0 then False else is_even(n - 1)\")"
+---
+is_even : Int → Bool
+is_odd : Int → Bool

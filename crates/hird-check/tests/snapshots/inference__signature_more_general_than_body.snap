@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn id(x: a) -> a = 1\")"
+---
+id : ∀a. a → a
+error[C0001] 19..20: type mismatch: expected `a`, got `Int`

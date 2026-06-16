@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn main() = (1 + 2 * 3, 1 < 2, \"a\" == \"a\", True && False)\"#)"
+---
+main : () → (Int, Bool, Bool, Bool)

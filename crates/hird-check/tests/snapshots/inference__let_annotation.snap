@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn main() = let x: Int = 1 in x\")"
+---
+main : () → Int

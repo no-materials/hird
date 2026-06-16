@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn main() = nope\")"
+---
+main : ∀a. a
+error[C0003] 12..16: unbound name `nope`

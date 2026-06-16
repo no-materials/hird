@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn get(r: a) = r.age\")"
+---
+get : ∀a. a
+error[C0009] 14..20: cannot determine the record type of this expression; add a type annotation

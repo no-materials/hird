@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn main() = match 1 {\\n\\\n           Whatever(x) -> x,\\n\\\n         }\")"
+---
+main : ∀a. a
+error[C0007] 21..33: unknown constructor `Whatever`

@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn first(p: (Int, String)) -> Int = match p { (x, y) -> x, }\\n\\\n         fn good() = first((1, \\\"a\\\"))\\n\\\n         fn bad() = first(1, \\\"a\\\")\")"
+---
+bad : ∀a. a
+first : (Int, String) → Int
+good : () → Int
+error[C0006] 99..113: this call supplies 2 argument(s), but the function takes 1

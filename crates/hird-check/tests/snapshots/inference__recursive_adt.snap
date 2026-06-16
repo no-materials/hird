@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type List<a> = Cons(a, List<a>) | Nil\\n\\\n         fn main() = Cons(1, Cons(2, Nil))\")"
+---
+Cons : ∀a. a → List<a> → List<a>
+Nil : ∀a. List<a>
+main : () → List<Int>

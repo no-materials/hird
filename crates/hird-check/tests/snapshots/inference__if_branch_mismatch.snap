@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn main() = if True then 1 else \"two\"\"#)"
+---
+main : ∀a. a
+error[C0001] 32..37: type mismatch: expected `Int`, got `String`

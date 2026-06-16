@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn main() = let f = \\x -> x in (f(1), f(\"hello\"))\"#)"
+---
+main : () → (Int, String)

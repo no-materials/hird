@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn make_adder(n: Int) -> (Int -> Int) = \\\\m -> n + m\\n\\\n         fn main() = make_adder(1)(2)\")"
+---
+main : () → Int
+make_adder : Int → (Int → Int)

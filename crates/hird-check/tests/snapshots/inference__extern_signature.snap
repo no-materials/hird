@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"extern fn list_len(xs: List<a>) -> Int\\n\\\n         fn main() = list_len([])\")"
+---
+list_len : ∀a. List<a> → Int
+main : () → Int

@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn swap(p: (Int, String)) -> (String, Int) = match p { (x, y) -> (y, x), }\")"
+---
+swap : (Int, String) → (String, Int)

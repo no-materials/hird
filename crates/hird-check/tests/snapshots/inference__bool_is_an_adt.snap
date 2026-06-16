@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn flip(b: Bool) -> Bool = match b {\\n\\\n           True -> False,\\n\\\n           False -> True,\\n\\\n         }\")"
+---
+flip : Bool → Bool

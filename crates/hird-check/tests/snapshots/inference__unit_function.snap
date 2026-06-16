@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn unit() = ()\\n\\\n         fn main() = unit()\")"
+---
+main : () → ()
+unit : () → ()

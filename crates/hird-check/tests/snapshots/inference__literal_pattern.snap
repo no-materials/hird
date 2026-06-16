@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn describe(n: Int) -> String = match n {\\n\\\n           1 -> \\\"one\\\",\\n\\\n           _ -> \\\"many\\\",\\n\\\n         }\")"
+---
+describe : Int → String

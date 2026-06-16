@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn fact(n: Int) -> Int = if n <= 1 then 1 else n * fact(n - 1)\")"
+---
+fact : Int → Int

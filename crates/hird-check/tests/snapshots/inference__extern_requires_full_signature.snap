@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"extern fn now()\")"
+---
+error[C0014] 10..13: extern `now` requires a fully annotated signature

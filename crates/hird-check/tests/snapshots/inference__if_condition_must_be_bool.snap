@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn main() = if 1 then 2 else 3\")"
+---
+main : ∀a. a
+error[C0001] 15..16: type mismatch: expected `Bool`, got `Int`

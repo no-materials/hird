@@ -310,6 +310,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hird-check"
+version = "0.1.0"
+dependencies = [
+ "hird-ast",
+ "hird-lex",
+ "hird-parse",
+ "hird-types",
+ "insta",
+ "proptest",
+]
+
+[[package]]
 name = "hird-cli"
 version = "0.1.0"
 dependencies = [

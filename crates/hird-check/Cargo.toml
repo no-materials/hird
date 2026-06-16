@@ -1,0 +1,22 @@
+[package]
+name = "hird-check"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Hirð type checking and inference"
+publish = false
+
+[dependencies]
+hird-ast.workspace = true
+hird-lex.workspace = true
+hird-parse.workspace = true
+hird-types.workspace = true
+
+[dev-dependencies]
+insta = "1"
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn main() = let x = 1 in let x = 2 in x\")"
+---
+main : () → Int
+warning[C0011] 29..30: binding `x` shadows an outer binding

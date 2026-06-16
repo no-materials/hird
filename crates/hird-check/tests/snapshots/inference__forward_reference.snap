@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn main() = helper(1)\\n\\\n         fn helper(x: a) = x\")"
+---
+helper : ∀a. a → a
+main : () → Int

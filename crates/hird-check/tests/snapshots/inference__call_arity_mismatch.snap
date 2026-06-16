@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn add(x: Int, y: Int) -> Int = x + y\\n\\\n         fn main() = add(1)\")"
+---
+add : Int → Int → Int
+main : ∀a. a
+error[C0006] 49..56: this call supplies 1 argument(s), but the function takes 2

@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn f(x: Nope) -> Int = 1\")"
+---
+error[C0004] 8..12: unknown type `Nope`

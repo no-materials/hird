@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn main() = let r = { age: 1 } in r.name\")"
+---
+main : ∀a. a
+error[C0010] 33..40: record `{ age: Int }` has no field `name`

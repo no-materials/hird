@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Box<a> = B(b)\")"
+---
+error[C0012] 16..17: type parameter `b` is not declared here

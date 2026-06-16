@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn const_first(x: a, y: b) -> a = y\")"
+---
+const_first : ∀a b. a → b → a
+error[C0001] 34..35: type mismatch: expected `a`, got `b`

@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Option<a> = Some(a) | None\\n\\\n         fn main() = match Some(1) {\\n\\\n           Some(x, y) -> x,\\n\\\n           None -> 0,\\n\\\n         }\")"
+---
+None : ∀a. Option<a>
+Some : ∀a. a → Option<a>
+main : ∀a. a
+error[C0008] 59..70: `Some` has 1 field(s), but the pattern names 2

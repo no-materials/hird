@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn pair(x: a, y: b) = (x, y)\")"
+---
+pair : ∀a b. a → b → (a, b)

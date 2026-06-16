@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn add(x: Int, y: Int) -> Int = x + y\")"
+---
+add : Int → Int → Int
