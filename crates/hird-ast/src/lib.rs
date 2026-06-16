@@ -731,6 +731,12 @@ impl Literal {
     pub fn kind(&self) -> SyntaxKind {
         self.0.kind()
     }
+
+    /// The underlying CST token.
+    #[must_use]
+    pub fn syntax(&self) -> &SyntaxToken {
+        &self.0
+    }
 }
 
 /// A reference to a name used as an expression (a bare identifier).
@@ -742,6 +748,12 @@ impl NameRef {
     #[must_use]
     pub fn text(&self) -> &str {
         self.0.text()
+    }
+
+    /// The underlying CST token.
+    #[must_use]
+    pub fn syntax(&self) -> &SyntaxToken {
+        &self.0
     }
 }
 
@@ -922,6 +934,12 @@ impl NameType {
     #[must_use]
     pub fn text(&self) -> &str {
         self.0.text()
+    }
+
+    /// The underlying CST token.
+    #[must_use]
+    pub fn syntax(&self) -> &SyntaxToken {
+        &self.0
     }
 }
 
