@@ -22,8 +22,10 @@ pub enum Type {
     TyVar(u32),
     /// Type constructor applied to zero or more arguments.
     TyCon(Name, Vec<Self>),
-    /// Function from one type to another.
-    TyFn(Box<Self>, Box<Self>),
+    /// Function from a parameter list to a result. Arity is semantic — BEAM
+    /// functions are n-ary and there is no auto-currying — so `(A, B) → C`
+    /// and `A → (B → C)` are distinct types.
+    TyFn(Vec<Self>, Box<Self>),
     /// Anonymous tuple.
     TyTuple(Vec<Self>),
     /// Structural record, keyed by label and held label-sorted.
@@ -47,10 +49,10 @@ impl Type {
         Self::TyCon(name.into(), args)
     }
 
-    /// A function type `from -> to`.
+    /// A function type `params -> ret` of arity `params.len()`.
     #[must_use]
-    pub fn func(from: Self, to: Self) -> Self {
-        Self::TyFn(Box::new(from), Box::new(to))
+    pub fn func(params: Vec<Self>, ret: Self) -> Self {
+        Self::TyFn(params, Box::new(ret))
     }
 
     /// A tuple of the given element types.
@@ -102,9 +104,55 @@ impl Type {
         Self::con("Option", Vec::from([inner]))
     }
 
+    /// A clone with variables renumbered densely from `0` in order of first
+    /// appearance ([`Type::TyForall`] binders first), so equivalent types
+    /// render identically (`∀a. a → a` rather than `∀c7. c7 → c7`).
+    ///
+    /// For display only: renumbering does not preserve variable identity
+    /// across distinct types.
+    #[must_use]
+    pub fn normalized(&self) -> Self {
+        let mut map = BTreeMap::new();
+        self.rename(&mut map)
+    }
+
+    /// Rewrites variables through `map`, assigning the next dense id to each
+    /// variable not yet mapped.
+    fn rename(&self, map: &mut BTreeMap<u32, u32>) -> Self {
+        /// The dense id for `var`, allocating it on first sight.
+        fn renumber(map: &mut BTreeMap<u32, u32>, var: u32) -> u32 {
+            let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
+            *map.entry(var).or_insert(next)
+        }
+
+        match self {
+            Self::TyVar(v) => Self::TyVar(renumber(map, *v)),
+            Self::TyCon(name, args) => {
+                Self::TyCon(name.clone(), args.iter().map(|a| a.rename(map)).collect())
+            }
+            Self::TyFn(params, ret) => Self::TyFn(
+                params.iter().map(|p| p.rename(map)).collect(),
+                Box::new(ret.rename(map)),
+            ),
+            Self::TyTuple(elems) => Self::TyTuple(elems.iter().map(|e| e.rename(map)).collect()),
+            Self::TyRecord(fields) => Self::TyRecord(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.rename(map)))
+                    .collect(),
+            ),
+            Self::TyForall(vars, body) => {
+                let vars = vars.iter().map(|v| renumber(map, *v)).collect();
+                Self::TyForall(vars, Box::new(body.rename(map)))
+            }
+        }
+    }
+
     /// Renders `self`, parenthesising a bare function type when it appears as
-    /// the left operand of an enclosing arrow (which is right-associative).
-    fn write(&self, f: &mut fmt::Formatter<'_>, fn_left: bool) -> fmt::Result {
+    /// an operand of an enclosing arrow chain (an unparenthesised chain
+    /// denotes a single n-ary function, so nested functions on either side
+    /// need parentheses).
+    fn write(&self, f: &mut fmt::Formatter<'_>, fn_operand: bool) -> fmt::Result {
         match self {
             Self::TyVar(id) => write_var(f, *id),
             Self::TyCon(name, args) => {
@@ -120,14 +168,24 @@ impl Type {
                 }
                 Ok(())
             }
-            Self::TyFn(from, to) => {
-                if fn_left {
+            Self::TyFn(params, ret) => {
+                if fn_operand {
                     f.write_str("(")?;
                 }
-                from.write(f, true)?;
+                if params.is_empty() {
+                    // A 0-ary function; `()` here is not the unit tuple.
+                    f.write_str("()")?;
+                } else {
+                    for (i, param) in params.iter().enumerate() {
+                        if i > 0 {
+                            f.write_str(" \u{2192} ")?;
+                        }
+                        param.write(f, true)?;
+                    }
+                }
                 f.write_str(" \u{2192} ")?;
-                to.write(f, false)?;
-                if fn_left {
+                ret.write(f, true)?;
+                if fn_operand {
                     f.write_str(")")?;
                 }
                 Ok(())
@@ -248,20 +306,38 @@ mod tests {
 
     #[test]
     fn function_uses_unicode_arrow() {
-        let ty = Type::func(Type::var(0), Type::var(1));
+        let ty = Type::func(vec![Type::var(0)], Type::var(1));
         assert_eq!(format!("{ty}"), "a \u{2192} b");
     }
 
     #[test]
-    fn arrow_is_right_associative() {
-        let ty = Type::func(Type::var(0), Type::func(Type::var(1), Type::var(2)));
+    fn nary_function_renders_as_flat_chain() {
+        let ty = Type::func(vec![Type::var(0), Type::var(1)], Type::var(2));
         assert_eq!(format!("{ty}"), "a \u{2192} b \u{2192} c");
     }
 
     #[test]
-    fn function_on_the_left_is_parenthesised() {
-        let ty = Type::func(Type::func(Type::var(0), Type::var(1)), Type::var(2));
+    fn zero_ary_function_renders_unit_params() {
+        let ty = Type::func(vec![], Type::int());
+        assert_eq!(format!("{ty}"), "() \u{2192} Int");
+    }
+
+    #[test]
+    fn function_parameter_is_parenthesised() {
+        let ty = Type::func(
+            vec![Type::func(vec![Type::var(0)], Type::var(1))],
+            Type::var(2),
+        );
         assert_eq!(format!("{ty}"), "(a \u{2192} b) \u{2192} c");
+    }
+
+    #[test]
+    fn function_return_is_parenthesised() {
+        let ty = Type::func(
+            vec![Type::var(0)],
+            Type::func(vec![Type::var(1)], Type::var(2)),
+        );
+        assert_eq!(format!("{ty}"), "a \u{2192} (b \u{2192} c)");
     }
 
     // -- tuples ------------------------------------------------------------
@@ -293,8 +369,23 @@ mod tests {
 
     #[test]
     fn forall_renders_with_binder() {
-        let body = Type::func(Type::var(0), Type::var(1));
+        let body = Type::func(vec![Type::var(0)], Type::var(1));
         let ty = Type::TyForall(vec![0], alloc::boxed::Box::new(body));
         assert_eq!(format!("{ty}"), "\u{2200}a. a \u{2192} b");
+    }
+
+    // -- normalisation -------------------------------------------------------
+
+    #[test]
+    fn normalized_renumbers_in_first_appearance_order() {
+        let ty = Type::func(vec![Type::var(7), Type::var(3)], Type::var(7));
+        assert_eq!(format!("{}", ty.normalized()), "a \u{2192} b \u{2192} a");
+    }
+
+    #[test]
+    fn normalized_assigns_forall_binders_first() {
+        let body = Type::func(vec![Type::var(9)], Type::var(4));
+        let ty = Type::TyForall(vec![9], alloc::boxed::Box::new(body));
+        assert_eq!(format!("{}", ty.normalized()), "\u{2200}a. a \u{2192} b");
     }
 }

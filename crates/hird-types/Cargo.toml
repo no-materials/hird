@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Hirð type representation, unification, and inference"
+description = "Hirð type representation, unification, and scheme operations"
 publish = false
 
 [dependencies]

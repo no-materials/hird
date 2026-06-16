@@ -1,12 +1,13 @@
 // Copyright 2026 the Hird Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Hirð type representation, unification, and inference engine.
+//! Hirð type representation, unification, and scheme operations.
 //!
 //! This crate is the type-system core: the [`Type`] representation, a
-//! union-find [`Subst`]itution table for type variables, and [`unify`]ation
-//! with an occurs check. It is pure data and algorithms — lowering from the
-//! AST and expression inference live in later passes.
+//! union-find [`Subst`]itution table with level-tracked generalisation and
+//! instantiation, and [`unify`]ation with an occurs check. It is pure data
+//! and algorithms — lowering from the AST and expression inference live in
+//! `hird-check`.
 //!
 //! # Quick start
 //!

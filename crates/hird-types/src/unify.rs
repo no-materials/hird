@@ -41,9 +41,14 @@ pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Resu
             }
             Ok(())
         }
-        (Type::TyFn(from1, to1), Type::TyFn(from2, to2)) => {
-            unify(subst, from1, from2, span)?;
-            unify(subst, to1, to2, span)
+        (Type::TyFn(params1, ret1), Type::TyFn(params2, ret2)) => {
+            if params1.len() != params2.len() {
+                return Err(mismatch(subst, expected, got, span));
+            }
+            for (l, r) in params1.iter().zip(params2.iter()) {
+                unify(subst, l, r, span)?;
+            }
+            unify(subst, ret1, ret2, span)
         }
         (Type::TyTuple(xs), Type::TyTuple(ys)) => {
             if xs.len() != ys.len() {
@@ -89,6 +94,10 @@ mod tests {
     use crate::subst::Subst;
     use crate::ty::Type;
 
+    // Docstring notation: α, β are unification variables. `~` is "unify",
+    // `⇒` the outcome, `{α ↦ T}` a recorded solution, `∅` no solutions,
+    // `⊥` failure, `μα. T` an infinite type.
+
     /// A throwaway span; these tests never inspect span contents.
     fn span() -> Span {
         Span::new(0, 0, 0)
@@ -96,12 +105,14 @@ mod tests {
 
     // -- primitives --------------------------------------------------------
 
+    /// `Int ~ Int ⇒ ∅`
     #[test]
     fn int_unifies_with_int() {
         let mut s = Subst::new();
         assert!(unify(&mut s, &Type::int(), &Type::int(), span()).is_ok());
     }
 
+    /// `Int ~ String ⇒ ⊥`
     #[test]
     fn int_mismatches_string() {
         let mut s = Subst::new();
@@ -115,6 +126,7 @@ mod tests {
 
     // -- variables ---------------------------------------------------------
 
+    /// `α ~ Int ⇒ {α ↦ Int}`
     #[test]
     fn var_binds_to_int() {
         let mut s = Subst::new();
@@ -123,6 +135,7 @@ mod tests {
         assert_eq!(s.resolve(&Type::var(a)), Type::int());
     }
 
+    /// `Int ~ α ⇒ {α ↦ Int}` — unification is symmetric.
     #[test]
     fn var_binds_when_on_the_right() {
         let mut s = Subst::new();
@@ -131,6 +144,7 @@ mod tests {
         assert_eq!(s.resolve(&Type::var(a)), Type::int());
     }
 
+    /// `α ~ β, β ~ Int ⇒ {α ↦ Int, β ↦ Int}`
     #[test]
     fn transitive_binding_through_union_find() {
         let mut s = Subst::new();
@@ -144,24 +158,26 @@ mod tests {
 
     // -- functions ---------------------------------------------------------
 
+    /// `(α → β) ~ (Int → String) ⇒ {α ↦ Int, β ↦ String}`
     #[test]
     fn function_binds_both_sides() {
         let mut s = Subst::new();
         let a = s.fresh();
         let b = s.fresh();
-        let lhs = Type::func(Type::var(a), Type::var(b));
-        let rhs = Type::func(Type::int(), Type::string());
+        let lhs = Type::func(vec![Type::var(a)], Type::var(b));
+        let rhs = Type::func(vec![Type::int()], Type::string());
         unify(&mut s, &lhs, &rhs, span()).unwrap();
         assert_eq!(s.resolve(&Type::var(a)), Type::int());
         assert_eq!(s.resolve(&Type::var(b)), Type::string());
         assert_eq!(s.resolve(&lhs), rhs);
     }
 
+    /// `(Int → Bool) ~ (String → Bool) ⇒ ⊥` — reported at `Int ~ String`.
     #[test]
     fn function_reports_inner_mismatch() {
         let mut s = Subst::new();
-        let lhs = Type::func(Type::int(), Type::bool());
-        let rhs = Type::func(Type::string(), Type::bool());
+        let lhs = Type::func(vec![Type::int()], Type::bool());
+        let rhs = Type::func(vec![Type::string()], Type::bool());
         let err = unify(&mut s, &lhs, &rhs, span()).unwrap_err();
         let TypeError::TypeMismatch { expected, got, .. } = err else {
             panic!("expected a TypeMismatch, got {err:?}");
@@ -170,8 +186,19 @@ mod tests {
         assert_eq!(got, Type::string());
     }
 
+    /// `(Int → Int) ~ (Int → Int → Int) ⇒ ⊥` — arity 1 ≠ 2.
+    #[test]
+    fn function_arity_mismatch_fails() {
+        let mut s = Subst::new();
+        let lhs = Type::func(vec![Type::int()], Type::int());
+        let rhs = Type::func(vec![Type::int(), Type::int()], Type::int());
+        let err = unify(&mut s, &lhs, &rhs, span()).unwrap_err();
+        assert!(matches!(err, TypeError::TypeMismatch { .. }));
+    }
+
     // -- occurs check ------------------------------------------------------
 
+    /// `α ~ List<α> ⇒ ⊥` — would require the infinite type `μα. List<α>`.
     #[test]
     fn occurs_check_rejects_infinite_type() {
         let mut s = Subst::new();
@@ -185,12 +212,13 @@ mod tests {
         assert_eq!(in_type, recursive);
     }
 
+    /// `α ~ β, β ~ List<α> ⇒ ⊥` — occurrence is checked on the class
+    /// `{α, β}`, not the variable's spelling.
     #[test]
     fn occurs_check_sees_through_substitution() {
         let mut s = Subst::new();
         let a = s.fresh();
         let b = s.fresh();
-        // After equating `a` and `b`, binding `b` to `List<a>` is still infinite.
         unify(&mut s, &Type::var(a), &Type::var(b), span()).unwrap();
         let err = unify(&mut s, &Type::var(b), &Type::list(Type::var(a)), span()).unwrap_err();
         assert!(matches!(err, TypeError::InfiniteType { .. }));
@@ -198,6 +226,7 @@ mod tests {
 
     // -- tuples ------------------------------------------------------------
 
+    /// `(α, Int) ~ (Bool, β) ⇒ {α ↦ Bool, β ↦ Int}`
     #[test]
     fn tuple_unifies_componentwise() {
         let mut s = Subst::new();
@@ -210,6 +239,7 @@ mod tests {
         assert_eq!(s.resolve(&Type::var(b)), Type::int());
     }
 
+    /// `(Int, Int) ~ (Int, Int, Int) ⇒ ⊥`
     #[test]
     fn tuple_arity_mismatch_fails() {
         let mut s = Subst::new();
@@ -221,6 +251,7 @@ mod tests {
 
     // -- records -----------------------------------------------------------
 
+    /// `{ x: α, y: Int } ~ { x: Bool, y: β } ⇒ {α ↦ Bool, β ↦ Int}`
     #[test]
     fn record_unifies_structurally() {
         let mut s = Subst::new();
@@ -239,6 +270,7 @@ mod tests {
         assert_eq!(s.resolve(&Type::var(b)), Type::int());
     }
 
+    /// `{ x: Int } ~ { y: Int } ⇒ ⊥`
     #[test]
     fn record_label_mismatch_fails() {
         let mut s = Subst::new();
@@ -248,6 +280,8 @@ mod tests {
         assert!(matches!(err, TypeError::TypeMismatch { .. }));
     }
 
+    /// `{ x: Int } ~ { x: Int, y: Int } ⇒ ⊥` — label sets must match
+    /// exactly; no row polymorphism until effect rows land.
     #[test]
     fn record_extra_label_fails() {
         let mut s = Subst::new();
@@ -262,6 +296,7 @@ mod tests {
 
     // -- constructors ------------------------------------------------------
 
+    /// `List<α> ~ List<Int> ⇒ {α ↦ Int}`
     #[test]
     fn constructor_args_unify() {
         let mut s = Subst::new();
@@ -276,6 +311,7 @@ mod tests {
         assert_eq!(s.resolve(&Type::var(a)), Type::int());
     }
 
+    /// `List<Int> ~ Option<Int> ⇒ ⊥`
     #[test]
     fn constructor_name_mismatch_fails() {
         let mut s = Subst::new();
@@ -289,6 +325,7 @@ mod tests {
         assert!(matches!(err, TypeError::TypeMismatch { .. }));
     }
 
+    /// `Map<Int, Int> ~ Map<Int> ⇒ ⊥`
     #[test]
     fn constructor_arity_mismatch_fails() {
         let mut s = Subst::new();
@@ -300,6 +337,9 @@ mod tests {
 
     // -- quantified precondition ------------------------------------------
 
+    /// `(∀α. α) ~ Int ⇒ ⊥` — schemes must be instantiated before they
+    /// reach unification; this failure flags a caller bug, not a program
+    /// type error.
     #[test]
     fn quantified_type_is_rejected() {
         let mut s = Subst::new();
