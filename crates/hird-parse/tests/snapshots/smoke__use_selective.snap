@@ -1,0 +1,19 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 93
+expression: "render_cst(\"use Ets.{Table, lookup}\")"
+---
+SOURCE_FILE
+  USE_DECL
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Ets"
+    USE_GROUP
+      DOT "."
+      L_BRACE "{"
+      IDENT "Table"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "lookup"
+      R_BRACE "}"

@@ -165,10 +165,12 @@ pub enum SyntaxKind {
     SOURCE_FILE,
     /// Module declaration (`module Name`).
     MODULE_DECL,
-    /// Use import (`use Path::Name`).
+    /// Use import (`use A.B`, `use M as N`, or `use M.{ a, b }`).
     USE_DECL,
-    /// Module path (`Foo::Bar::Baz`).
+    /// Dotted module path (`Foo.Bar.Baz`).
     PATH,
+    /// Selective import group (`.{ a, b }`).
+    USE_GROUP,
     /// Function declaration.
     FN_DECL,
     /// Visibility modifier (`pub`).

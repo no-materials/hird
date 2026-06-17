@@ -1,7 +1,7 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-assertion_line: 244
-expression: "render_cst(\"\\\nmodule Planner\n\nuse Actors::Base\n\neffect Log\n\ntype Result<A> = Ok(A) | Err(String)\n\npub fn identity(x: Int) -> Int = x\n\nextern fn print(s: String) -> Unit\")"
+assertion_line: 654
+expression: "render_cst(\"\\\nmodule Planner\n\nuse Actors.Base\n\neffect Log\n\ntype Result<A> = Ok(A) | Err(String)\n\npub fn identity(x: Int) -> Int = x\n\nextern fn print(s: String) -> Unit\")"
 ---
 SOURCE_FILE
   MODULE_DECL
@@ -14,7 +14,7 @@ SOURCE_FILE
     PATH
       WHITESPACE " "
       IDENT "Actors"
-      COLON_COLON "::"
+      DOT "."
       IDENT "Base"
   EFFECT_DECL
     WHITESPACE "\n\n"

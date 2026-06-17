@@ -212,7 +212,7 @@ impl ModuleDecl {
 }
 
 ast_node! {
-    /// A use import (`use Path::To::Item as Alias`).
+    /// A use import (`use A.B`, `use M as N`, or `use M.{ a, b }`).
     UseDecl => USE_DECL
 }
 
@@ -227,14 +227,26 @@ impl UseDecl {
     #[must_use]
     pub fn alias(&self) -> Option<&str> {
         // `as` is a contextual keyword lexed as an `IDENT`; the alias is the
-        // next non-trivia token after it. (Path segments are nested in `Path`,
-        // not direct children here.)
+        // next non-trivia token after it. (Path segments and selective-group
+        // members are nested in child nodes, not direct children here.)
         self.0
             .children_with_tokens()
             .filter_map(|e| e.into_token())
             .filter(|t| !is_trivia(t.kind()))
             .skip_while(|t| t.text() != "as")
             .nth(1)
+            .map(|t| t.text())
+    }
+
+    /// The member names of a selective group (`.{ a, b }`), in source order.
+    /// Empty for whole-module and aliased imports.
+    pub fn selected(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::USE_GROUP)
+            .flat_map(|group| group.children_with_tokens())
+            .filter_map(|e| e.into_token())
+            .filter(|t| t.kind() == SyntaxKind::IDENT)
             .map(|t| t.text())
     }
 }
@@ -1238,7 +1250,7 @@ impl RecordField {
 }
 
 ast_node! {
-    /// A qualified path (`Foo::Bar::Baz`).
+    /// A dotted path (`Foo.Bar.Baz`).
     Path => PATH
 }
 

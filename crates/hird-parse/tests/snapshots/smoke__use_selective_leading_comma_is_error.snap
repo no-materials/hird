@@ -1,0 +1,18 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 110
+expression: "render_cst(\"use Ets.{,}\")"
+---
+SOURCE_FILE
+  USE_DECL
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Ets"
+    USE_GROUP
+      DOT "."
+      L_BRACE "{"
+      COMMA ","
+      R_BRACE "}"
+---
+P0001 9..10: expected identifier

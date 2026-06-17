@@ -501,25 +501,75 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `use a::b::c`, with an optional `as` alias.
+    /// A use import: a `.`-separated path, then either an `as` alias or a
+    /// selective group — never both.
+    ///
+    /// ```text
+    /// use Ets                  whole-module
+    /// use Log as L             aliased
+    /// use Ets.{Table, lookup}  selective (members brought in unqualified)
+    /// ```
     fn parse_use_decl(&mut self) {
         self.start_node(SyntaxKind::USE_DECL);
         self.expect(SyntaxKind::USE_KW);
-        self.parse_path();
-        if self.at_contextual("as") {
+        self.parse_use_path();
+        if self.at(SyntaxKind::DOT) {
+            // A `.` after the path can only introduce a `.{ ... }` group.
+            self.parse_use_group();
+            // Selective and aliased forms are mutually exclusive. Absorb a
+            // trailing `as Alias` so it does not trip the declaration loop, and
+            // flag the combination.
+            if self.at_contextual("as") {
+                self.emit(
+                    DiagnosticCode::P0002,
+                    "a selective import cannot also be aliased",
+                    Some("use either `M.{ a, b }` or `M as N`, not both"),
+                );
+                self.bump();
+                self.expect(SyntaxKind::IDENT);
+            }
+        } else if self.at_contextual("as") {
             self.bump();
             self.expect(SyntaxKind::IDENT);
         }
         self.finish_node();
     }
 
-    /// A `::`-separated path of identifiers (`a::b::c`).
-    fn parse_path(&mut self) {
+    /// A `.`-separated path of identifiers (`A.B.C`). Stops before a `.{`
+    /// selective group, leaving it for [`Self::parse_use_group`].
+    fn parse_use_path(&mut self) {
         self.start_node(SyntaxKind::PATH);
         self.expect(SyntaxKind::IDENT);
-        while self.eat(SyntaxKind::COLON_COLON) {
-            self.expect(SyntaxKind::IDENT);
+        while self.at(SyntaxKind::DOT) && self.nth(1) == SyntaxKind::IDENT {
+            self.bump(); // separator `.`
+            self.bump(); // next segment
         }
+        self.finish_node();
+    }
+
+    /// `.{ name, name, ... }` — a selective import group whose members are
+    /// brought in unqualified. The group must name at least one member; the
+    /// empty form (`.{}`) gets a tailored diagnostic.
+    fn parse_use_group(&mut self) {
+        self.start_node(SyntaxKind::USE_GROUP);
+        self.expect(SyntaxKind::DOT);
+        self.expect(SyntaxKind::L_BRACE);
+        if self.at(SyntaxKind::R_BRACE) {
+            self.emit(
+                DiagnosticCode::P0002,
+                "selective import group is empty",
+                Some("list one or more names, e.g. `.{ Table, lookup }`"),
+            );
+        } else {
+            self.expect(SyntaxKind::IDENT);
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACE) {
+                    break;
+                }
+                self.expect(SyntaxKind::IDENT);
+            }
+        }
+        self.expect(SyntaxKind::R_BRACE);
         self.finish_node();
     }
 

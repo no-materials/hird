@@ -1,7 +1,7 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
 assertion_line: 83
-expression: "render_cst(\"use Foo::Bar::Baz\")"
+expression: "render_cst(\"use Foo.Bar.Baz\")"
 ---
 SOURCE_FILE
   USE_DECL
@@ -9,7 +9,7 @@ SOURCE_FILE
     PATH
       WHITESPACE " "
       IDENT "Foo"
-      COLON_COLON "::"
+      DOT "."
       IDENT "Bar"
-      COLON_COLON "::"
+      DOT "."
       IDENT "Baz"

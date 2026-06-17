@@ -3,7 +3,9 @@
 
 #![expect(missing_docs, reason = "test suite")]
 
-use hird_ast::{AstNode, Constructor, Decl, Expr, FnDecl, Pattern, SourceFile, TypeDecl, TypeExpr};
+use hird_ast::{
+    AstNode, Constructor, Decl, Expr, FnDecl, Pattern, SourceFile, TypeDecl, TypeExpr, UseDecl,
+};
 
 fn file(src: &str) -> SourceFile {
     let parsed = hird_parse::parse(src, 0);
@@ -29,6 +31,15 @@ fn first_type(file: &SourceFile) -> TypeDecl {
         .expect("a type declaration")
 }
 
+fn first_use(file: &SourceFile) -> UseDecl {
+    file.declarations()
+        .find_map(|d| match d {
+            Decl::Use(u) => Some(u),
+            _ => None,
+        })
+        .expect("a use declaration")
+}
+
 /// Parse `fn f() = <expr>` and return the body expression.
 fn body(expr_src: &str) -> Expr {
     let src = format!("fn f() = {expr_src}");
@@ -49,7 +60,7 @@ fn source_file_declarations() {
         "\
 module Planner
 
-use Actors::Base
+use Actors.Base
 
 effect Log
 
@@ -79,18 +90,32 @@ extern fn print(s: String) -> Unit",
 }
 
 #[test]
+fn use_decl_whole_module() {
+    let u = first_use(&file("use Ets"));
+    assert_eq!(owned(u.path().expect("path").segments()), ["Ets"]);
+    assert_eq!(u.alias(), None);
+    assert!(owned(u.selected()).is_empty());
+}
+
+#[test]
 fn use_decl_path_and_alias() {
-    let file = file("use Foo::Bar::Baz as B");
-    let use_decl = file
-        .declarations()
-        .find_map(|d| match d {
-            Decl::Use(u) => Some(u),
-            _ => None,
-        })
-        .unwrap();
-    let segments = owned(use_decl.path().expect("path").segments());
-    assert_eq!(segments, ["Foo", "Bar", "Baz"]);
-    assert_eq!(use_decl.alias(), Some("B"));
+    let u = first_use(&file("use Foo.Bar.Baz as B"));
+    assert_eq!(
+        owned(u.path().expect("path").segments()),
+        ["Foo", "Bar", "Baz"]
+    );
+    assert_eq!(u.alias(), Some("B"));
+    assert!(owned(u.selected()).is_empty());
+}
+
+#[test]
+fn use_decl_selective() {
+    // The path segment stays in `path()`; the brace members project through
+    // `selected()`. A selective import carries no alias.
+    let u = first_use(&file("use Ets.{Table, lookup}"));
+    assert_eq!(owned(u.path().expect("path").segments()), ["Ets"]);
+    assert_eq!(owned(u.selected()), ["Table", "lookup"]);
+    assert_eq!(u.alias(), None);
 }
 
 #[test]

@@ -1,0 +1,22 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+assertion_line: 116
+expression: "render_cst(\"use Ets.{Table} as E\")"
+---
+SOURCE_FILE
+  USE_DECL
+    USE_KW "use"
+    PATH
+      WHITESPACE " "
+      IDENT "Ets"
+    USE_GROUP
+      DOT "."
+      L_BRACE "{"
+      IDENT "Table"
+      R_BRACE "}"
+    WHITESPACE " "
+    IDENT "as"
+    WHITESPACE " "
+    IDENT "E"
+---
+P0002 16..18: a selective import cannot also be aliased

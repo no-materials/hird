@@ -80,12 +80,40 @@ fn use_simple() {
 
 #[test]
 fn use_path() {
-    insta::assert_snapshot!(render_cst("use Foo::Bar::Baz"));
+    insta::assert_snapshot!(render_cst("use Foo.Bar.Baz"));
 }
 
 #[test]
 fn use_alias() {
-    insta::assert_snapshot!(render_cst("use Foo::Bar as B"));
+    insta::assert_snapshot!(render_cst("use Foo.Bar as B"));
+}
+
+#[test]
+fn use_selective() {
+    insta::assert_snapshot!(render_cst("use Ets.{Table, lookup}"));
+}
+
+#[test]
+fn use_selective_trailing_comma() {
+    insta::assert_snapshot!(render_cst("use Ets.{Table, lookup,}"));
+}
+
+#[test]
+fn use_selective_empty_is_error() {
+    // A selective group must name at least one member.
+    insta::assert_snapshot!(render_cst("use Ets.{}"));
+}
+
+#[test]
+fn use_selective_leading_comma_is_error() {
+    // A leading separator has no name before it.
+    insta::assert_snapshot!(render_cst("use Ets.{,}"));
+}
+
+#[test]
+fn use_selective_with_alias_is_error() {
+    // Selective and aliased forms are mutually exclusive.
+    insta::assert_snapshot!(render_cst("use Ets.{Table} as E"));
 }
 
 // ── function declarations ───────────────────────────────────────
@@ -627,7 +655,7 @@ fn multi_decl_module() {
         "\
 module Planner
 
-use Actors::Base
+use Actors.Base
 
 effect Log
 
