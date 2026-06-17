@@ -54,7 +54,7 @@ Key design decisions in this phase:
 2. [x] [hir-h8qo](hir-h8qo.md) — Complete the hird-ast projection: type expressions and patterns
 3. [x] [hir-lhyh](hir-lhyh.md) — Let-polymorphism and ADT type checking
 4. [x] [hir-n3si](hir-n3si.md) — Pattern match exhaustiveness checking
-5. [ ] [hir-teho](hir-teho.md) — Surface syntax for the opaque type modifier (grammar precursor for step 7)
+5. [x] [hir-teho](hir-teho.md) — Surface syntax for the opaque type modifier (grammar precursor for step 7)
 6. [ ] [hir-kw4v](hir-kw4v.md) — Surface syntax for selective and aliased imports (grammar precursor for step 7)
 7. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types
 
@@ -98,3 +98,9 @@ independent after step 3. Within the module track, the two grammar precursors
   randomly generated ill-typed expressions produce errors (not panics).
 - `cargo clippy` and `cargo test` pass for `hird-types`.
 
+
+## Notes
+
+**2026-06-17T13:14:53Z**
+
+Step 5 (hir-teho) landed: opaque-type grammar is in place. hird-lex has an `opaque` keyword token; hird-parse accepts `pub opaque type` and rejects `opaque` without a preceding `pub` or a following `type` (tailored P0002 diagnostics, clean recovery); hird-ast exposes TypeDecl::is_opaque() beside is_pub(). Grammar-only — declaring-module tracking and the cross-module construct/destructure errors remain in hir-i0u7.

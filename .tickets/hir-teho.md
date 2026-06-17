@@ -1,6 +1,6 @@
 ---
 id: hir-teho
-status: open
+status: closed
 deps: []
 links: [hir-0s3s]
 created: 2026-06-17T12:10:26Z
