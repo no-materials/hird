@@ -1,0 +1,22 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"pub opaque fn foo() = 1\")"
+---
+SOURCE_FILE
+  ERROR
+    PUB_KW "pub"
+    WHITESPACE " "
+    OPAQUE_KW "opaque"
+  FN_DECL
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "foo"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "1"
+---
+P0002 0..3: `opaque` can only modify a `type`

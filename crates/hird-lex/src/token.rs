@@ -91,6 +91,8 @@ pub enum TokenKind {
     Module,
     /// `pub`
     Pub,
+    /// `opaque`
+    Opaque,
     /// `extern`
     Extern,
     /// `if`
@@ -221,6 +223,7 @@ impl TokenKind {
                 | Self::Use
                 | Self::Module
                 | Self::Pub
+                | Self::Opaque
                 | Self::Extern
                 | Self::If
                 | Self::Then

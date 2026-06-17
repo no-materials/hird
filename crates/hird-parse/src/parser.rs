@@ -449,6 +449,10 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::EFFECT_KW => self.parse_effect_decl(),
             SyntaxKind::TOOL_KW => self.parse_tool_decl(),
             SyntaxKind::EXTERN_KW => self.parse_extern_decl(),
+            SyntaxKind::OPAQUE_KW => self.recover_decl(
+                "`opaque` must follow `pub`",
+                Some("an opaque type is declared `pub opaque type`"),
+            ),
             SyntaxKind::PUB_KW => match self.nth(1) {
                 SyntaxKind::FN_KW => self.parse_fn_decl(),
                 SyntaxKind::TYPE_KW => self.parse_type_decl(),
@@ -456,6 +460,13 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 SyntaxKind::SUPERVISOR_KW => self.parse_supervisor_decl(),
                 SyntaxKind::EFFECT_KW => self.parse_effect_decl(),
                 SyntaxKind::TOOL_KW => self.parse_tool_decl(),
+                SyntaxKind::OPAQUE_KW if self.nth(2) == SyntaxKind::TYPE_KW => {
+                    self.parse_type_decl();
+                }
+                SyntaxKind::OPAQUE_KW => self.recover_decl(
+                    "`opaque` can only modify a `type`",
+                    Some("an opaque type is declared `pub opaque type`"),
+                ),
                 _ => self.recover_decl(
                     "expected declaration after `pub`",
                     Some("`pub` must be followed by a declaration"),
@@ -591,10 +602,15 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `type Name<params> = Ctor | ...`.
+    /// `[pub [opaque]] type Name<params> = Ctor | ...`.
+    ///
+    /// `opaque` is consumed here but only reaches this point in the
+    /// `pub opaque type` form: `parse_top_item` routes that form here and
+    /// rejects `opaque` without a preceding `pub` or a following `type`.
     fn parse_type_decl(&mut self) {
         self.start_node(SyntaxKind::TYPE_DECL);
         self.parse_visibility();
+        self.eat(SyntaxKind::OPAQUE_KW);
         self.expect(SyntaxKind::TYPE_KW);
         self.expect(SyntaxKind::IDENT);
         if self.at(SyntaxKind::LT) {
@@ -1355,6 +1371,7 @@ fn is_keyword(kind: SyntaxKind) -> bool {
             | SyntaxKind::USE_KW
             | SyntaxKind::MODULE_KW
             | SyntaxKind::PUB_KW
+            | SyntaxKind::OPAQUE_KW
             | SyntaxKind::EXTERN_KW
             | SyntaxKind::IF_KW
             | SyntaxKind::THEN_KW

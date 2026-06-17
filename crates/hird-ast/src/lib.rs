@@ -84,6 +84,12 @@ fn is_pub(node: &SyntaxNode) -> bool {
     node.children().any(|c| c.kind() == SyntaxKind::VISIBILITY)
 }
 
+/// Whether `node` carries an `opaque` modifier. Only ever set alongside `pub`,
+/// since the parser rejects `opaque` without it.
+fn is_opaque(node: &SyntaxNode) -> bool {
+    token(node, SyntaxKind::OPAQUE_KW).is_some()
+}
+
 /// The kind of a node-or-token element.
 fn element_kind(element: ResolvedElementRef<'_, SyntaxKind>) -> SyntaxKind {
     match element {
@@ -279,6 +285,13 @@ impl TypeDecl {
     #[must_use]
     pub fn is_pub(&self) -> bool {
         is_pub(&self.0)
+    }
+
+    /// Whether the type is opaque (`pub opaque type`): its name is exported but
+    /// its constructors stay module-private. Implies [`is_pub`](Self::is_pub).
+    #[must_use]
+    pub fn is_opaque(&self) -> bool {
+        is_opaque(&self.0)
     }
 
     /// The type name.

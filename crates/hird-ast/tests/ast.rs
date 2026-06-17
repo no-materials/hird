@@ -3,7 +3,7 @@
 
 #![expect(missing_docs, reason = "test suite")]
 
-use hird_ast::{AstNode, Constructor, Decl, Expr, FnDecl, Pattern, SourceFile, TypeExpr};
+use hird_ast::{AstNode, Constructor, Decl, Expr, FnDecl, Pattern, SourceFile, TypeDecl, TypeExpr};
 
 fn file(src: &str) -> SourceFile {
     let parsed = hird_parse::parse(src, 0);
@@ -18,6 +18,15 @@ fn first_fn(file: &SourceFile) -> FnDecl {
             _ => None,
         })
         .expect("a fn declaration")
+}
+
+fn first_type(file: &SourceFile) -> TypeDecl {
+    file.declarations()
+        .find_map(|d| match d {
+            Decl::Type(t) => Some(t),
+            _ => None,
+        })
+        .expect("a type declaration")
 }
 
 /// Parse `fn f() = <expr>` and return the body expression.
@@ -121,6 +130,30 @@ fn type_decl_constructors() {
         .filter_map(|c| c.name().map(str::to_owned))
         .collect();
     assert_eq!(ctors, ["Some", "None"]);
+}
+
+#[test]
+fn type_decl_opacity() {
+    // The three visibility levels: private, transparent (`pub`), and opaque
+    // (`pub opaque`). `file` asserts a clean parse, so each form is well-formed.
+    let t = first_type(&file("type Foo = Bar(Int)"));
+    assert!(!t.is_pub());
+    assert!(!t.is_opaque());
+
+    let t = first_type(&file("pub type Foo = Bar(Int)"));
+    assert!(t.is_pub());
+    assert!(!t.is_opaque());
+
+    let t = first_type(&file("pub opaque type Foo = Bar(Int)"));
+    assert!(t.is_pub());
+    assert!(t.is_opaque());
+    // Name and constructors project unchanged through the opaque modifier.
+    assert_eq!(t.name(), Some("Foo"));
+    let ctors: Vec<String> = t
+        .constructors()
+        .filter_map(|c| c.name().map(str::to_owned))
+        .collect();
+    assert_eq!(ctors, ["Bar"]);
 }
 
 #[test]

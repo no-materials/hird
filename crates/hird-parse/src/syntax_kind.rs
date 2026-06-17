@@ -53,6 +53,8 @@ pub enum SyntaxKind {
     MODULE_KW,
     /// `pub`
     PUB_KW,
+    /// `opaque`
+    OPAQUE_KW,
     /// `extern`
     EXTERN_KW,
     /// `if`
@@ -279,6 +281,7 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Use => Self::USE_KW,
             TokenKind::Module => Self::MODULE_KW,
             TokenKind::Pub => Self::PUB_KW,
+            TokenKind::Opaque => Self::OPAQUE_KW,
             TokenKind::Extern => Self::EXTERN_KW,
             TokenKind::If => Self::IF_KW,
             TokenKind::Then => Self::THEN_KW,
@@ -366,6 +369,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::USE_KW => Some("use"),
             Self::MODULE_KW => Some("module"),
             Self::PUB_KW => Some("pub"),
+            Self::OPAQUE_KW => Some("opaque"),
             Self::EXTERN_KW => Some("extern"),
             Self::IF_KW => Some("if"),
             Self::THEN_KW => Some("then"),

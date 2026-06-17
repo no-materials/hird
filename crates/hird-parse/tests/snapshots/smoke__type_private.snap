@@ -1,0 +1,18 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"type Foo = Bar(Int)\")"
+---
+SOURCE_FILE
+  TYPE_DECL
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Foo"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Bar"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "Int"
+      R_PAREN ")"

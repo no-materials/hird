@@ -1,0 +1,23 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"opaque type Foo = Bar(Int)\")"
+---
+SOURCE_FILE
+  ERROR
+    OPAQUE_KW "opaque"
+  TYPE_DECL
+    WHITESPACE " "
+    TYPE_KW "type"
+    WHITESPACE " "
+    IDENT "Foo"
+    WHITESPACE " "
+    EQ "="
+    CONSTRUCTOR
+      WHITESPACE " "
+      IDENT "Bar"
+      L_PAREN "("
+      FIELD_LIST
+        IDENT "Int"
+      R_PAREN ")"
+---
+P0002 0..6: `opaque` must follow `pub`

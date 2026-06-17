@@ -203,6 +203,37 @@ fn type_leading_pipe() {
     insta::assert_snapshot!(render_cst("type PlannerMsg = | PlanRepo(Path) | Shutdown"));
 }
 
+// ── type visibility: private / pub / pub opaque ─────────────────
+
+#[test]
+fn type_private() {
+    insta::assert_snapshot!(render_cst("type Foo = Bar(Int)"));
+}
+
+#[test]
+fn type_pub() {
+    insta::assert_snapshot!(render_cst("pub type Foo = Bar(Int)"));
+}
+
+#[test]
+fn type_pub_opaque() {
+    insta::assert_snapshot!(render_cst("pub opaque type Foo = Bar(Int)"));
+}
+
+#[test]
+fn type_opaque_without_pub_is_error() {
+    // `opaque` must follow `pub`. The bare form is reported, but `opaque` alone
+    // is wrapped in an error and the type still recovers as a private one.
+    insta::assert_snapshot!(render_cst("opaque type Foo = Bar(Int)"));
+}
+
+#[test]
+fn type_opaque_without_type_is_error() {
+    // `opaque` only modifies a `type`. Here it precedes `fn`: the `pub opaque`
+    // run is wrapped in an error and the function still parses.
+    insta::assert_snapshot!(render_cst("pub opaque fn foo() = 1"));
+}
+
 // ── actor declarations ──────────────────────────────────────────
 
 #[test]
