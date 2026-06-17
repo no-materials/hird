@@ -1,7 +1,7 @@
 ---
 id: hir-i0u7
 status: open
-deps: [hir-lhyh]
+deps: [hir-lhyh, hir-teho]
 links: [hir-0s3s]
 created: 2026-05-22T21:37:55Z
 type: task
@@ -69,3 +69,39 @@ hir-0s3s. Add snapshot tests for the duplicate/collision cases alongside the imp
 
 Note: hir-lhyh's "shadowing (warn, don't error)" is a DIFFERENT concern (inner let-bindings
 shadowing outer scopes), not top-level duplicate definitions.
+
+**2026-06-17T12:11:07Z**
+
+Fork A (opaque-type mechanism) — locked.
+
+**Decision: explicit `opaque` modifier, Gleam-style three-level visibility.**
+
+  type Foo = ...             private (module-only)
+  pub type Foo = ...         transparent (name + constructors exported)
+  pub opaque type Foo = ...  opaque (name exported, constructors module-private)
+
+`pub type` stays transparent by default; opacity is opt-in via `pub opaque
+type`. Rationale: matches the Gleam-style conventions OD6 (hir-0s3s)
+already commits to, satisfies the Explicit-Over-Implicit tenet, and lets users
+define their own invariant-enforcing abstract types — not just the built-in
+capabilities. Capability types (Table, Tool, Db, Clock, Random, Log per
+ADR-006) are opaque types under this same mechanism: opacity is exactly what
+makes a capability unforgeable (its constructor is private to the declaring
+module, so no other code can mint or upgrade one).
+
+**Grammar precursor: hir-teho** (this ticket now depends on it). It adds the
+`opaque` keyword to the lexer, parses `pub opaque type`, and exposes
+`TypeDecl::is_opaque()` next to `is_pub()`. Grammar-only; no semantics.
+
+**What stays in this ticket (the semantic half):**
+- The registry records, per constructor, its declaring module and whether the
+  owning type is opaque.
+- Constructing an opaque type (`Foo(..)` as a value) outside its declaring
+  module is an error.
+- Destructuring an opaque type outside its declaring module is an error. This
+  plugs into the constructor-pattern path added by hir-n3si: when a pattern
+  names a constructor of an opaque type defined elsewhere, emit a dedicated
+  "cannot destructure opaque type `Foo` outside module `Bar`" diagnostic
+  instead of the generic unknown-constructor error.
+- Inside the declaring module, opaque types behave as ordinary ADTs (full
+  construction and pattern matching).
