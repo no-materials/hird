@@ -54,9 +54,13 @@ Key design decisions in this phase:
 2. [x] [hir-h8qo](hir-h8qo.md) — Complete the hird-ast projection: type expressions and patterns
 3. [x] [hir-lhyh](hir-lhyh.md) — Let-polymorphism and ADT type checking
 4. [x] [hir-n3si](hir-n3si.md) — Pattern match exhaustiveness checking
-5. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types
+5. [ ] [hir-teho](hir-teho.md) — Surface syntax for the opaque type modifier (grammar precursor for step 7)
+6. [ ] [hir-kw4v](hir-kw4v.md) — Surface syntax for selective and aliased imports (grammar precursor for step 7)
+7. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types
 
-Steps 4 and 5 are independent after step 3.
+Step 4 (pattern exhaustiveness) and the module-system track (steps 5–7) are
+independent after step 3. Within the module track, the two grammar precursors
+(steps 5 and 6) are independent of each other and both precede step 7.
 
 ## Open design question
 

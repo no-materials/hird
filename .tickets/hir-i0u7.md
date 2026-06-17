@@ -1,7 +1,7 @@
 ---
 id: hir-i0u7
 status: open
-deps: [hir-lhyh, hir-teho]
+deps: [hir-lhyh, hir-teho, hir-kw4v]
 links: [hir-0s3s]
 created: 2026-05-22T21:37:55Z
 type: task
@@ -105,3 +105,43 @@ module, so no other code can mint or upgrade one).
   instead of the generic unknown-constructor error.
 - Inside the declaring module, opaque types behave as ordinary ADTs (full
   construction and pattern matching).
+
+**2026-06-17T12:58:16Z**
+
+Forks B–D — locked (decisions are the recommended ones).
+
+**B — Import syntax: dot separator + selective grammar (precursor: hir-kw4v).**
+Adopt the phrasebook forms (phrasebook.md is authoritative for surface syntax):
+`use Mod`, `use Mod as M`, `use Mod.{a, b}`, with `.` as the separator — the
+current `::` is the bug. The selective/aliased grammar lands in hir-kw4v; this
+ticket owns RESOLUTION: binding selective names unqualified, binding the
+module/alias for qualified access, and resolving `Mod.member`. Qualified name
+vs record field access (`Ets.lookup` vs `point.x`) is disambiguated check-side
+by the receiver: a bare PascalCase name that resolves in the module namespace is
+a qualified name; otherwise it is field access on a value. The casing convention
+guarantees the two never overlap.
+
+**C — Whole-program driver contract.**
+hird-check gains a program-level entry, roughly
+`check_program(modules: &[(ModuleName, SourceFile)]) -> CheckedProgram`, which
+builds the use-graph, rejects cycles (reuse the existing Tarjan SCC code in
+checker.rs), checks modules in dependency order, and seeds each module's
+environment from its imports' EXPORTED schemes. A thin driver (the CLI, or a
+small session layer) does file discovery + parse and hands parsed modules in;
+the single-file `check()` stays as the per-module core. Module names are
+path-derived and validated against the file's `module` declaration (mismatch =
+error). Standard-library resolution is deferred for v0.1 behind a seam (local
+modules only).
+
+**D — Two namespaces (types vs values).**
+Types and values occupy separate namespaces, so `type Email = Email(String)`
+(type `Email` plus constructor `Email`) is legal — required for opaque
+capability types. The registry already reflects this (separate `adts` and
+`ctors` maps). Duplicate detection runs per namespace:
+- type vs type (same name) -> error; constructor vs constructor -> error;
+  value vs value (fn or binding) -> error;
+- type vs value -> NOT a collision (different namespaces);
+- fn vs constructor -> impossible (casing forbids the textual clash).
+Import collisions follow the same per-namespace rule (import-vs-local,
+import-vs-import). Every duplicate diagnostic carries both spans (original
+definition + redefinition), per the hir-of12 inbound scope.
