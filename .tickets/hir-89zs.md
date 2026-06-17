@@ -55,7 +55,7 @@ Key design decisions in this phase:
 3. [x] [hir-lhyh](hir-lhyh.md) — Let-polymorphism and ADT type checking
 4. [x] [hir-n3si](hir-n3si.md) — Pattern match exhaustiveness checking
 5. [x] [hir-teho](hir-teho.md) — Surface syntax for the opaque type modifier (grammar precursor for step 7)
-6. [ ] [hir-kw4v](hir-kw4v.md) — Surface syntax for selective and aliased imports (grammar precursor for step 7)
+6. [x] [hir-kw4v](hir-kw4v.md) — Surface syntax for selective and aliased imports (grammar precursor for step 7)
 7. [ ] [hir-i0u7](hir-i0u7.md) — Module system and opaque types
 
 Step 4 (pattern exhaustiveness) and the module-system track (steps 5–7) are
@@ -104,3 +104,16 @@ independent after step 3. Within the module track, the two grammar precursors
 **2026-06-17T13:14:53Z**
 
 Step 5 (hir-teho) landed: opaque-type grammar is in place. hird-lex has an `opaque` keyword token; hird-parse accepts `pub opaque type` and rejects `opaque` without a preceding `pub` or a following `type` (tailored P0002 diagnostics, clean recovery); hird-ast exposes TypeDecl::is_opaque() beside is_pub(). Grammar-only — declaring-module tracking and the cross-module construct/destructure errors remain in hir-i0u7.
+
+**2026-06-17T13:42:55Z**
+
+Step 6 (hir-kw4v) landed: selective/aliased import grammar is in place. Use
+paths now use `.` separators (replacing `::`); hird-parse accepts whole-module
+(`use Ets`), aliased (`use Log as L`), and selective (`use Ets.{Table, lookup}`)
+forms. Selective and aliased are mutually exclusive; an empty group (`.{}`) and a
+selective+alias combination report tailored P0002 diagnostics, a leading
+separator (`.{,}`) reports "expected identifier", and all malformed forms recover
+losslessly. hird-ast exposes UseDecl::selected() beside path()/alias(), with a new
+USE_GROUP CST node holding the brace members. No lexer change was needed (`.` `{`
+`}` `,` and contextual `as` already lex). Grammar-only — import resolution,
+qualified-name disambiguation, visibility, and collision checks remain in hir-i0u7.
