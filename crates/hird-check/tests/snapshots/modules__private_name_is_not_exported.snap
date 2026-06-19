@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\", \"module M\\nfn secret(x: Int) -> Int = x\"),\n(\"App\", \"module App\\nuse M.{secret}\\npub fn run(x: Int) -> Int = x\"),])"
+---
+== App ==
+run : Int → Int
+error[C0023] 18..24: module `M` does not export `secret`
+== M ==
+secret : Int → Int

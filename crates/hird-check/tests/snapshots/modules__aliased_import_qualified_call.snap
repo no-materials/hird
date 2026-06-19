@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Log\", \"module Log\\npub fn info(msg: String) -> Int = 0\"),\n(\"App\", \"module App\\nuse Log as L\\npub fn run() -> Int = L.info(\\\"hi\\\")\",),])"
+---
+== App ==
+run : () → Int
+== Log ==
+info : String → Int

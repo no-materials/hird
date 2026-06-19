@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Right\", \"module Wrong\\npub fn f() -> Int = 0\")])"
+---
+== Right ==
+f : () → Int
+error[C0019] 7..12: module is declared `Wrong` but its path names it `Right`

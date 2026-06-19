@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"A\", \"module A\\nuse B\\npub fn fa() -> Int = 0\"),\n(\"B\", \"module B\\nuse A\\npub fn fb() -> Int = 0\"),])"
+---
+== A ==
+fa : () → Int
+error[C0020] 8..14: circular import: module `B` is part of an import cycle
+== B ==
+fb : () → Int
+error[C0020] 8..14: circular import: module `A` is part of an import cycle

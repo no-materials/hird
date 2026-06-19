@@ -43,18 +43,55 @@ mod elaborate;
 mod env;
 mod exhaustive;
 mod infer;
+mod program;
 mod registry;
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt;
 
 use hird_ast::{Expr, SourceFile, SyntaxNode, SyntaxToken};
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
 use hird_types::{Name, Type};
 
-pub use diag::{CheckCode, CheckDiagnostic, Severity};
+pub use diag::{CheckCode, CheckDiagnostic, RelatedSpan, Severity};
+pub use program::{CheckedProgram, check_program};
+
+/// The name of a module: one or more `PascalCase` segments joined by `.`
+/// (e.g. `Ets`, `Actors.Base`). Derived from a file's path and validated
+/// against its `module` declaration.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ModuleName(Box<str>);
+
+impl ModuleName {
+    /// Wraps a string as a module name.
+    #[must_use]
+    pub fn new(value: impl Into<Box<str>>) -> Self {
+        Self(value.into())
+    }
+
+    /// Borrows the underlying dotted name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The trailing segment, which is the default qualifier a whole-module
+    /// `use` binds (`use Actors.Base` ⇒ `Base.member`).
+    #[must_use]
+    pub fn last_segment(&self) -> &str {
+        self.0.rsplit('.').next().unwrap_or(&self.0)
+    }
+}
+
+impl fmt::Display for ModuleName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// Identity of a CST node or token: kind plus byte range.
 ///

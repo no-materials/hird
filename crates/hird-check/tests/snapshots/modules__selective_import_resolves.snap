@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Ets\", \"module Ets\\npub fn lookup(k: Int) -> Int = k\"),\n(\"App\",\n\"module App\\nuse Ets.{lookup}\\npub fn run(x: Int) -> Int = lookup(x)\",),])"
+---
+== App ==
+run : Int → Int
+== Ets ==
+lookup : Int → Int

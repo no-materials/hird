@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\", \"module M\\nfn foo() -> Int = 1\\nfn foo() -> Int = 2\",)])"
+---
+== M ==
+foo : () → Int
+error[C0017] 32..35: duplicate definition of `foo`
+  related 12..15: first defined here

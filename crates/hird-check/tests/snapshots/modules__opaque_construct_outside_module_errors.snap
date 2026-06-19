@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Ets\", \"module Ets\\npub opaque type Table = MkTable(Int)\"),\n(\"App\",\n\"module App\\nuse Ets.{Table}\\npub fn forge() -> Table = MkTable(0)\"),])"
+---
+== App ==
+forge : () → Table
+error[C0022] 53..60: cannot construct opaque type `Table` outside module `Ets`
+== Ets ==
+MkTable : Int → Table

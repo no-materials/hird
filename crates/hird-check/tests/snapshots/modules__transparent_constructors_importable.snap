@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Opt\", \"module Opt\\npub type Maybe = Just(Int) | Nada\"),\n(\"App\",\n\"module App\\n\\\n             use Opt.{Maybe, Just, Nada}\\n\\\n             pub fn unwrap(m: Maybe) -> Int = match m { Just(n) -> n, Nada -> 0, }\\n\\\n             pub fn wrap(n: Int) -> Maybe = Just(n)\",),])"
+---
+== App ==
+unwrap : Maybe → Int
+wrap : Int → Maybe
+== Opt ==
+Just : Int → Maybe
+Nada : Maybe

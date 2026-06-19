@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Ets\", \"module Ets\\npub fn lookup(k: Int) -> Int = k\"),\n(\"App\", \"module App\\nuse Ets\\npub fn run(x: Int) -> Int = Ets.nope(x)\",),])"
+---
+== App ==
+run : Int → Int
+error[C0024] 46..55: module `Ets` has no exported value `nope`
+== Ets ==
+lookup : Int → Int

@@ -12,7 +12,7 @@
 
 use alloc::collections::BTreeMap;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use hird_ast::{
@@ -48,6 +48,12 @@ impl Checker {
                 let text = name.text();
                 let Some(scheme) = self.env.lookup(text).cloned() else {
                     let span = token_span(name.syntax(), self.source_id);
+                    // A foreign opaque constructor is in the registry but never
+                    // bound as a value, so construction outside its module lands
+                    // here; name the type rather than report an unbound name.
+                    if let Some(aborted) = self.opaque_construct_error(text, span) {
+                        return Err(aborted);
+                    }
                     return Err(self.error(
                         CheckCode::C0003,
                         span,
@@ -268,14 +274,33 @@ impl Checker {
                 let Some(name) = ctor.name() else {
                     return Err(Aborted);
                 };
-                let Some(info) = self.registry.ctor(name) else {
+                // Snapshot what the gate needs, ending the registry borrow
+                // before any diagnostic is pushed.
+                let lookup = self.registry.ctor(name).map(|info| {
+                    (
+                        info.scheme.clone(),
+                        info.opaque,
+                        info.owner.clone(),
+                        info.module.clone(),
+                    )
+                });
+                let Some((scheme, opaque, owner, module)) = lookup else {
                     return Err(self.error(
                         CheckCode::C0007,
                         span,
                         format!("unknown constructor `{name}`"),
                     ));
                 };
-                let scheme = info.scheme.clone();
+                if opaque && module.as_ref() != self.current_module.as_ref() {
+                    let module = module.map_or_else(String::new, |m| m.to_string());
+                    return Err(self.error(
+                        CheckCode::C0021,
+                        span,
+                        format!(
+                            "cannot destructure opaque type `{owner}` outside module `{module}`"
+                        ),
+                    ));
+                }
                 let instance = self.subst.instantiate(&scheme);
                 let (fields, result_ty) = match instance {
                     Type::TyFn(params, ret) => (params, *ret),
@@ -391,6 +416,11 @@ impl Checker {
 
     /// Field access requires an already-determined record type; row
     /// polymorphism is a later phase.
+    ///
+    /// A bare name receiver that resolves in the module namespace makes this a
+    /// qualified name (`Mod.member`) rather than field access; the `PascalCase`
+    /// casing of module qualifiers keeps the two from ever overlapping with a
+    /// value's field (`point.x`).
     fn infer_field(&mut self, field: &FieldExpr) -> Checked<Type> {
         let Some(receiver) = field.receiver() else {
             return Err(Aborted);
@@ -399,6 +429,23 @@ impl Checker {
             return Err(Aborted);
         };
         let span = node_span(field.syntax(), self.source_id);
+        if let Expr::Name(recv) = &receiver
+            && let Some(member) = self
+                .modules
+                .get(recv.text())
+                .map(|vals| vals.get(name).cloned())
+        {
+            // The receiver is a module qualifier: resolve against its exports
+            // without ever typing the receiver as a value.
+            return match member {
+                Some(scheme) => Ok(self.subst.instantiate(&scheme)),
+                None => Err(self.error(
+                    CheckCode::C0024,
+                    span,
+                    format!("module `{}` has no exported value `{name}`", recv.text()),
+                )),
+            };
+        }
         let receiver_ty = self.infer_expr(&receiver)?;
         match self.subst.resolve(&receiver_ty) {
             Type::TyRecord(fields) => match fields.get(&Label::new(name)) {
@@ -425,6 +472,25 @@ impl Checker {
                 format!("cannot access field `{name}` on non-record type `{other}`"),
             )),
         }
+    }
+
+    /// Reports constructing an opaque type outside its declaring module
+    /// (C0022), if `name` is such a foreign opaque constructor. Returns `None`
+    /// when `name` is not a constructor, or is one this module may construct.
+    fn opaque_construct_error(&mut self, name: &str, span: Span) -> Option<Aborted> {
+        let (owner, module) = {
+            let info = self.registry.ctor(name)?;
+            if !info.opaque || info.module.as_ref() == self.current_module.as_ref() {
+                return None;
+            }
+            (info.owner.clone(), info.module.clone())
+        };
+        let module = module.map_or_else(String::new, |m| m.to_string());
+        Some(self.error(
+            CheckCode::C0022,
+            span,
+            format!("cannot construct opaque type `{owner}` outside module `{module}`"),
+        ))
     }
 
     /// `{ field: value, … }` — later duplicates override earlier ones.

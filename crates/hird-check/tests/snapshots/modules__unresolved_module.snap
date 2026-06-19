@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"App\",\n\"module App\\nuse Nowhere.{thing}\\npub fn run() -> Int = 0\",)])"
+---
+== App ==
+run : () → Int
+error[C0023] 14..22: unresolved import: no module named `Nowhere`

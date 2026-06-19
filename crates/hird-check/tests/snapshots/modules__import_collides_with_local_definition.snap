@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\", \"module M\\npub fn helper(x: Int) -> Int = x\"),\n(\"App\", \"module App\\nuse M.{helper}\\nfn helper(x: Int) -> Int = x\"),])"
+---
+== App ==
+helper : Int → Int
+error[C0017] 29..35: duplicate definition of `helper`
+  related 18..24: first defined here
+== M ==
+helper : Int → Int

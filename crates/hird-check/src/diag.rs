@@ -9,6 +9,7 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use hird_lex::Span;
 use hird_types::{Type, TypeError};
@@ -59,6 +60,38 @@ pub enum CheckCode {
     C0015,
     /// A match arm is unreachable: earlier arms already cover it.
     C0016,
+    /// A value name (function, binding, or constructor) is defined twice in
+    /// one module, or an import collides with such a definition.
+    C0017,
+    /// A type name is defined twice in one module, or an imported type
+    /// collides with a local type.
+    C0018,
+    /// A module's `module` declaration disagrees with its path-derived name.
+    C0019,
+    /// Two or more modules import each other, forming a cycle.
+    C0020,
+    /// A pattern destructures an opaque type outside its declaring module.
+    C0021,
+    /// A value constructs an opaque type outside its declaring module.
+    C0022,
+    /// A `use` import names a module that does not exist or a name the target
+    /// module does not export.
+    C0023,
+    /// A qualified name `Mod.member` references a value the module does not
+    /// export.
+    C0024,
+}
+
+/// A secondary source location attached to a diagnostic.
+///
+/// Carries the "other" span a message refers to — for a duplicate definition,
+/// the original; the primary [`CheckDiagnostic::span`] is the offending site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelatedSpan {
+    /// The related source location.
+    pub span: Span,
+    /// What this location is, e.g. `first defined here`.
+    pub message: String,
 }
 
 /// A single type-checker diagnostic.
@@ -72,6 +105,9 @@ pub struct CheckDiagnostic {
     pub span: Span,
     /// Human-readable message.
     pub message: String,
+    /// Secondary locations the message refers to, in attachment order. Empty
+    /// for the common single-span diagnostic.
+    pub related: Vec<RelatedSpan>,
 }
 
 impl CheckDiagnostic {
@@ -83,6 +119,7 @@ impl CheckDiagnostic {
             severity: Severity::Error,
             span,
             message,
+            related: Vec::new(),
         }
     }
 
@@ -94,7 +131,16 @@ impl CheckDiagnostic {
             severity: Severity::Warning,
             span,
             message,
+            related: Vec::new(),
         }
+    }
+
+    /// Attaches a secondary location, consuming and returning `self` for
+    /// chaining.
+    #[must_use]
+    pub fn with_related(mut self, span: Span, message: String) -> Self {
+        self.related.push(RelatedSpan { span, message });
+        self
     }
 
     /// Converts a unification failure into a diagnostic.

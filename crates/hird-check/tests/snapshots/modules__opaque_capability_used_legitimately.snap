@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Ets\",\n\"module Ets\\n\\\n             pub opaque type Table = MkTable(Int)\\n\\\n             pub fn empty() -> Table = MkTable(0)\\n\\\n             pub fn size(t: Table) -> Int = match t { MkTable(n) -> n, }\",),\n(\"App\",\n\"module App\\n\\\n             use Ets.{Table, empty, size}\\n\\\n             pub fn use_table() -> Int = size(empty())\\n\\\n             pub fn store(t: Table) -> List<Table> = [t]\",),])"
+---
+== App ==
+store : Table → List<Table>
+use_table : () → Int
+== Ets ==
+MkTable : Int → Table
+empty : () → Table
+size : Table → Int

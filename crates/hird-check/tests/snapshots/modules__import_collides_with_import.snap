@@ -1,0 +1,12 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"A\", \"module A\\npub fn shared() -> Int = 1\"),\n(\"B\", \"module B\\npub fn shared() -> Int = 2\"),\n(\"App\",\n\"module App\\nuse A.{shared}\\nuse B.{shared}\\npub fn run() -> Int = shared()\",),])"
+---
+== A ==
+shared : () → Int
+== App ==
+run : () → Int
+error[C0017] 33..39: duplicate definition of `shared`
+  related 18..24: first defined here
+== B ==
+shared : () → Int

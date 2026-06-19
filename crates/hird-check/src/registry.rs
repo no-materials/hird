@@ -8,6 +8,8 @@ use alloc::vec::Vec;
 
 use hird_types::{Name, Type};
 
+use crate::ModuleName;
+
 /// A declared algebraic data type.
 #[derive(Debug)]
 pub(crate) struct AdtInfo {
@@ -23,6 +25,14 @@ pub(crate) struct CtorInfo {
     /// Scheme of the constructor as a value: `∀params. fields → Adt<params>`
     /// for constructors with fields, or the bare instance type when nullary.
     pub(crate) scheme: Type,
+    /// The type this constructs.
+    pub(crate) owner: Name,
+    /// Module that declares the constructor; `None` for the current module's
+    /// own declarations and built-ins. Construction and destructuring outside
+    /// this module are gated when the owning type is opaque.
+    pub(crate) module: Option<ModuleName>,
+    /// Whether the owning type is opaque (constructors module-private).
+    pub(crate) opaque: bool,
 }
 
 /// Declared types and constructors, plus built-in type arities.
@@ -54,12 +64,18 @@ impl Registry {
             Name::new("True"),
             CtorInfo {
                 scheme: Type::bool(),
+                owner: Name::new("Bool"),
+                module: None,
+                opaque: false,
             },
         );
         registry.declare_ctor(
             Name::new("False"),
             CtorInfo {
                 scheme: Type::bool(),
+                owner: Name::new("Bool"),
+                module: None,
+                opaque: false,
             },
         );
         registry

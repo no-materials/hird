@@ -16,8 +16,9 @@ use hird_types::{Name, Subst, Type, unify};
 
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::env::Env;
+use crate::program::{ExportedType, ModuleInterface};
 use crate::registry::{CtorInfo, Registry};
-use crate::{CheckedFile, NodeKey, expr_span, name_token_span, node_span};
+use crate::{CheckedFile, ModuleName, NodeKey, expr_span, name_token_span, node_span};
 
 /// Marker: the current declaration's check stopped after an error. The
 /// triggering diagnostic has already been recorded.
@@ -40,10 +41,27 @@ pub(crate) struct Checker {
     /// Per-node types, recorded raw and resolved in [`Checker::finish`].
     pub(crate) types: Vec<(NodeKey, Type)>,
     /// Top-level bindings in registration order, resolved in
-    /// [`Checker::finish`].
+    /// [`Checker::finish_with_interface`].
     bindings: Vec<(String, Type)>,
     /// Source file id used for spans.
     pub(crate) source_id: u32,
+    /// The module being checked; set by the whole-program driver and `None`
+    /// for single-file checking. Locally declared constructors record it, and
+    /// the opaque gate compares a foreign constructor's module against it.
+    pub(crate) current_module: Option<ModuleName>,
+    /// First-seen name-token span of each value-namespace definition, for
+    /// duplicate detection (functions, externs, constructors, imported
+    /// values).
+    value_spans: BTreeMap<String, Span>,
+    /// First-seen name-token span of each type-namespace definition.
+    type_spans: BTreeMap<String, Span>,
+    /// Imported module qualifiers mapped to their exported value schemes, for
+    /// `Mod.member` qualified access.
+    pub(crate) modules: BTreeMap<String, BTreeMap<String, Type>>,
+    /// Names of this module's exported (`pub`) functions.
+    exported_fns: Vec<String>,
+    /// This module's exported (`pub`) types paired with their opacity.
+    exported_types: Vec<(Name, bool)>,
 }
 
 impl Checker {
@@ -62,11 +80,30 @@ impl Checker {
             types: Vec::new(),
             bindings: Vec::new(),
             source_id,
+            current_module: None,
+            value_spans: BTreeMap::new(),
+            type_spans: BTreeMap::new(),
+            modules: BTreeMap::new(),
+            exported_fns: Vec::new(),
+            exported_types: Vec::new(),
         }
     }
 
-    /// Checks `file` and assembles the result.
-    pub(crate) fn run(mut self, file: &SourceFile) -> CheckedFile {
+    /// Checks `file` and assembles the result, discarding the export interface.
+    pub(crate) fn run(self, file: &SourceFile) -> CheckedFile {
+        self.run_with_interface(file).0
+    }
+
+    /// Checks `file`, returning its result and the export interface the
+    /// whole-program driver seeds into dependent modules.
+    pub(crate) fn run_with_interface(
+        mut self,
+        file: &SourceFile,
+    ) -> (CheckedFile, ModuleInterface) {
+        // Duplicate detection runs first, over source order, against the tables
+        // any seeded imports have already populated (catching import-vs-local).
+        self.detect_duplicates(file);
+
         let mut type_decls = Vec::new();
         let mut fn_decls = Vec::new();
         let mut extern_decls = Vec::new();
@@ -78,6 +115,14 @@ impl Checker {
                 // Modules and imports are the module system's pass; effects,
                 // tools, actors, and supervisors are later phases.
                 _ => {}
+            }
+        }
+
+        for decl in &fn_decls {
+            if decl.is_pub()
+                && let Some(name) = decl.name()
+            {
+                self.exported_fns.push(String::from(name));
             }
         }
 
@@ -95,7 +140,152 @@ impl Checker {
             let _ = self.declare_extern(decl);
         }
         self.check_functions(&fn_decls);
-        self.finish()
+        self.finish_with_interface()
+    }
+
+    // ── module-system seeding (whole-program driver) ─────────────
+
+    /// Records the module under check.
+    pub(crate) fn set_module(&mut self, name: ModuleName) {
+        self.current_module = Some(name);
+    }
+
+    /// Injects a driver-discovered diagnostic (module-name mismatch, unresolved
+    /// import, cycle) so it sorts in with the per-module diagnostics.
+    pub(crate) fn push_diag(&mut self, diag: CheckDiagnostic) {
+        self.diags.push(diag);
+    }
+
+    /// Binds a qualifier to a module's exported values for `Mod.member` access.
+    pub(crate) fn seed_module_qualifier(
+        &mut self,
+        qualifier: &str,
+        values: BTreeMap<String, Type>,
+    ) {
+        self.modules.insert(String::from(qualifier), values);
+    }
+
+    /// Brings an imported function into scope unqualified.
+    pub(crate) fn seed_import_function(&mut self, name: &str, scheme: Type, span: Span) {
+        self.note_value_name(name, span);
+        self.env.insert_root(name, scheme);
+    }
+
+    /// Brings an imported transparent constructor into scope unqualified.
+    pub(crate) fn seed_import_ctor(
+        &mut self,
+        name: &str,
+        owner: Name,
+        scheme: Type,
+        from: ModuleName,
+        span: Span,
+    ) {
+        self.note_value_name(name, span);
+        self.registry.declare_ctor(
+            Name::new(name),
+            CtorInfo {
+                scheme: scheme.clone(),
+                owner,
+                module: Some(from),
+                opaque: false,
+            },
+        );
+        self.env.insert_root(name, scheme);
+    }
+
+    /// Brings an imported type's name (and arity) into scope. A transparent
+    /// type's constructors are imported separately, by name; an opaque type's
+    /// constructors are registered solely so an out-of-module destructure or
+    /// construction names the type instead of reporting an unknown constructor.
+    pub(crate) fn seed_import_type(
+        &mut self,
+        name: &Name,
+        exported: &ExportedType,
+        from: ModuleName,
+        span: Span,
+    ) {
+        self.note_type_name(name.as_str(), span);
+        let ctor_names = exported.ctors.iter().map(|(n, _)| n.clone()).collect();
+        self.registry
+            .declare_adt(name.clone(), exported.arity, ctor_names);
+        if exported.opaque {
+            for (ctor, scheme) in &exported.ctors {
+                self.registry.declare_ctor(
+                    ctor.clone(),
+                    CtorInfo {
+                        scheme: scheme.clone(),
+                        owner: name.clone(),
+                        module: Some(from.clone()),
+                        opaque: true,
+                    },
+                );
+            }
+        }
+    }
+
+    /// Records a value-namespace definition at `span`, reporting a duplicate
+    /// (C0017) against the first occurrence.
+    fn note_value_name(&mut self, name: &str, span: Span) {
+        if let Some(first) = self.value_spans.get(name).copied() {
+            self.diags.push(
+                CheckDiagnostic::error(
+                    CheckCode::C0017,
+                    span,
+                    format!("duplicate definition of `{name}`"),
+                )
+                .with_related(first, String::from("first defined here")),
+            );
+        } else {
+            self.value_spans.insert(String::from(name), span);
+        }
+    }
+
+    /// Records a type-namespace definition at `span`, reporting a duplicate
+    /// (C0018) against the first occurrence.
+    fn note_type_name(&mut self, name: &str, span: Span) {
+        if let Some(first) = self.type_spans.get(name).copied() {
+            self.diags.push(
+                CheckDiagnostic::error(CheckCode::C0018, span, format!("duplicate type `{name}`"))
+                    .with_related(first, String::from("first defined here")),
+            );
+        } else {
+            self.type_spans.insert(String::from(name), span);
+        }
+    }
+
+    /// Walks declarations in source order, recording each name in its namespace
+    /// and reporting collisions. Types and values are separate namespaces, so a
+    /// type and a value may share a name (`type Email = Email(String)`).
+    fn detect_duplicates(&mut self, file: &SourceFile) {
+        for decl in file.declarations() {
+            match decl {
+                Decl::Fn(d) => {
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_value_name(name, span);
+                    }
+                }
+                Decl::Extern(d) => {
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_value_name(name, span);
+                    }
+                }
+                Decl::Type(d) => {
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_type_name(name, span);
+                    }
+                    for ctor in d.constructors() {
+                        if let Some(name) = ctor.name() {
+                            let span = name_token_span(ctor.syntax(), self.source_id);
+                            self.note_value_name(name, span);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     // ── type declarations ───────────────────────────────────────
@@ -103,6 +293,10 @@ impl Checker {
     /// Registers a type declaration's name, arity, and constructor list.
     fn register_adt_header(&mut self, decl: &TypeDecl) {
         let Some(name) = decl.name() else { return };
+        if decl.is_pub() {
+            self.exported_types
+                .push((Name::new(name), decl.is_opaque()));
+        }
         let params: Vec<&str> = decl.type_params().collect();
         for (i, param) in params.iter().enumerate() {
             if params[..i].contains(param) {
@@ -130,6 +324,8 @@ impl Checker {
         let Some(type_name) = decl.name() else {
             return Ok(());
         };
+        let owner = Name::new(type_name);
+        let opaque = decl.is_opaque();
         let mut scope = BTreeMap::new();
         self.subst.enter_level();
         let mut param_args = Vec::new();
@@ -174,6 +370,9 @@ impl Checker {
                 Name::new(ctor_name.as_str()),
                 CtorInfo {
                     scheme: scheme.clone(),
+                    owner: owner.clone(),
+                    module: self.current_module.clone(),
+                    opaque,
                 },
             );
             self.env.insert_root(&ctor_name, scheme.clone());
@@ -422,15 +621,16 @@ impl Checker {
         })
     }
 
-    /// Assembles the result: resolves recorded types, sorts diagnostics into
-    /// source order, and snapshots the ADT table.
-    fn finish(mut self) -> CheckedFile {
+    /// Assembles the result and the export interface: resolves recorded types,
+    /// sorts diagnostics into source order, snapshots the ADT table, and
+    /// gathers the `pub` surface from the accumulated export markers.
+    fn finish_with_interface(mut self) -> (CheckedFile, ModuleInterface) {
         let types = self
             .types
             .iter()
             .map(|(key, ty)| (*key, self.subst.resolve(ty)))
             .collect();
-        let bindings = self
+        let bindings: BTreeMap<String, Type> = self
             .bindings
             .iter()
             .map(|(name, ty)| (name.clone(), self.subst.resolve(ty)))
@@ -440,14 +640,51 @@ impl Checker {
             .adt_summaries()
             .map(|(name, ctors)| (name.clone(), ctors.clone()))
             .collect();
+
+        let functions = self
+            .exported_fns
+            .iter()
+            .filter_map(|name| bindings.get(name).map(|ty| (name.clone(), ty.clone())))
+            .collect();
+        let mut exported = BTreeMap::new();
+        for (type_name, opaque) in &self.exported_types {
+            let arity = self.registry.type_arity(type_name.as_str()).unwrap_or(0);
+            let ctors = self
+                .registry
+                .adt_constructors(type_name.as_str())
+                .map(|cs| {
+                    cs.iter()
+                        .filter_map(|c| {
+                            self.registry
+                                .ctor(c.as_str())
+                                .map(|info| (c.clone(), info.scheme.clone()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            exported.insert(
+                type_name.clone(),
+                ExportedType {
+                    arity,
+                    opaque: *opaque,
+                    ctors,
+                },
+            );
+        }
+        let interface = ModuleInterface {
+            functions,
+            types: exported,
+        };
+
         self.diags
             .sort_by_key(|d| (d.span.start, d.span.end, d.severity, d.code));
-        CheckedFile {
+        let checked = CheckedFile {
             types,
             bindings,
             adts,
             diagnostics: self.diags,
-        }
+        };
+        (checked, interface)
     }
 }
 
@@ -522,8 +759,9 @@ fn collect_idents(node: &SyntaxNode, out: &mut Vec<String>) {
 /// Tarjan's strongly-connected-components algorithm.
 ///
 /// Components are emitted callees-first (reverse topological order of the
-/// condensation), which is exactly the order generalisation needs.
-fn tarjan(graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
+/// condensation), which is exactly the order generalisation needs — and, reused
+/// by the whole-program driver, the order modules must be checked in.
+pub(crate) fn tarjan(graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
     /// Mutable traversal state shared by the recursive walk.
     struct State<'g> {
         /// Adjacency lists.

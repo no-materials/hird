@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\", \"module M\\ntype T = A\\ntype T = B\")])"
+---
+== M ==
+A : T
+B : T
+error[C0018] 25..26: duplicate type `T`
+  related 14..15: first defined here

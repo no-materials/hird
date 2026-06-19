@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\",\n\"module M\\npub type Email = Email(String)\\npub fn make(s: String) -> Email = Email(s)\",)])"
+---
+== M ==
+Email : String → Email
+make : String → Email
