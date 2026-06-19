@@ -21,7 +21,6 @@ use alloc::vec::Vec;
 
 use hird_ast::{AstNode, Decl, SourceFile, UseDecl};
 use hird_lex::Span;
-use hird_parse::SyntaxKind;
 use hird_types::{Name, Type};
 
 use crate::checker::{Checker, tarjan};
@@ -54,31 +53,33 @@ pub(crate) struct ExportedType {
 }
 
 impl ModuleInterface {
-    /// The scheme of an exported constructor of a *transparent* type, with its
-    /// owning type. Opaque constructors are never public, so they are skipped.
+    /// Every importable constructor — those of transparent exported types —
+    /// as `(owning type, constructor, scheme)`. Opaque types' constructors
+    /// stay module-private and are skipped.
+    fn transparent_ctors(&self) -> impl Iterator<Item = (&Name, &Name, &Type)> {
+        self.types
+            .iter()
+            .filter(|(_, ty)| !ty.opaque)
+            .flat_map(|(owner, ty)| {
+                ty.ctors
+                    .iter()
+                    .map(move |(ctor, scheme)| (owner, ctor, scheme))
+            })
+    }
+
+    /// The scheme of an importable constructor, with its owning type.
     fn public_ctor(&self, name: &str) -> Option<(Name, Type)> {
-        self.types.iter().find_map(|(owner, ty)| {
-            if ty.opaque {
-                return None;
-            }
-            ty.ctors
-                .iter()
-                .find(|(ctor, _)| ctor.as_str() == name)
-                .map(|(_, scheme)| (owner.clone(), scheme.clone()))
-        })
+        self.transparent_ctors()
+            .find(|(_, ctor, _)| ctor.as_str() == name)
+            .map(|(owner, _, scheme)| (owner.clone(), scheme.clone()))
     }
 
     /// Every value reachable through a qualifier (`Mod.member`): exported
     /// functions plus the constructors of transparent exported types.
     fn exported_values(&self) -> BTreeMap<String, Type> {
         let mut values = self.functions.clone();
-        for ty in self.types.values() {
-            if ty.opaque {
-                continue;
-            }
-            for (ctor, scheme) in &ty.ctors {
-                values.insert(String::from(ctor.as_str()), scheme.clone());
-            }
+        for (_, ctor, scheme) in self.transparent_ctors() {
+            values.insert(String::from(ctor.as_str()), scheme.clone());
         }
         values
     }
@@ -223,12 +224,7 @@ fn resolve_uses(
 /// The selective-group members of `use_decl` with their name-token spans.
 fn selected_members(use_decl: &UseDecl, source_id: u32) -> Vec<(String, Span)> {
     use_decl
-        .syntax()
-        .children()
-        .filter(|c| c.kind() == SyntaxKind::USE_GROUP)
-        .flat_map(|group| group.children_with_tokens())
-        .filter_map(|e| e.into_token())
-        .filter(|t| t.kind() == SyntaxKind::IDENT)
+        .selected_tokens()
         .map(|t| (String::from(t.text()), token_span(t, source_id)))
         .collect()
 }
@@ -302,13 +298,9 @@ fn seed_use(
 
     for (member, span) in &u.selected {
         let mut found = false;
-        if let Some(exported) = interface.types.get(&Name::new(member.as_str())) {
-            checker.seed_import_type(
-                &Name::new(member.as_str()),
-                exported,
-                u.target.clone(),
-                *span,
-            );
+        let member_name = Name::new(member.as_str());
+        if let Some(exported) = interface.types.get(&member_name) {
+            checker.seed_import_type(&member_name, exported, u.target.clone(), *span);
             found = true;
         }
         if let Some(scheme) = interface.functions.get(member) {

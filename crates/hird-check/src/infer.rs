@@ -25,7 +25,8 @@ use hird_types::{Label, Type};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
-use crate::{NodeKey, expr_span, name_token_span, node_span, token_span};
+use crate::registry::CtorInfo;
+use crate::{ModuleName, NodeKey, expr_span, name_token_span, node_span, token_span};
 
 impl Checker {
     /// Infers the type of `expr`, recording it in the node table.
@@ -279,27 +280,18 @@ impl Checker {
                 let lookup = self.registry.ctor(name).map(|info| {
                     (
                         info.scheme.clone(),
-                        info.opaque,
-                        info.owner.clone(),
-                        info.module.clone(),
+                        opaque_violation(info, self.current_module.as_ref(), "destructure"),
                     )
                 });
-                let Some((scheme, opaque, owner, module)) = lookup else {
+                let Some((scheme, violation)) = lookup else {
                     return Err(self.error(
                         CheckCode::C0007,
                         span,
                         format!("unknown constructor `{name}`"),
                     ));
                 };
-                if opaque && module.as_ref() != self.current_module.as_ref() {
-                    let module = module.map_or_else(String::new, |m| m.to_string());
-                    return Err(self.error(
-                        CheckCode::C0021,
-                        span,
-                        format!(
-                            "cannot destructure opaque type `{owner}` outside module `{module}`"
-                        ),
-                    ));
+                if let Some(message) = violation {
+                    return Err(self.error(CheckCode::C0021, span, message));
                 }
                 let instance = self.subst.instantiate(&scheme);
                 let (fields, result_ty) = match instance {
@@ -478,19 +470,12 @@ impl Checker {
     /// (C0022), if `name` is such a foreign opaque constructor. Returns `None`
     /// when `name` is not a constructor, or is one this module may construct.
     fn opaque_construct_error(&mut self, name: &str, span: Span) -> Option<Aborted> {
-        let (owner, module) = {
-            let info = self.registry.ctor(name)?;
-            if !info.opaque || info.module.as_ref() == self.current_module.as_ref() {
-                return None;
-            }
-            (info.owner.clone(), info.module.clone())
-        };
-        let module = module.map_or_else(String::new, |m| m.to_string());
-        Some(self.error(
-            CheckCode::C0022,
-            span,
-            format!("cannot construct opaque type `{owner}` outside module `{module}`"),
-        ))
+        let message = opaque_violation(
+            self.registry.ctor(name)?,
+            self.current_module.as_ref(),
+            "construct",
+        )?;
+        Some(self.error(CheckCode::C0022, span, message))
     }
 
     /// `{ field: value, … }` — later duplicates override earlier ones.
@@ -533,4 +518,22 @@ fn binop_kind(op: &BinOpExpr) -> Option<SyntaxKind> {
                     | SyntaxKind::OROR
             )
         })
+}
+
+/// The "outside its module" diagnostic for touching a foreign opaque
+/// constructor `info`; `verb` is the action (`construct`/`destructure`).
+/// `None` when `info` is transparent or owned by `current`. A module-less
+/// owner (single-file checking) renders as the empty module name.
+fn opaque_violation(info: &CtorInfo, current: Option<&ModuleName>, verb: &str) -> Option<String> {
+    if !info.opaque || info.module.as_ref() == current {
+        return None;
+    }
+    let module = info
+        .module
+        .as_ref()
+        .map_or_else(String::new, |m| m.to_string());
+    Some(format!(
+        "cannot {verb} opaque type `{}` outside module `{module}`",
+        info.owner
+    ))
 }

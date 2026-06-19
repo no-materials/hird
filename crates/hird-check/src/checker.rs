@@ -226,31 +226,27 @@ impl Checker {
     /// Records a value-namespace definition at `span`, reporting a duplicate
     /// (C0017) against the first occurrence.
     fn note_value_name(&mut self, name: &str, span: Span) {
-        if let Some(first) = self.value_spans.get(name).copied() {
-            self.diags.push(
-                CheckDiagnostic::error(
-                    CheckCode::C0017,
-                    span,
-                    format!("duplicate definition of `{name}`"),
-                )
-                .with_related(first, String::from("first defined here")),
-            );
-        } else {
-            self.value_spans.insert(String::from(name), span);
-        }
+        note_duplicate(
+            &mut self.diags,
+            &mut self.value_spans,
+            CheckCode::C0017,
+            name,
+            span,
+            || format!("duplicate definition of `{name}`"),
+        );
     }
 
     /// Records a type-namespace definition at `span`, reporting a duplicate
     /// (C0018) against the first occurrence.
     fn note_type_name(&mut self, name: &str, span: Span) {
-        if let Some(first) = self.type_spans.get(name).copied() {
-            self.diags.push(
-                CheckDiagnostic::error(CheckCode::C0018, span, format!("duplicate type `{name}`"))
-                    .with_related(first, String::from("first defined here")),
-            );
-        } else {
-            self.type_spans.insert(String::from(name), span);
-        }
+        note_duplicate(
+            &mut self.diags,
+            &mut self.type_spans,
+            CheckCode::C0018,
+            name,
+            span,
+            || format!("duplicate type `{name}`"),
+        );
     }
 
     /// Walks declarations in source order, recording each name in its namespace
@@ -685,6 +681,27 @@ impl Checker {
             diagnostics: self.diags,
         };
         (checked, interface)
+    }
+}
+
+/// Records `name` in `spans`, or — when already present — pushes a duplicate
+/// diagnostic (`code`, with `message` rendered lazily) related to the first
+/// occurrence.
+fn note_duplicate(
+    diags: &mut Vec<CheckDiagnostic>,
+    spans: &mut BTreeMap<String, Span>,
+    code: CheckCode,
+    name: &str,
+    span: Span,
+    message: impl FnOnce() -> String,
+) {
+    if let Some(first) = spans.get(name).copied() {
+        diags.push(
+            CheckDiagnostic::error(code, span, message())
+                .with_related(first, String::from("first defined here")),
+        );
+    } else {
+        spans.insert(String::from(name), span);
     }
 }
 

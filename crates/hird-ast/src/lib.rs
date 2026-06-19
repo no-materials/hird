@@ -241,13 +241,18 @@ impl UseDecl {
     /// The member names of a selective group (`.{ a, b }`), in source order.
     /// Empty for whole-module and aliased imports.
     pub fn selected(&self) -> impl Iterator<Item = &str> {
+        self.selected_tokens().map(|t| t.text())
+    }
+
+    /// The member-name tokens of a selective group, in source order — the
+    /// span-bearing form of [`selected`](Self::selected).
+    pub fn selected_tokens(&self) -> impl Iterator<Item = &SyntaxToken> {
         self.0
             .children()
             .filter(|c| c.kind() == SyntaxKind::USE_GROUP)
             .flat_map(|group| group.children_with_tokens())
             .filter_map(|e| e.into_token())
             .filter(|t| t.kind() == SyntaxKind::IDENT)
-            .map(|t| t.text())
     }
 }
 
