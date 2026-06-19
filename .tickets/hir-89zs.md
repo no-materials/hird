@@ -1,6 +1,6 @@
 ---
 id: hir-89zs
-status: open
+status: closed
 deps: [hir-vm5s]
 links: []
 created: 2026-05-22T21:32:36Z
@@ -117,3 +117,24 @@ losslessly. hird-ast exposes UseDecl::selected() beside path()/alias(), with a n
 USE_GROUP CST node holding the brace members. No lexer change was needed (`.` `{`
 `}` `,` and contextual `as` already lex). Grammar-only — import resolution,
 qualified-name disambiguation, visibility, and collision checks remain in hir-i0u7.
+
+**2026-06-18T14:56:15Z**
+
+Step 7 (hir-i0u7) landed: the module system and opaque types. hird-check gains a
+whole-program entry, check_program(modules) -> CheckedProgram, alongside the
+single-file check(): path-derived module names validated against the `module`
+decl, import use-graph cycle-checked via the existing Tarjan SCC code, modules
+checked in dependency order seeded from their imports' exported schemes.
+
+Imports resolve in all three forms (selective binds unqualified; whole-module
+and aliased bind a qualifier for Mod.member, disambiguated from field access by
+a PascalCase receiver). pub fn / pub type / pub opaque type control visibility.
+Opaque types are unforgeable: constructing or destructuring one outside its
+declaring module is an error naming the type and module (ADR-006 capabilities
+are opaque types under this mechanism), while inside it they are ordinary ADTs;
+opaque values still pass and store freely. Types and values occupy separate
+namespaces, with per-namespace duplicate/collision detection carrying both
+spans. 17 module snapshot tests; fmt + clippy + workspace tests pass.
+
+OD6 (hir-0s3s) is resolved and promoted to ADR-010 in DECISIONS.md. The whole of
+Phase 3's task sequence is now complete.

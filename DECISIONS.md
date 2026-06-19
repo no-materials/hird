@@ -278,6 +278,70 @@ unambiguously a record literal. Sequencing within a body uses nested
 
 ---
 
+## ADR-010: Module and visibility system
+
+**Date**: 2026-06-18
+**Status**: Accepted
+
+### Context
+
+Hirð needs a module system: a unit of namespacing, a visibility boundary, and
+the mechanism behind the opaque-capability discipline (ADR-006). The design
+space spans first-class modules and functors (ML), path-based modules with
+`use` imports (Rust, Gleam), and header/implementation splits (C). The sibling
+a sibling project project already commits to `use`/export conventions, and parity
+keeps the two languages legible to the same readers and tools.
+
+### Decision
+
+The module system is path-based and intentionally small. No first-class
+modules, no functors, no module-level abstraction beyond opaque types.
+
+- **One module per file.** A module's name is derived from its file path and is
+  authoritative; a file's `module` declaration, if present, must match it.
+- **Imports** take three forms, with `.` as the separator:
+  `use Mod` (binds the trailing segment as a qualifier),
+  `use Mod as M` (binds `M` as the qualifier), and
+  `use Mod.{a, b}` (binds `a` and `b` unqualified). Whole-module and aliased
+  imports are for qualified access; only selective imports bind names
+  unqualified.
+- **Qualified access** is `Mod.member`. It is disambiguated from record field
+  access (`point.x`) by the receiver: a bare `PascalCase` name that resolves in
+  the module namespace is a qualifier; otherwise it is field access on a value.
+  The naming convention (ADR naming rules) guarantees the two never overlap.
+- **Three type-visibility levels:** `type T` is private (module-only),
+  `pub type T` is transparent (name and constructors exported), and
+  `pub opaque type T` exports the name but keeps constructors module-private.
+  Functions export with `pub fn`. Unprefixed declarations are private.
+- **Separate namespaces for types and values**, so `type Email = Email(String)`
+  (a type and a like-named constructor) is legal. Duplicate detection runs per
+  namespace.
+- **Circular imports are detected and rejected** by condensing the import graph
+  into strongly connected components.
+
+Opaque types are the mechanism behind capability types (ADR-006): a
+capability's constructor is private to its declaring module, so no other code
+can mint or forge one. Construction and destructuring of an opaque type outside
+its module are compile errors.
+
+Standard-library resolution is deferred: for v0.1, imports resolve only to
+modules supplied to the checker, behind a seam that a library search path can
+later fill.
+
+### Consequences
+
+- The module system is easy to teach and to read: three import forms, one
+  visibility keyword plus an `opaque` modifier, file-based module identity.
+- Opaque capabilities (ADR-006) need no separate mechanism; they are ordinary
+  opaque types.
+- No qualified type paths (`Mod.Type`) in v0.1 — another module's type is named
+  by importing it selectively. The casing convention makes the qualified-name
+  vs field-access split unambiguous without lookahead.
+- Whole-program checking must order modules by dependency and reject cycles,
+  rather than checking files independently.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -290,6 +354,5 @@ when resolved:
 | OD3 | Audit log fidelity | Phase 6 | hir-yum3 |
 | OD4 | Tool effect replay semantics | Phase 6 | hir-v3pv |
 | OD5 | Actor protocol typing richness | Phase 7 | hir-b2gn |
-| OD6 | Module and visibility system | Phase 3 | hir-0s3s |
 | OD7 | Handler semantics in v0.1 | Phase 5 | hir-mzhn |
 | OD8 | Send/reply effect tracking | Phase 7 | hir-actn |

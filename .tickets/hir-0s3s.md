@@ -1,6 +1,6 @@
 ---
 id: hir-0s3s
-status: open
+status: closed
 deps: []
 links: [hir-i0u7, hir-teho, hir-kw4v]
 created: 2026-05-22T21:43:31Z
@@ -75,3 +75,7 @@ ADR-010 references ADR-006 (opaque-capability discipline), which relies on this
 opaque-type mechanism, rather than restating it. This satisfies this ticket's
 "decision documented in DECISIONS.md" acceptance criterion. Sequencing: write it
 last, once the above are implemented and validated.
+
+**2026-06-18T14:56:15Z**
+
+Promoted to ADR-010 in DECISIONS.md (Accepted, 2026-06-18) and removed from the Open Decision Slots table, alongside the hir-i0u7 implementation. The ADR consolidates: one module per file with path-derived, validated names; use Mod / use Mod as M / use Mod.{a, b} with dot separator; Mod.member qualified access disambiguated from field access by a PascalCase receiver; three type-visibility levels (private / pub / pub opaque); separate type and value namespaces; circular-import rejection. It references ADR-006 for the opaque-capability discipline rather than restating it.

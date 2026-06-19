@@ -1,6 +1,6 @@
 ---
 id: hir-i0u7
-status: open
+status: closed
 deps: [hir-lhyh, hir-teho, hir-kw4v]
 links: [hir-0s3s]
 created: 2026-05-22T21:37:55Z
@@ -145,3 +145,36 @@ capability types. The registry already reflects this (separate `adts` and
 Import collisions follow the same per-namespace rule (import-vs-local,
 import-vs-import). Every duplicate diagnostic carries both spans (original
 definition + redefinition), per the hir-of12 inbound scope.
+
+**2026-06-18T14:56:03Z**
+
+Landed in hird-check. The single-file check() stays the per-module core; a new
+program-level check_program(modules: &[(ModuleName, SourceFile)]) -> CheckedProgram
+wraps it: path-derived module names validated against the `module` decl (C0019),
+import use-graph condensed with the existing Tarjan SCC code, cycles rejected
+(C0020), modules checked callees-first with each seeded from its imports'
+exported schemes. Stdlib resolution deferred behind a local-only seam
+(unresolved import = C0023).
+
+Imports: whole-module `use Mod` and `use Mod as M` bind a qualifier (trailing
+segment or alias) for `Mod.member` access; `use Mod.{a, b}` binds members
+unqualified. Qualified name vs field access disambiguated by a PascalCase
+receiver resolving in the module namespace (C0024 for an unknown qualified
+member).
+
+Visibility: pub fn / pub type / pub opaque type drive the export interface;
+unprefixed is private. Opaque types record their declaring module + opacity per
+constructor; construct (C0022) or destructure (C0021) outside the declaring
+module is an error naming the type and module, while inside it they are ordinary
+ADTs. Opaque values pass and store freely.
+
+Two namespaces (D): per-namespace duplicate detection — value-namespace dup
+(C0017: fn/extern/ctor, incl. import-vs-local and import-vs-import) and
+type-namespace dup (C0018); `type Email = Email(String)` is legal. Every
+duplicate carries both spans via a new RelatedSpan on CheckDiagnostic.
+
+17 module snapshot tests (tests/modules.rs) cover selective/aliased/wildcard
+imports, qualified names, visibility, circular imports, opaque construct/
+destructure/round-trip, and the collision cases. fmt + clippy (-D warnings) +
+full workspace tests pass. OD6 promoted to ADR-010; its open-decision row
+removed.
