@@ -355,10 +355,13 @@ dependencies = [
 name = "hird-ir"
 version = "0.1.0"
 dependencies = [
- "hird-actors",
  "hird-ast",
- "hird-effects",
+ "hird-check",
+ "hird-parse",
  "hird-types",
+ "insta",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

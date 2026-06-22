@@ -1,0 +1,88 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Opt",
+  "declarations": [
+    {
+      "kind": "Type",
+      "name": "Option",
+      "params": [
+        "a"
+      ],
+      "constructors": [
+        {
+          "name": "Some",
+          "fields": [
+            "a"
+          ]
+        },
+        {
+          "name": "None",
+          "fields": []
+        }
+      ]
+    },
+    {
+      "kind": "Fn",
+      "name": "unwrap",
+      "params": [
+        {
+          "name": "opt",
+          "type": "Option<Int>"
+        }
+      ],
+      "return_type": "Int",
+      "effect_row": {},
+      "body": {
+        "kind": "Match",
+        "scrutinee": {
+          "kind": "Var",
+          "name": "opt",
+          "type": "Option<Int>"
+        },
+        "scrutinee_type": "Option<Int>",
+        "arms": [
+          {
+            "pattern": {
+              "kind": "Constructor",
+              "name": "Some",
+              "type_name": "Option",
+              "fields": [
+                {
+                  "kind": "Bind",
+                  "name": "x",
+                  "type": "Int"
+                }
+              ],
+              "type": "Option<Int>"
+            },
+            "body": {
+              "kind": "Var",
+              "name": "x",
+              "type": "Int"
+            }
+          },
+          {
+            "pattern": {
+              "kind": "Constructor",
+              "name": "None",
+              "type_name": "Option",
+              "fields": [],
+              "type": "Option<Int>"
+            },
+            "body": {
+              "kind": "Literal",
+              "value": {
+                "Int": "0"
+              },
+              "type": "Int"
+            }
+          }
+        ],
+        "result_type": "Int"
+      }
+    }
+  ]
+}
