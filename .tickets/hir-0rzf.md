@@ -50,7 +50,7 @@ Key properties:
 
 ## Task sequence
 
-1. [ ] [hir-ee8k](hir-ee8k.md) — IR data structures and lowering
+1. [x] [hir-ee8k](hir-ee8k.md) — IR data structures and lowering
 2. [ ] [hir-a6lz](hir-a6lz.md) — IR pretty-printer and round-trip tests
 
 ## Out of scope
@@ -74,3 +74,26 @@ Key properties:
   serialization format.
 - `cargo clippy` and `cargo test` pass for `hird-ir`.
 
+
+## Notes
+
+**2026-06-19T13:23:54Z**
+
+Task 1 (hir-ee8k) landed in hird-ir, unblocking hir-a6lz.
+
+Shape the pretty-printer/round-trip work inherits:
+- IR is n-ary, not curried: IrFnDef/IrLambda carry param lists, IrApp carries an
+  arg list. Pretty-print n-ary calls/lambdas directly; do not re-curry.
+- Desugarings the round-trip must tolerate (IR is the canonical form, source is
+  not): if -> match over Bool; operators -> application of an operator-symbol
+  IrVar; parens dropped; handle -> body. A re-parse of pretty-printed IR will
+  re-lower to the same IR, but will NOT match the original source token-for-token
+  past these desugarings — compare IR-to-IR, as the property is written.
+- Every node carries a resolved hird_types::Type (Type has a canonical Display).
+  Polymorphic fn/lambda var letters are deterministic but not normalised per
+  signature; the pretty-printer owns any per-signature variable canonicalisation.
+- JSON projection (Serialize-only) renders types as Display strings; round-trip
+  is IR-in-memory, not via JSON.
+
+Effect rows ship as an empty EffectRow placeholder ({} in JSON) per this epic's
+scope; effects land when Phase 5 extends the IR.
