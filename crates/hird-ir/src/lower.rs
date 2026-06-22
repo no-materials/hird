@@ -25,6 +25,7 @@
 //! internal invariant violation and panics.
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -519,14 +520,14 @@ fn constructor_field_types(scheme: &Type, params: &[String]) -> Vec<Type> {
         _ => (&[][..], inner),
     };
     let rename = parameter_rename(result, params);
-    fields.iter().map(|f| apply_rename(f, &rename)).collect()
+    fields.iter().map(|f| f.substitute(&rename)).collect()
 }
 
 /// Builds the variable-to-name map for [`constructor_field_types`] from a
 /// constructor's result type `Owner<v₁ … vₙ>` and the owner's declared
 /// parameter names.
-fn parameter_rename(result: &Type, params: &[String]) -> alloc::collections::BTreeMap<u32, Type> {
-    let mut map = alloc::collections::BTreeMap::new();
+fn parameter_rename(result: &Type, params: &[String]) -> BTreeMap<u32, Type> {
+    let mut map = BTreeMap::new();
     if let Type::TyCon(_, args) = result {
         for (arg, name) in args.iter().zip(params) {
             if let Type::TyVar(id) = arg {
@@ -535,32 +536,4 @@ fn parameter_rename(result: &Type, params: &[String]) -> alloc::collections::BTr
         }
     }
     map
-}
-
-/// Structurally rewrites the type variables named in `rename`, leaving every
-/// other node unchanged.
-fn apply_rename(ty: &Type, rename: &alloc::collections::BTreeMap<u32, Type>) -> Type {
-    match ty {
-        Type::TyVar(id) => rename.get(id).cloned().unwrap_or_else(|| ty.clone()),
-        Type::TyCon(name, args) => Type::TyCon(
-            name.clone(),
-            args.iter().map(|a| apply_rename(a, rename)).collect(),
-        ),
-        Type::TyFn(params, ret) => Type::TyFn(
-            params.iter().map(|p| apply_rename(p, rename)).collect(),
-            Box::new(apply_rename(ret, rename)),
-        ),
-        Type::TyTuple(elems) => {
-            Type::TyTuple(elems.iter().map(|e| apply_rename(e, rename)).collect())
-        }
-        Type::TyRecord(fields) => Type::TyRecord(
-            fields
-                .iter()
-                .map(|(k, v)| (k.clone(), apply_rename(v, rename)))
-                .collect(),
-        ),
-        Type::TyForall(vars, body) => {
-            Type::TyForall(vars.clone(), Box::new(apply_rename(body, rename)))
-        }
-    }
 }

@@ -322,38 +322,9 @@ impl Subst {
             Type::TyForall(vars, body) => {
                 let map: BTreeMap<u32, Type> =
                     vars.iter().map(|v| (*v, self.fresh_type())).collect();
-                Self::replace(body, &map)
+                body.substitute(&map)
             }
             other => other.clone(),
-        }
-    }
-
-    /// Structurally replaces the variables in `map`, leaving all others
-    /// untouched. Scheme bodies are closed under their binders, so no capture
-    /// is possible.
-    fn replace(ty: &Type, map: &BTreeMap<u32, Type>) -> Type {
-        match ty {
-            Type::TyVar(v) => map.get(v).cloned().unwrap_or_else(|| ty.clone()),
-            Type::TyCon(name, args) => Type::TyCon(
-                name.clone(),
-                args.iter().map(|a| Self::replace(a, map)).collect(),
-            ),
-            Type::TyFn(params, ret) => Type::TyFn(
-                params.iter().map(|p| Self::replace(p, map)).collect(),
-                Box::new(Self::replace(ret, map)),
-            ),
-            Type::TyTuple(elems) => {
-                Type::TyTuple(elems.iter().map(|e| Self::replace(e, map)).collect())
-            }
-            Type::TyRecord(fields) => Type::TyRecord(
-                fields
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Self::replace(v, map)))
-                    .collect(),
-            ),
-            Type::TyForall(vars, body) => {
-                Type::TyForall(vars.clone(), Box::new(Self::replace(body, map)))
-            }
         }
     }
 }

@@ -148,25 +148,7 @@ fn serialize_types<S>(tys: &[Type], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    use serde::ser::SerializeSeq;
-    let mut seq = serializer.serialize_seq(Some(tys.len()))?;
-    for ty in tys {
-        seq.serialize_element(&TypeStr(ty))?;
-    }
-    seq.end()
-}
-
-/// A [`Type`] wrapper that serializes through [`serialize_type`]. Used to
-/// render the elements of a type list.
-struct TypeStr<'a>(&'a Type);
-
-impl Serialize for TypeStr<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serialize_type(self.0, serializer)
-    }
+    serializer.collect_seq(tys.iter().map(|ty| format!("{ty}")))
 }
 
 /// An effect row.

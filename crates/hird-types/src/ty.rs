@@ -104,6 +104,36 @@ impl Type {
         Self::con("Option", Vec::from([inner]))
     }
 
+    /// Structurally substitutes the variables listed in `map`, leaving every
+    /// other node unchanged. Quantifier bodies are closed under their binders,
+    /// so no capture occurs.
+    #[must_use]
+    pub fn substitute(&self, map: &BTreeMap<u32, Self>) -> Self {
+        match self {
+            Self::TyVar(v) => map.get(v).cloned().unwrap_or_else(|| self.clone()),
+            Self::TyCon(name, args) => Self::TyCon(
+                name.clone(),
+                args.iter().map(|a| a.substitute(map)).collect(),
+            ),
+            Self::TyFn(params, ret) => Self::TyFn(
+                params.iter().map(|p| p.substitute(map)).collect(),
+                Box::new(ret.substitute(map)),
+            ),
+            Self::TyTuple(elems) => {
+                Self::TyTuple(elems.iter().map(|e| e.substitute(map)).collect())
+            }
+            Self::TyRecord(fields) => Self::TyRecord(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.substitute(map)))
+                    .collect(),
+            ),
+            Self::TyForall(vars, body) => {
+                Self::TyForall(vars.clone(), Box::new(body.substitute(map)))
+            }
+        }
+    }
+
     /// A clone with variables renumbered densely from `0` in order of first
     /// appearance ([`Type::TyForall`] binders first), so equivalent types
     /// render identically (`∀a. a → a` rather than `∀c7. c7 → c7`).
