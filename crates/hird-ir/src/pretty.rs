@@ -26,8 +26,8 @@
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use alloc::format;
 use alloc::string::String;
+use core::fmt::{Display, Write as _};
 
 use hird_types::Type;
 
@@ -235,9 +235,15 @@ impl Printer {
         self.out.push_str(s);
     }
 
+    /// Appends a value through its [`Display`] implementation.
+    fn push_display(&mut self, value: &impl Display) {
+        // Writing into a `String` is infallible.
+        let _ = write!(self.out, "{value}");
+    }
+
     /// Appends a type, canonicalising its variables through `map`.
     fn push_type(&mut self, ty: &Type, map: &mut VarMap) {
-        self.push(&format!("{}", canonical_type(ty, map)));
+        self.push_display(&canonical_type(ty, map));
     }
 
     /// Renders a module: its name, then its declarations separated by blank
@@ -305,10 +311,10 @@ impl Printer {
             self.push(&ctor.name);
             if let [first, rest @ ..] = ctor.fields.as_slice() {
                 self.push("(");
-                self.push(&format!("{first}"));
+                self.push_display(first);
                 for field in rest {
                     self.push(", ");
-                    self.push(&format!("{field}"));
+                    self.push_display(field);
                 }
                 self.push(")");
             }
@@ -333,7 +339,7 @@ impl Printer {
                     if i > 0 {
                         self.push(", ");
                     }
-                    self.push(&format!("p{i}"));
+                    let _ = write!(self.out, "p{i}");
                     self.push(": ");
                     self.push_type(param, &mut vars);
                 }
