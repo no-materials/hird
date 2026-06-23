@@ -1,0 +1,7 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Calc
+
+fn compute(a: Int, b: Int) → Int = let scaled = (a + b) * 2 in scaled - 1

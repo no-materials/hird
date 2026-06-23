@@ -193,3 +193,59 @@ serializes (pretty) to:
   ]
 }
 ```
+
+## Pretty-printing
+
+`pretty_print(module)` renders an `IrModule` back to canonical Hirð source.
+The printer is the inverse direction of lowering: it re-introduces the surface
+forms lowering erased. Because lowering is not injective on syntax (operators,
+`if`, and parentheses all collapse), the printed source is *canonical* rather
+than a copy of any original — but it lowers back to the same IR.
+
+Formatting:
+
+- A `module <Name>` header, then one declaration per block, blocks separated by
+  a blank line. Each declaration is rendered on a single logical line.
+- Operators print infix using their canonical Unicode forms (`→`, `λ`, `∧`,
+  `∨`), with parentheses inserted only where operator precedence or
+  associativity would otherwise re-parse to a different tree (`(a + b) * c`,
+  `(a == b) == c`).
+- A lowered `if` prints as the `match` over `Bool` it became; a lowered handle
+  prints as its body. These desugarings are not reversed — the IR is the
+  canonical form.
+- Function signatures print every parameter type and, where expressible, the
+  return type. Record and unit (`()`) types have no annotation syntax, so a
+  function returning one omits its (optional) return annotation and lets
+  inference recover it. The empty effect row is elided (`! {}` is the surface
+  default).
+- Type-variable letters are renumbered to `a, b, c, …` in order of first
+  appearance within each signature, so output does not depend on the
+  unification-variable identities inference happened to assign.
+- Extern parameter names are synthesised (`p0`, `p1`, …); the IR keeps only the
+  signature type, and the names do not affect it.
+
+## Round-trip property
+
+For any well-typed module, lowering is stable through pretty-printing:
+
+```
+source → check → lower → pretty_print → check → lower
+```
+
+reproduces the first IR, **up to type-variable renaming**. This is a property
+test (`tests/roundtrip.rs`), exercised over hand-written programs covering
+every node kind and over proptest-generated well-typed programs. It is the
+regression net for lowering and inference: it catches printer bugs (output that
+fails to parse or re-check), lowering bugs (information lost on the way down),
+and inference instability (re-checking the printed form yielding different
+types).
+
+Equality is taken modulo type-variable renaming because two sources of
+variation are benign: inference assigns fresh unification-variable identities on
+each run, and the printer may turn an inferred signature into a skolemised one
+(annotating the return type moves a function onto the checker's rigid-skolem
+path). Both genuine unification variables and skolem constants — which the lexer
+guarantees are the only lowercase type names — are renumbered by first
+appearance before comparing. Type declarations are compared verbatim: their
+constructor field types are fixed by the declared parameter names, with no
+inference freedom.

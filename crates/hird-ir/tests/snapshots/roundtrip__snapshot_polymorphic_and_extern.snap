@@ -1,0 +1,9 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Poly
+
+extern fn map(p0: a → b, p1: List<a>) → List<b>
+
+fn snd(x: a, y: b) → b = y

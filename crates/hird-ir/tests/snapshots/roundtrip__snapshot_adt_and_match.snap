@@ -1,0 +1,9 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Opt
+
+type Option<a> = Some(a) | None
+
+fn unwrap(opt: Option<Int>) → Int = match opt { Some(x) → x, None → 0 }

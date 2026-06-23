@@ -1,7 +1,7 @@
 // Copyright 2026 the Hird Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! IR data structures, lowering, and serialization.
+//! IR data structures, lowering, serialization, and pretty-printing.
 //!
 //! The IR is the stable, fully-typed representation produced after type
 //! inference. Every node carries its resolved [`hird_types::Type`]; syntactic
@@ -9,8 +9,10 @@
 //! the MCP server. It is the contract between the compiler frontend and every
 //! downstream consumer (codegen, LLM tooling, effect-graph analysis).
 //!
-//! [`lower_module`] turns a checked module into an [`IrModule`]; the IR node
-//! kinds are in [`mod@ir`]. The schema is documented in `docs/ir.md`.
+//! [`lower_module`] turns a checked module into an [`IrModule`]; [`pretty_print`]
+//! renders an [`IrModule`] back to canonical Hirð source. The IR node kinds are
+//! in [`mod@ir`]. The schema and round-trip property are documented in
+//! `docs/ir.md`.
 //!
 //! # Quick start
 //!
@@ -24,6 +26,9 @@
 //! let module = hird_ir::lower_module(&file, &checked, "Main");
 //! assert_eq!(module.declarations.len(), 1);
 //! assert!(module.to_json().is_ok());
+//!
+//! let source = hird_ir::pretty_print(&module);
+//! assert!(source.contains("fn answer() \u{2192} Int = 42"));
 //! ```
 
 #![no_std]
@@ -32,6 +37,7 @@ extern crate alloc;
 
 mod ir;
 mod lower;
+mod pretty;
 
 pub use ir::{
     EffectRow, IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl,
@@ -40,3 +46,4 @@ pub use ir::{
     IrVar, IrWildcardPat, LiteralValue,
 };
 pub use lower::lower_module;
+pub use pretty::pretty_print;
