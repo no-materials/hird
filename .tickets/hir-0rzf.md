@@ -1,6 +1,6 @@
 ---
 id: hir-0rzf
-status: open
+status: closed
 deps: [hir-89zs]
 links: []
 created: 2026-05-22T21:32:56Z
@@ -51,7 +51,7 @@ Key properties:
 ## Task sequence
 
 1. [x] [hir-ee8k](hir-ee8k.md) — IR data structures and lowering
-2. [ ] [hir-a6lz](hir-a6lz.md) — IR pretty-printer and round-trip tests
+2. [x] [hir-a6lz](hir-a6lz.md) — IR pretty-printer and round-trip tests
 
 ## Out of scope
 
@@ -97,3 +97,25 @@ Shape the pretty-printer/round-trip work inherits:
 
 Effect rows ship as an empty EffectRow placeholder ({} in JSON) per this epic's
 scope; effects land when Phase 5 extends the IR.
+
+**2026-06-22T10:51:58Z**
+
+Task 2 (hir-a6lz) landed in hird-ir: pretty_print(&IrModule) -> String plus the
+round-trip property test (tests/roundtrip.rs). Both tasks are now closed and
+every epic acceptance criterion is met:
+
+- IR data structures with explicit types on every node; all listed node kinds
+  present (hir-ee8k).
+- Lowering from typed AST to fully-elaborated IR (hir-ee8k).
+- Pretty-printer emitting canonical, parseable Hirð source.
+- Round-trip property test (hand-written programs covering every node kind plus
+  a type-directed proptest generator), comparing IR-to-IR modulo type-variable
+  renaming.
+- JSON serialization of IR fragments (hir-ee8k).
+- docs/ir.md documents the node kinds, JSON schema, the pretty-printer's
+  canonical formatting, and the round-trip property.
+- cargo clippy and cargo test pass for hird-ir (and the full workspace).
+
+Empty EffectRow placeholder and the absence of actor/supervisor IR nodes are
+per this epic's scope; effects land when Phase 5 extends the IR. The epic is
+functionally complete and ready to close.
