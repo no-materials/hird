@@ -1,6 +1,6 @@
 ---
 id: hir-95ld
-status: open
+status: closed
 deps: [hir-a6lz]
 links: []
 created: 2026-05-22T21:38:37Z
@@ -129,3 +129,57 @@ Starting-state note: lexer (! token, effect/handle keywords) and parser
 currently parses-but-ignores them; hird-ir already has the placeholder
 EffectRow + IrFnDef.effect_row field. So the remaining work is the
 type-theoretic core, annotation elaboration, and wiring — not surface syntax.
+
+**2026-06-24T12:54:49Z**
+
+Landed. Effect-row representation, row unification, and annotation
+elaboration are implemented; the IR carries and round-trips effect rows.
+
+Representation (hird-types, per the locked crate-placement decision):
+- effect.rs: RowVar newtype, Effect (Named | Parametric(name, args)), and
+  EffectRow { BTreeMap<Name, Vec<Effect>> head-keyed buckets, Option<RowVar>
+  tail }. Closed = None tail, open = Some, empty row = empty map + None.
+  Display: {}, {Log}, {Log, Tool<X>}, {Log | r}, {r}.
+- TyFn gained an EffectRow field; Type::func keeps the empty-row default and
+  Type::func_eff sets one. ~the whole type core (substitute, rename/normalize,
+  resolve, occurs, generalize, instantiate, Display) now crosses into rows.
+
+Substitution (separate row union-find inside Subst, sharing the level
+counter): fresh_row, row find/union/bind, resolve_row (flattens the tail
+chain, resolves args, dedups, canonical-sorts). TyForall quantifies type vars
+AND row vars (kinded). Level-lowering and the occurs-check descend through
+every TyFn row and through Parametric type args, so generalize neither
+over- nor under-quantifies a row var — covered by two direct escape tests.
+
+Row unification (mutually recursive with type unify): closed/closed,
+open/closed, open/open with fresh-tail splitting, tail union for the
+no-surplus case, and a tail occurs-check. Same-head effects unify their type
+args through the ordinary unify; multiset machinery is deliberately not built.
+Failures carry structure (EffectMismatch with expected/got/offending,
+InfiniteEffectRow). Termination argued from a decreasing residual measure; the
+open/open overlapping-head idempotence test was written first as the canary.
+
+Checker: effect declarations register name+arity; ! {…} annotations elaborate
+into EffectRow with a per-signature row-variable scope shared with parameter
+types, so a row variable named in a parameter and in the function's own row is
+one variable. Top-level signatures carry the row on their generalised scheme,
+so annotated row-polymorphic functions (apply : ∀a b r. (a → b ! {r}) → a →
+b ! {r}) type-check. New diagnostics: unknown effect, effect arity, multiple
+row variables, effect mismatch, infinite row.
+
+IR: the placeholder EffectRow is replaced by the hird-types type, serialized
+as its textual form. The row is recorded during the body check (same
+elaboration as the parameter types) so the IR's row shares row-variable
+identity with its parameters; the pretty-printer prints it and synthesises the
+effect declarations it references so printed source re-checks. Round-trip and
+pretty-printer snapshots extended to non-empty rows.
+
+Tests: 14 row-unification cases + 5 row generalisation/escape cases in
+hird-types; effect-declaration, parametric-effect, row-polymorphic, and
+error-path snapshots in hird-check; effect-row display unit tests; non-empty-row
+round-trip + pretty snapshots in hird-ir. fmt, clippy (-D warnings), and the
+full workspace test suite pass.
+
+Out of scope (sibling tickets): body-effect inference and annotation-vs-inferred
+checking; capability-effect value linkage; DI-style handler lowering. TyError
+payloads are boxed to keep Result small on the success path.

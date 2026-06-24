@@ -48,7 +48,7 @@ graphs precise enough to show exactly which tables a function touches.
 
 ## Task sequence
 
-1. [ ] [hir-95ld](hir-95ld.md) — Effect row types and row polymorphism
+1. [x] [hir-95ld](hir-95ld.md) — Effect row types and row polymorphism
 2. [ ] [hir-0x16](hir-0x16.md) — Effect inference and annotation checking
 3. [ ] [hir-t1cj](hir-t1cj.md) — DI-style effect handlers
 
@@ -87,3 +87,24 @@ graphs precise enough to show exactly which tables a function touches.
 - OD7 and OD8 decisions documented in DECISIONS.md.
 - `cargo clippy` and `cargo test` pass for `hird-effects`.
 
+
+## Notes
+
+**2026-06-24T12:55:14Z**
+
+Task 1 of 3 complete: hir-95ld (effect row types and row polymorphism) landed
+and is closed.
+
+Delivered: the effect-row representation (Effect, EffectRow, RowVar) and row
+unification live in hird-types; TyFn carries a row; generalize/instantiate
+quantify and refresh row variables with the occurs-check and level-lowering
+crossing into row-space. The checker registers `effect` declarations and
+elaborates `! {…}` annotations onto function schemes, so annotated
+row-polymorphic functions type-check. The IR carries the row and round-trips
+it (the pretty-printer synthesises the `effect` declarations it references).
+
+Phase-level acceptance still open (later tasks): effect inference for bodies
+and annotation-vs-inferred checking with spans, capability-effect linkage, and
+DI-style handler blocks. OD7/OD8 remain for hir-t1cj / Phase 7 respectively.
+
+hir-0x16 (effect inference and annotation checking) is now unblocked.
