@@ -106,6 +106,18 @@ impl Effect {
             Self::Parametric(_, args) => args,
         }
     }
+
+    /// Maps `f` over the effect's type arguments, preserving the head. A
+    /// [`Effect::Named`] effect has no arguments and is returned unchanged.
+    #[must_use]
+    pub fn map_args(&self, f: impl FnMut(&Type) -> Type) -> Self {
+        match self {
+            Self::Named(name) => Self::Named(name.clone()),
+            Self::Parametric(name, args) => {
+                Self::Parametric(name.clone(), args.iter().map(f).collect())
+            }
+        }
+    }
 }
 
 impl fmt::Display for Effect {
@@ -206,12 +218,6 @@ impl EffectRow {
         self.effects.is_empty() && self.tail.is_none()
     }
 
-    /// Whether the row is closed (has no tail variable).
-    #[must_use]
-    pub fn is_closed(&self) -> bool {
-        self.tail.is_none()
-    }
-
     /// Every effect, in head order then insertion order.
     pub fn effects(&self) -> impl Iterator<Item = &Effect> + '_ {
         self.effects.values().flatten()
@@ -233,11 +239,13 @@ impl EffectRow {
     /// arguments are concrete and renderings stable.
     pub(crate) fn sort_buckets(&mut self) {
         for bucket in self.effects.values_mut() {
-            bucket.sort_by(|a, b| {
-                let (mut sa, mut sb) = (String::new(), String::new());
-                let _ = write!(sa, "{a}");
-                let _ = write!(sb, "{b}");
-                sa.cmp(&sb)
+            if bucket.len() < 2 {
+                continue;
+            }
+            bucket.sort_by_cached_key(|effect| {
+                let mut key = String::new();
+                let _ = write!(key, "{effect}");
+                key
             });
         }
     }

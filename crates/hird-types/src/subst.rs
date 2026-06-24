@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 
 use hird_lex::Span;
 
-use crate::effect::{Effect, EffectRow, RowVar};
+use crate::effect::{EffectRow, RowVar};
 use crate::error::TypeError;
 use crate::ty::Type;
 
@@ -281,7 +281,9 @@ impl Subst {
             });
         }
         let level = self.row_root_level(root);
-        self.lower_row(level, &row);
+        // No type variable to watch for here; the walk only lowers the levels of
+        // the row's free variables.
+        self.occurs_in_row(None, level, &row);
         self.row_slots[root.index() as usize] = RowSlot::Solved(row);
         Ok(())
     }
@@ -313,7 +315,7 @@ impl Subst {
     pub(crate) fn bind(&mut self, var: u32, ty: Type, span: Span) -> Result<(), TypeError> {
         let root = self.find(var);
         let level = self.root_level(root);
-        if self.occurs_adjust(root, level, &ty) {
+        if self.occurs_adjust(Some(root), level, &ty) {
             return Err(TypeError::InfiniteType {
                 var: root,
                 in_type: Box::new(self.resolve(&ty)),
@@ -324,115 +326,65 @@ impl Subst {
         Ok(())
     }
 
-    /// Whether representative `var` appears anywhere in `ty`, following bound
-    /// variables through the current substitution. As a side effect, lowers
-    /// every reached unbound variable's level to at most `level`.
-    fn occurs_adjust(&mut self, var: u32, level: u32, ty: &Type) -> bool {
+    /// Lowers to at most `level` the level of every unbound type variable
+    /// reachable from `ty`, following bound variables through the current
+    /// substitution, and reports whether `watch` is among them.
+    ///
+    /// Binding a type variable passes `Some(representative)` to reject an
+    /// infinite type. Lowering a row's free type variables when binding a row
+    /// variable passes `None`: there is no occurrence to find, only levels to
+    /// adjust.
+    fn occurs_adjust(&mut self, watch: Option<u32>, level: u32, ty: &Type) -> bool {
         match ty {
             Type::TyVar(v) => {
                 let root = self.find(*v);
                 match &mut self.slots[root as usize] {
                     Slot::Solved(t) => {
                         let t = t.clone();
-                        self.occurs_adjust(var, level, &t)
+                        self.occurs_adjust(watch, level, &t)
                     }
                     Slot::Unbound { level: l, .. } => {
                         if *l > level {
                             *l = level;
                         }
-                        root == var
+                        watch == Some(root)
                     }
                     // `find` returned a representative.
                     Slot::Link(_) => unreachable!("find returned a link"),
                 }
             }
-            Type::TyCon(_, args) => args.iter().any(|a| self.occurs_adjust(var, level, a)),
+            Type::TyCon(_, args) => args.iter().any(|a| self.occurs_adjust(watch, level, a)),
             Type::TyFn(params, ret, row) => {
                 // Short-circuiting `||` is sound: it only skips work once an
                 // occurrence is found, and an occurrence aborts the binding, so
-                // the level-lowering it skips never matters.
-                params.iter().any(|p| self.occurs_adjust(var, level, p))
-                    || self.occurs_adjust(var, level, ret)
-                    || self.occurs_in_row(var, level, row)
+                // the level-lowering it skips never matters. With `watch` `None`
+                // no occurrence is ever found, so nothing is skipped.
+                params.iter().any(|p| self.occurs_adjust(watch, level, p))
+                    || self.occurs_adjust(watch, level, ret)
+                    || self.occurs_in_row(watch, level, row)
             }
-            Type::TyTuple(elems) => elems.iter().any(|e| self.occurs_adjust(var, level, e)),
-            Type::TyRecord(fields) => fields.values().any(|t| self.occurs_adjust(var, level, t)),
-            Type::TyForall(_, _, body) => self.occurs_adjust(var, level, body),
+            Type::TyTuple(elems) => elems.iter().any(|e| self.occurs_adjust(watch, level, e)),
+            Type::TyRecord(fields) => fields.values().any(|t| self.occurs_adjust(watch, level, t)),
+            Type::TyForall(_, _, body) => self.occurs_adjust(watch, level, body),
         }
     }
 
-    /// Whether type variable `var` occurs in `row` (only ever inside a
-    /// parametric effect's type arguments), lowering the levels of every
-    /// variable `row` reaches — type variables in effect arguments and tail row
-    /// variables — to at most `level`. The type-space half of the soundness
+    /// Whether `watch` occurs in `row` (only ever inside a parametric effect's
+    /// type arguments), lowering to at most `level` the levels of every variable
+    /// `row` reaches — type variables in effect arguments and tail row
+    /// variables. With `watch` `None` it performs only the lowering, the form
+    /// used when binding a row variable. The type-space half of the soundness
     /// obligation that level-lowering crosses into row-space.
-    fn occurs_in_row(&mut self, var: u32, level: u32, row: &EffectRow) -> bool {
+    fn occurs_in_row(&mut self, watch: Option<u32>, level: u32, row: &EffectRow) -> bool {
         let mut occurs = false;
         // `|=` (no short-circuit) so every argument is visited and lowered.
         for effect in row.effects() {
             for arg in effect.args() {
-                occurs |= self.occurs_adjust(var, level, arg);
+                occurs |= self.occurs_adjust(watch, level, arg);
             }
         }
         self.lower_row_tail(level, row.tail());
         occurs
-    }
-
-    /// Lowers to at most `level` the levels of every unbound variable reachable
-    /// from `ty`: its type variables, the type arguments of effects in any
-    /// function row it contains, and those rows' tail variables.
-    fn lower_levels(&mut self, level: u32, ty: &Type) {
-        match ty {
-            Type::TyVar(v) => {
-                let root = self.find(*v);
-                match &mut self.slots[root as usize] {
-                    Slot::Solved(t) => {
-                        let t = t.clone();
-                        self.lower_levels(level, &t);
-                    }
-                    Slot::Unbound { level: l, .. } => {
-                        if *l > level {
-                            *l = level;
-                        }
-                    }
-                    Slot::Link(_) => unreachable!("find returned a link"),
-                }
-            }
-            Type::TyCon(_, args) => {
-                for arg in args {
-                    self.lower_levels(level, arg);
-                }
-            }
-            Type::TyFn(params, ret, row) => {
-                for param in params {
-                    self.lower_levels(level, param);
-                }
-                self.lower_levels(level, ret);
-                self.lower_row(level, row);
-            }
-            Type::TyTuple(elems) => {
-                for elem in elems {
-                    self.lower_levels(level, elem);
-                }
-            }
-            Type::TyRecord(fields) => {
-                for field in fields.values() {
-                    self.lower_levels(level, field);
-                }
-            }
-            Type::TyForall(_, _, body) => self.lower_levels(level, body),
-        }
-    }
-
-    /// Lowers to at most `level` the levels of every variable `row` reaches:
-    /// type variables in effect arguments and the tail row variables.
-    fn lower_row(&mut self, level: u32, row: &EffectRow) {
-        for effect in row.effects() {
-            for arg in effect.args() {
-                self.lower_levels(level, arg);
-            }
-        }
-        self.lower_row_tail(level, row.tail());
     }
 
     /// Walks the tail chain from `tail`, lowering each unbound row variable's
@@ -449,7 +401,7 @@ impl Subst {
                 Some(solved) => {
                     for effect in solved.effects() {
                         for arg in effect.args() {
-                            self.lower_levels(level, arg);
+                            self.occurs_adjust(None, level, arg);
                         }
                     }
                     cur = solved.tail();
@@ -527,7 +479,7 @@ impl Subst {
     pub fn resolve_row(&self, row: &EffectRow) -> EffectRow {
         let mut acc = EffectRow::empty();
         for effect in row.effects() {
-            acc.insert(self.resolve_effect(effect));
+            acc.insert(effect.map_args(|a| self.resolve(a)));
         }
         // Follow the tail chain, splicing solved rows in and stopping at the
         // first unbound representative (or the closed end). The occurs check on
@@ -539,7 +491,7 @@ impl Subst {
             match &self.row_slots[root.index() as usize] {
                 RowSlot::Solved(solved) => {
                     for effect in solved.effects() {
-                        acc.insert(self.resolve_effect(effect));
+                        acc.insert(effect.map_args(|a| self.resolve(a)));
                     }
                     cur = solved.tail();
                 }
@@ -552,16 +504,6 @@ impl Subst {
         acc.set_tail(tail);
         acc.sort_buckets();
         acc
-    }
-
-    /// Resolves the type arguments of one effect.
-    fn resolve_effect(&self, effect: &Effect) -> Effect {
-        match effect {
-            Effect::Named(name) => Effect::Named(name.clone()),
-            Effect::Parametric(name, args) => {
-                Effect::Parametric(name.clone(), args.iter().map(|a| self.resolve(a)).collect())
-            }
-        }
     }
 
     /// Generalises `ty` into a type scheme: resolves it, then quantifies every

@@ -68,6 +68,14 @@ impl Scope {
     }
 }
 
+/// One elaborated effect-row entry.
+enum RowEntry {
+    /// A concrete effect to add to the row.
+    Effect(Effect),
+    /// The row's tail variable, named by a bare lowercase entry.
+    Tail(RowVar),
+}
+
 impl Checker {
     /// Elaborates with declared-parameters-only scoping (type declarations).
     pub(crate) fn elaborate_closed(&mut self, ty: &TypeExpr, scope: &mut Scope) -> Checked<Type> {
@@ -210,42 +218,43 @@ impl Checker {
     ) -> Checked<EffectRow> {
         let mut row = EffectRow::empty();
         for entry in ann.effects() {
-            if let Some(effect) = self.elaborate_effect(&entry, scope, mode)? {
-                row.insert(effect);
-            } else {
-                // A lowercase entry is the row tail. Only one is allowed.
-                let span = type_expr_span(&entry, self.source_id);
-                let TypeExpr::Name(name) = &entry else {
-                    return Err(Aborted);
-                };
-                let var = self.row_var(name.text(), span, scope, mode)?;
-                if row.tail().is_some_and(|existing| existing != var) {
-                    return Err(self.error(
-                        CheckCode::C0029,
-                        span,
-                        String::from("an effect row may name at most one row variable"),
-                    ));
+            match self.elaborate_effect(&entry, scope, mode)? {
+                RowEntry::Effect(effect) => row.insert(effect),
+                RowEntry::Tail(var) => {
+                    // A lowercase entry is the row tail. Only one is allowed.
+                    if row.tail().is_some_and(|existing| existing != var) {
+                        return Err(self.error(
+                            CheckCode::C0029,
+                            type_expr_span(&entry, self.source_id),
+                            String::from("an effect row may name at most one row variable"),
+                        ));
+                    }
+                    row = row.with_tail(Some(var));
                 }
-                row = row.with_tail(Some(var));
             }
         }
         Ok(row)
     }
 
-    /// Elaborates one effect-row entry: `Ok(Some(effect))` for an effect,
-    /// `Ok(None)` for a bare lowercase name (a row variable, handled by the
-    /// caller). Unknown effects and arity mismatches are errors.
+    /// Elaborates one effect-row entry: a concrete effect, or the row's tail
+    /// variable for a bare lowercase name. Unknown effects and arity mismatches
+    /// are errors.
     fn elaborate_effect(
         &mut self,
         entry: &TypeExpr,
         scope: &mut Scope,
         mode: VarMode,
-    ) -> Checked<Option<Effect>> {
+    ) -> Checked<RowEntry> {
         match entry {
-            TypeExpr::Name(name) if is_var_name(name.text()) => Ok(None),
+            TypeExpr::Name(name) if is_var_name(name.text()) => {
+                let span = type_expr_span(entry, self.source_id);
+                self.row_var(name.text(), span, scope, mode)
+                    .map(RowEntry::Tail)
+            }
             TypeExpr::Name(name) => {
                 let span = token_span(name.syntax(), self.source_id);
-                self.named_effect(name.text(), Vec::new(), span).map(Some)
+                self.named_effect(name.text(), Vec::new(), span)
+                    .map(RowEntry::Effect)
             }
             TypeExpr::App(app) => {
                 let span = type_expr_span(entry, self.source_id);
@@ -263,7 +272,7 @@ impl Checker {
                 for arg in app.args() {
                     args.push(self.elaborate(&arg, scope, mode)?);
                 }
-                self.named_effect(name, args, span).map(Some)
+                self.named_effect(name, args, span).map(RowEntry::Effect)
             }
             // Functions, tuples, and parentheses are not effects.
             other => {

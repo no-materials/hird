@@ -8,7 +8,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::effect::{Effect, EffectRow, RowVar};
+use crate::effect::{EffectRow, RowVar};
 use crate::name::{Label, Name};
 
 /// A semantic type.
@@ -318,24 +318,9 @@ fn substitute_row(
 ) -> EffectRow {
     let mut out = EffectRow::empty();
     for effect in row.effects() {
-        out.insert(substitute_effect(effect, types, rows));
+        out.insert(effect.map_args(|a| a.substitute(types, rows)));
     }
     out.with_tail(row.tail().map(|rv| rows.get(&rv).copied().unwrap_or(rv)))
-}
-
-/// Substitutes one effect's type arguments through `types`/`rows`.
-fn substitute_effect(
-    effect: &Effect,
-    types: &BTreeMap<u32, Type>,
-    rows: &BTreeMap<RowVar, RowVar>,
-) -> Effect {
-    match effect {
-        Effect::Named(name) => Effect::Named(name.clone()),
-        Effect::Parametric(name, args) => Effect::Parametric(
-            name.clone(),
-            args.iter().map(|a| a.substitute(types, rows)).collect(),
-        ),
-    }
 }
 
 /// Renumbers a function's effect row for canonical display: each parametric
@@ -348,24 +333,9 @@ fn rename_row(
 ) -> EffectRow {
     let mut out = EffectRow::empty();
     for effect in row.effects() {
-        out.insert(rename_effect(effect, types, rows));
+        out.insert(effect.map_args(|a| a.rename(types, rows)));
     }
     out.with_tail(row.tail().map(|rv| RowVar::new(renumber(rows, rv.index()))))
-}
-
-/// Renumbers one effect's type arguments through `types`/`rows`.
-fn rename_effect(
-    effect: &Effect,
-    types: &mut BTreeMap<u32, u32>,
-    rows: &mut BTreeMap<u32, u32>,
-) -> Effect {
-    match effect {
-        Effect::Named(name) => Effect::Named(name.clone()),
-        Effect::Parametric(name, args) => Effect::Parametric(
-            name.clone(),
-            args.iter().map(|a| a.rename(types, rows)).collect(),
-        ),
-    }
 }
 
 /// Renders variable `id` as a lowercase letter, suffixing a counter once the

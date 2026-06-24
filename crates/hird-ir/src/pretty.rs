@@ -29,7 +29,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt::{Display, Write as _};
 
-use hird_types::{Effect, EffectRow, RowVar, Type};
+use hird_types::{EffectRow, RowVar, Type};
 
 use crate::ir::{
     IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrTypeDef, LiteralValue,
@@ -246,20 +246,9 @@ fn canonical_type(ty: &Type, vars: &mut VarMap, rows: &mut RowMap) -> Type {
 fn canonical_effect_row(row: &EffectRow, vars: &mut VarMap, rows: &mut RowMap) -> EffectRow {
     let mut out = EffectRow::empty();
     for effect in row.effects() {
-        out.insert(canonical_effect(effect, vars, rows));
+        out.insert(effect.map_args(|a| canonical_type(a, vars, rows)));
     }
     out.with_tail(row.tail().map(|rv| RowVar::new(intern_row(rows, rv))))
-}
-
-/// A copy of `effect` with its type arguments canonicalised.
-fn canonical_effect(effect: &Effect, vars: &mut VarMap, rows: &mut RowMap) -> Effect {
-    match effect {
-        Effect::Named(name) => Effect::Named(name.clone()),
-        Effect::Parametric(name, args) => Effect::Parametric(
-            name.clone(),
-            args.iter().map(|a| canonical_type(a, vars, rows)).collect(),
-        ),
-    }
 }
 
 /// The source text of a literal value (strings keep their surrounding quotes).
