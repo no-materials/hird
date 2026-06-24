@@ -342,6 +342,84 @@ later fill.
 
 ---
 
+## ADR-011: Effect-row representation and crate boundaries
+
+**Date**: 2026-06-24
+**Status**: Accepted
+
+### Context
+
+Phase 5 adds effect rows to the type system. Function types must carry an
+effect row, and the substitution table must allocate and solve row variables
+for row polymorphism. The Phase-5 tickets nominally place `EffectRow` and
+`Effect` in `hird-effects`, but `hird-effects` depends on `hird-types`, while
+`TyFn` (in `hird-types`) must embed an effect row and `Subst` (in `hird-types`)
+must manage row variables — a dependency cycle. Row unification is also mutually
+recursive with type unification, because parametric effects carry types. Two
+further questions follow: how row variables live in the union-find, and how an
+effect row is represented so that unification stays sound.
+
+### Decision
+
+1. **The representation lives in `hird-types`.** `Effect`, `EffectRow`, row
+   variables, and row unification are defined in `hird-types` alongside `Type`,
+   `Subst`, and `unify`; `TyFn` carries an `EffectRow`. `hird-effects` is the
+   home for *effect inference* and *handler lowering*, built on top of
+   `hird-types` — not for the data types. `hird-ir` uses the `hird-types`
+   representation in place of its placeholder.
+
+2. **Row variables use a separate union-find within `Subst`.** Row variables
+   are a distinct kind from type variables: they are allocated from a separate
+   row-slot table, indexed by a distinct `RowVar` newtype, and share the single
+   binding-`level` counter with type variables. Cross-kind binding (solving a
+   type variable to a row, or vice versa) is unrepresentable — the kind
+   separation is enforced by the Rust type system, not by runtime assertions.
+   Generalisation and instantiation quantify and refresh row variables as well
+   as type variables; quantified variables record their kind.
+
+   *Rejected*: a single union-find over a `Type`-or-`Row` term with kind-tagged
+   slots. It is more compact and avoids duplicated union-find code, but trades
+   compile-time kind safety for runtime assertions and perturbs the tested
+   type-slot core. The duplicated machinery is small and bounded, and the shared
+   level counter means there is no dual-counter coherence cost.
+
+3. **An effect row is an idempotent set with an optional tail, keyed by effect
+   head.** `EffectRow` is a single struct: a collection of effects keyed by
+   effect-constructor name (`BTreeMap<Name, Vec<Effect>>`, so several effects
+   may share one head — `Tool<ReadRepo>` and `Tool<CreateTicket>` coexist) plus
+   an `Option<RowVar>` tail. The empty/closed/open distinction is encoded by the
+   tail (`None` closed, `Some` open, empty map + `None` the empty row), not by
+   separate variants. Rows are idempotent sets (`{Log, Log} = {Log}`).
+
+   The outer key is the effect-constructor name, which is stable under
+   substitution, so ordering never depends on unsolved type-variable identities
+   (a structural `Ord` over effects would corrupt as variables solve). Row
+   unification matches effects by head and unifies the type arguments of
+   same-head effects through the ordinary type `unify`; the open/open case
+   splits the residual into a fresh tail row variable. Effect equality and
+   de-duplication compare *resolved* arguments, never raw variable ids.
+
+4. **Set semantics are a v0.1 commitment.** Idempotent set semantics match
+   ADR-004 (DI-style handlers; Koka-style resumable handlers deferred to v0.2+).
+   Scoped or duplicated labels and effect ordering — which Koka-style handlers
+   may require — are out of scope; if ever adopted they supersede this decision
+   with a multiset/ordered representation.
+
+### Consequences
+
+- The foundational type crate owns the effect-row representation; effects build
+  on types with no dependency cycle.
+- Kind confusion between type and row variables is a compile error.
+- Binding soundness obligation: level-lowering and the occurs-check must cross
+  from type-space into row-space — through every `TyFn` row and through the type
+  arguments of parametric effects — or generalisation over-quantifies a row
+  variable and an effect can escape its handler.
+- Row unification must be shown to terminate (a decreasing measure on the
+  residual rows, plus an occurs-check on row tails), not merely be "idempotent".
+- Effect-graph tooling gets a head-keyed index for free.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
