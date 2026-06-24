@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 594
+expression: "check_str(r\"fn f(x: Int) -> Int ! {r, s} = x\")"
+---
+error[C0029] 26..27: an effect row may name at most one row variable

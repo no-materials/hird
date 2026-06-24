@@ -17,8 +17,9 @@ Three properties hold for every IR produced by lowering a well-typed module:
 - **The IR serializes to JSON.** Every node derives `serde::Serialize` with a
   stable, documented schema (below).
 
-Effect rows are present on function definitions as empty placeholders; Phase 5
-populates them. Actor and supervisor nodes are added in later phases.
+Function definitions carry an effect row, populated from the function's
+declared `! { … }` annotation (the empty row when none is given). Actor and
+supervisor nodes are added in later phases.
 
 ## Lowering
 
@@ -62,8 +63,9 @@ single argument (`f((a, b))` passes one tuple).
 - `IrModule { name, declarations }` — a module's name and its declarations in
   source order.
 - `IrFnDef { name, params, return_type, effect_row, body }` — a function. Each
-  `IrParam { name, type }` is explicitly typed; `effect_row` is empty in this
-  phase.
+  `IrParam { name, type }` is explicitly typed; `effect_row` is the function's
+  declared effect row (empty when it declares none), serialized as its textual
+  form.
 - `IrTypeDef { name, params, constructors }` — a data type. `params` are the
   declared type-parameter names; each `IrConstructorDef { name, fields }`
   lists its field types, with type-parameter variables rendered under their
@@ -122,7 +124,8 @@ Lowered IR serializes through `IrModule::to_json()` (compact) and
   tree. This keeps the JSON readable for tooling and LLM consumption.
 - **Literal values are tagged** by kind: `{"Int": "42"}`, `{"Float": "3.14"}`,
   `{"Str": "\"hello\""}`.
-- **The empty effect row** serializes as `{}`.
+- **Effect rows render as canonical strings**, like types: the empty row is
+  `"{}"`, and a non-empty one `"{Log}"`, `"{Log, Tool<X>}"`, or `"{Log | r}"`.
 
 Serialization is one-directional: the IR is produced by lowering and is not
 parsed back from JSON.
@@ -156,7 +159,7 @@ serializes (pretty) to:
       "name": "unwrap",
       "params": [{ "name": "opt", "type": "Option<Int>" }],
       "return_type": "Int",
-      "effect_row": {},
+      "effect_row": "{}",
       "body": {
         "kind": "Match",
         "scrutinee": { "kind": "Var", "name": "opt", "type": "Option<Int>" },
@@ -216,11 +219,16 @@ Formatting:
 - Function signatures print every parameter type and, where expressible, the
   return type. Record and unit (`()`) types have no annotation syntax, so a
   function returning one omits its (optional) return annotation and lets
-  inference recover it. The empty effect row is elided (`! {}` is the surface
-  default).
-- Type-variable letters are renumbered to `a, b, c, …` in order of first
-  appearance within each signature, so output does not depend on the
-  unification-variable identities inference happened to assign.
+  inference recover it. A non-empty effect row prints after the return type
+  (`! {Log}`); the empty row is elided (`! {}` is the surface default).
+- Effect declarations are reconstructed from the rows that reference them and
+  printed after the module header (`effect Log`, `effect Tool<t0>`). They are
+  not IR nodes, so without this the printed source would name effects it never
+  declares and fail to re-check.
+- Type-variable letters are renumbered to `a, b, c, …`, and row-variable letters
+  to `r, r1, …`, in order of first appearance within each signature, so output
+  does not depend on the unification-variable identities inference happened to
+  assign.
 - Extern parameter names are synthesised (`p0`, `p1`, …); the IR keeps only the
   signature type, and the names do not affect it.
 

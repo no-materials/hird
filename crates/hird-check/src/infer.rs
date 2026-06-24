@@ -10,7 +10,6 @@
 //! ordering, polymorphic equality, `Bool` connectives). `handle` blocks
 //! type as their body; effect handling is a later phase.
 
-use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -25,6 +24,7 @@ use hird_types::{Label, Type};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
+use crate::elaborate::Scope;
 use crate::registry::CtorInfo;
 use crate::{ModuleName, NodeKey, expr_span, name_token_span, node_span, token_span};
 
@@ -120,7 +120,7 @@ impl Checker {
         if let Ok(ty) = &value_ty
             && let Some(annotation) = le.annotation()
         {
-            let mut scope = BTreeMap::new();
+            let mut scope = Scope::new();
             let span = expr_span(&value, self.source_id);
             value_ty = match self.elaborate_fresh(&annotation, &mut scope) {
                 Ok(ann_ty) => self.unify_at(&ann_ty, ty, span).map(|()| ann_ty),
@@ -295,7 +295,7 @@ impl Checker {
                 }
                 let instance = self.subst.instantiate(&scheme);
                 let (fields, result_ty) = match instance {
-                    Type::TyFn(params, ret) => (params, *ret),
+                    Type::TyFn(params, ret, _) => (params, *ret),
                     other => (Vec::new(), other),
                 };
                 let sub_patterns: Vec<Pattern> = ctor.fields().collect();
@@ -379,7 +379,7 @@ impl Checker {
         }
         let app_span = node_span(app.syntax(), self.source_id);
         match self.subst.resolve(&callee_ty) {
-            Type::TyFn(params, ret) => {
+            Type::TyFn(params, ret, _) => {
                 if params.len() != arg_tys.len() {
                     return Err(self.error(
                         CheckCode::C0006,

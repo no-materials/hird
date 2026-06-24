@@ -23,7 +23,7 @@ use hird_ir::{
     IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
     pretty_print,
 };
-use hird_types::Type;
+use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -77,13 +77,35 @@ enum VarKey {
     Skolem(String),
 }
 
-/// Maps each type variable to its canonical index within one declaration.
-type VarMap = BTreeMap<VarKey, u32>;
+/// Maps each type variable and row variable to its canonical index within one
+/// declaration; the two kinds renumber in independent sequences.
+#[derive(Default)]
+struct VarMap {
+    /// Type-variable identities to canonical indices.
+    vars: BTreeMap<VarKey, u32>,
+    /// Row-variable identities to canonical indices.
+    rows: BTreeMap<RowVar, u32>,
+}
 
-/// The canonical index for `key`, allocating the next on first sight.
+impl VarMap {
+    /// An empty map.
+    fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// The canonical index for type-variable `key`, allocating the next on first
+/// sight.
 fn intern(map: &mut VarMap, key: VarKey) -> u32 {
-    let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
-    *map.entry(key).or_insert(next)
+    let next = u32::try_from(map.vars.len()).unwrap_or(u32::MAX);
+    *map.vars.entry(key).or_insert(next)
+}
+
+/// The canonical index for row variable `var`, allocating the next on first
+/// sight.
+fn intern_row(map: &mut VarMap, var: RowVar) -> u32 {
+    let next = u32::try_from(map.rows.len()).unwrap_or(u32::MAX);
+    *map.rows.entry(var).or_insert(next)
 }
 
 /// Whether a type name is a variable (lowercase) rather than a constructor.
@@ -103,9 +125,10 @@ fn canon_type(ty: &Type, map: &mut VarMap) -> Type {
             name.clone(),
             args.iter().map(|a| canon_type(a, map)).collect(),
         ),
-        Type::TyFn(params, ret) => Type::TyFn(
+        Type::TyFn(params, ret, row) => Type::TyFn(
             params.iter().map(|p| canon_type(p, map)).collect(),
             Box::new(canon_type(ret, map)),
+            canon_effect_row(row, map),
         ),
         Type::TyTuple(elems) => Type::TyTuple(elems.iter().map(|e| canon_type(e, map)).collect()),
         Type::TyRecord(fields) => Type::TyRecord(
@@ -114,9 +137,37 @@ fn canon_type(ty: &Type, map: &mut VarMap) -> Type {
                 .map(|(label, v)| (label.clone(), canon_type(v, map)))
                 .collect(),
         ),
-        Type::TyForall(vars, body) => Type::TyForall(
-            vars.iter().map(|v| intern(map, VarKey::Unif(*v))).collect(),
+        Type::TyForall(tvars, rvars, body) => Type::TyForall(
+            tvars
+                .iter()
+                .map(|v| intern(map, VarKey::Unif(*v)))
+                .collect(),
+            rvars
+                .iter()
+                .map(|v| RowVar::new(intern_row(map, *v)))
+                .collect(),
             Box::new(canon_type(body, map)),
+        ),
+    }
+}
+
+/// Normalises an effect row's argument types and tail variable, mirroring the
+/// printer so two alpha-equivalent rows compare equal.
+fn canon_effect_row(row: &EffectRow, map: &mut VarMap) -> EffectRow {
+    let mut out = EffectRow::empty();
+    for effect in row.effects() {
+        out.insert(canon_effect(effect, map));
+    }
+    out.with_tail(row.tail().map(|rv| RowVar::new(intern_row(map, rv))))
+}
+
+/// Normalises one effect's argument types.
+fn canon_effect(effect: &Effect, map: &mut VarMap) -> Effect {
+    match effect {
+        Effect::Named(name) => Effect::Named(name.clone()),
+        Effect::Parametric(name, args) => Effect::Parametric(
+            name.clone(),
+            args.iter().map(|a| canon_type(a, map)).collect(),
         ),
     }
 }
@@ -140,7 +191,7 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 name: f.name.clone(),
                 params: f.params.iter().map(|p| canon_param(p, &mut map)).collect(),
                 return_type: canon_type(&f.return_type, &mut map),
-                effect_row: f.effect_row,
+                effect_row: canon_effect_row(&f.effect_row, &mut map),
                 body: canon_expr(&f.body, &mut map),
             })
         }
@@ -375,6 +426,36 @@ fn qualified_let_bindings() {
     );
 }
 
+// ── effect rows ──────────────────────────────────────────────────
+//
+// Non-empty rows must survive the round-trip. The printer synthesises the
+// `effect` declarations the rows reference, so the printed source re-checks
+// even though effect declarations are not IR nodes.
+
+#[test]
+fn row_polymorphic_function() {
+    // An open row variable, needing no effect declaration to re-check.
+    assert_roundtrips("fn apply(g: a -> b ! {r}, x: a) -> b ! {r} = g(x)");
+}
+
+#[test]
+fn single_named_effect() {
+    assert_roundtrips(
+        "effect Log\n\
+         fn log_it(x: Int) -> Int ! {Log} = x",
+    );
+}
+
+#[test]
+fn multiple_and_parametric_effects() {
+    assert_roundtrips(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn read(x: Int) -> Int ! {Log, Tool<Repo>} = x",
+    );
+}
+
 // ── pretty-printer snapshots ─────────────────────────────────────
 
 #[test]
@@ -402,6 +483,21 @@ fn snapshot_polymorphic_and_extern() {
         "extern fn map(f: a -> b, xs: List<a>) -> List<b>\n\
          fn snd(x: b, y: a) -> a = y",
         "Poly",
+    );
+    insta::assert_snapshot!(pretty_print(&module));
+}
+
+#[test]
+fn snapshot_effects_synthesise_declarations() {
+    // Effect declarations are reconstructed from the rows that reference them,
+    // and a row variable prints as an open row.
+    let module = lower_src(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn read(x: Int) -> Int ! {Log, Tool<Repo>} = x\n\
+         fn apply(g: a -> b ! {r}, x: a) -> b ! {r} = g(x)",
+        "Eff",
     );
     insta::assert_snapshot!(pretty_print(&module));
 }

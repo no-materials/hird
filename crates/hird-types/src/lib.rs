@@ -28,14 +28,16 @@
 
 extern crate alloc;
 
+mod effect;
 mod error;
 mod name;
 mod subst;
 mod ty;
 mod unify;
 
+pub use effect::{Effect, EffectRow, RowVar};
 pub use error::TypeError;
 pub use name::{Label, Name};
 pub use subst::Subst;
 pub use ty::Type;
-pub use unify::unify;
+pub use unify::{unify, unify_row};

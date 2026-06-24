@@ -526,3 +526,70 @@ fn captured_monomorphic_binding_is_not_generalized() {
 fn distinct_skolems_do_not_unify() {
     insta::assert_snapshot!(check_str(r"fn const_first(x: a, y: b) -> a = y"));
 }
+
+// ── effect rows ─────────────────────────────────────────────────
+
+/// An explicit empty row is the pure row and elides in display.
+#[test]
+fn empty_effect_row_elides() {
+    insta::assert_snapshot!(check_str("fn add(x: Int, y: Int) -> Int ! {} = x + y"));
+}
+
+/// A single declared effect appears on the function's scheme.
+#[test]
+fn single_effect_on_signature() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn log_it(x: Int) -> Int ! {Log} = x"
+    ));
+}
+
+/// Several effects share the row, rendered head-sorted.
+#[test]
+fn multiple_effects_on_signature() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Spawn\n\
+         fn worker(x: Int) -> Int ! {Spawn, Log} = x"
+    ));
+}
+
+/// A parametric effect carries a type argument (`Tool<Repo>`).
+#[test]
+fn parametric_effect_on_signature() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn read(x: Int) -> Int ! {Tool<Repo>} = x"
+    ));
+}
+
+/// A row-polymorphic function: the row variable `r` is shared between the
+/// callback's effect row and the function's own, and quantified in the scheme.
+#[test]
+fn row_polymorphic_signature() {
+    insta::assert_snapshot!(check_str(
+        r"fn apply(g: a -> b ! {r}, x: a) -> b ! {r} = g(x)"
+    ));
+}
+
+/// An effect annotation referencing an undeclared effect is an error.
+#[test]
+fn unknown_effect_is_rejected() {
+    insta::assert_snapshot!(check_str("fn f(x: Int) -> Int ! {Mystery} = x"));
+}
+
+/// Applying an effect to the wrong number of type arguments is an error.
+#[test]
+fn effect_arity_mismatch_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         fn f(x: Int) -> Int ! {Tool} = x"
+    ));
+}
+
+/// A row may name at most one row variable.
+#[test]
+fn multiple_row_variables_rejected() {
+    insta::assert_snapshot!(check_str(r"fn f(x: Int) -> Int ! {r, s} = x"));
+}

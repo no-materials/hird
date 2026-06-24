@@ -149,8 +149,8 @@ fn wrap_ctor(ctor: &Ctor, arity: usize, rows: Vec<Vec<Witness>>) -> Vec<Vec<Witn
 /// The field count a constructor scheme exposes (0 for nullary constructors).
 fn scheme_arity(scheme: &Type) -> usize {
     match scheme {
-        Type::TyForall(_, inner) => scheme_arity(inner),
-        Type::TyFn(params, _) => params.len(),
+        Type::TyForall(_, _, inner) => scheme_arity(inner),
+        Type::TyFn(params, _, _) => params.len(),
         _ => 0,
     }
 }
@@ -384,7 +384,7 @@ impl Checker {
                     return Vec::new();
                 };
                 match self.subst.instantiate(&info.scheme.clone()) {
-                    Type::TyFn(params, ret) => {
+                    Type::TyFn(params, ret, _) => {
                         let _ = unify(&mut self.subst, &ret, col_ty, span);
                         params.iter().map(|p| self.subst.resolve(p)).collect()
                     }

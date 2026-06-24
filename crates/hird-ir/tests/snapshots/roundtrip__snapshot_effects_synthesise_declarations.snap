@@ -1,0 +1,16 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+assertion_line: 498
+expression: pretty_print(&module)
+---
+module Eff
+
+effect Log
+
+effect Tool<t0>
+
+type Repo = MkRepo
+
+fn read(x: Int) → Int ! {Log, Tool<Repo>} = x
+
+fn apply(g: a → b ! {r}, x: a) → b ! {r} = g(x)

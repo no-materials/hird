@@ -356,7 +356,7 @@ fn json_schema_is_stable() {
     let json = module.to_json().expect("serialization succeeds");
     assert_eq!(
         json,
-        r#"{"name":"Main","declarations":[{"kind":"Fn","name":"answer","params":[],"return_type":"Int","effect_row":{},"body":{"kind":"Literal","value":{"Int":"42"},"type":"Int"}}]}"#
+        r#"{"name":"Main","declarations":[{"kind":"Fn","name":"answer","params":[],"return_type":"Int","effect_row":"{}","body":{"kind":"Literal","value":{"Int":"42"},"type":"Int"}}]}"#
     );
 }
 

@@ -39,10 +39,10 @@ use hird_parse::SyntaxKind;
 use hird_types::Type;
 
 use crate::ir::{
-    EffectRow, IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl,
-    IrExpr, IrExternRef, IrField, IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat,
-    IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrTypeDef,
-    IrVar, IrWildcardPat, LiteralValue,
+    IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl, IrExpr,
+    IrExternRef, IrField, IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
+    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrTypeDef, IrVar,
+    IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -99,11 +99,20 @@ impl Lowerer<'_> {
             })
             .collect();
         let return_type = self.expr_type(&body);
+        // The checker records each function's declared effect row, resolved
+        // against the same elaboration as the parameter types so shared row
+        // variables keep one identity; an un-annotated function has no entry
+        // and carries the empty row.
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(decl.syntax()))
+            .cloned()
+            .unwrap_or_default();
         Some(IrFnDef {
             name: String::from(name),
             params,
             return_type,
-            effect_row: EffectRow::empty(),
+            effect_row,
             body: self.lower_expr(&body),
         })
     }
@@ -218,7 +227,7 @@ impl Lowerer<'_> {
     /// type, so each parameter is explicitly typed.
     fn lower_lambda(&self, lambda: &LambdaExpr) -> IrExpr {
         let (param_tys, body_type) = match self.node_type(lambda.syntax()) {
-            Type::TyFn(params, ret) => (params, *ret),
+            Type::TyFn(params, ret, _) => (params, *ret),
             other => (Vec::new(), other),
         };
         let params = lambda
@@ -511,16 +520,19 @@ fn canonical_operator(op: &str) -> String {
 /// types read back as written (`a`, `List<a>`).
 fn constructor_field_types(scheme: &Type, params: &[String]) -> Vec<Type> {
     let inner = match scheme {
-        Type::TyForall(_, body) => body.as_ref(),
+        Type::TyForall(_, _, body) => body.as_ref(),
         other => other,
     };
     let (fields, result) = match inner {
-        Type::TyFn(fields, result) => (fields.as_slice(), result.as_ref()),
+        Type::TyFn(fields, result, _) => (fields.as_slice(), result.as_ref()),
         // A nullary constructor: no fields, the type itself is the result.
         _ => (&[][..], inner),
     };
     let rename = parameter_rename(result, params);
-    fields.iter().map(|f| f.substitute(&rename)).collect()
+    fields
+        .iter()
+        .map(|f| f.substitute(&rename, &BTreeMap::new()))
+        .collect()
 }
 
 /// Builds the variable-to-name map for [`constructor_field_types`] from a

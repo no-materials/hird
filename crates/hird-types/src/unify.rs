@@ -3,8 +3,12 @@
 
 //! The unification algorithm over [`Type`].
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use hird_lex::Span;
 
+use crate::effect::{Effect, EffectRow};
 use crate::error::TypeError;
 use crate::subst::Subst;
 use crate::ty::Type;
@@ -41,14 +45,15 @@ pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Resu
             }
             Ok(())
         }
-        (Type::TyFn(params1, ret1), Type::TyFn(params2, ret2)) => {
+        (Type::TyFn(params1, ret1, row1), Type::TyFn(params2, ret2, row2)) => {
             if params1.len() != params2.len() {
                 return Err(mismatch(subst, expected, got, span));
             }
             for (l, r) in params1.iter().zip(params2.iter()) {
                 unify(subst, l, r, span)?;
             }
-            unify(subst, ret1, ret2, span)
+            unify(subst, ret1, ret2, span)?;
+            unify_row(subst, row1, row2, span)
         }
         (Type::TyTuple(xs), Type::TyTuple(ys)) => {
             if xs.len() != ys.len() {
@@ -77,8 +82,200 @@ pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Resu
 /// variables.
 fn mismatch(subst: &Subst, expected: &Type, got: &Type, span: Span) -> TypeError {
     TypeError::TypeMismatch {
-        expected: subst.resolve(expected),
-        got: subst.resolve(got),
+        expected: Box::new(subst.resolve(expected)),
+        got: Box::new(subst.resolve(got)),
+        span,
+    }
+}
+
+/// Unifies effect row `expected` with `got` under `subst`.
+///
+/// Both rows are resolved first (tails flattened, arguments resolved). Effects
+/// sharing a head then have their type arguments unified; effects present on
+/// only one side become a *residual* the other side must absorb through its
+/// tail. A closed row cannot absorb a residual (a mismatch); an open row binds
+/// its tail to the residual; two open rows split a fresh shared tail (the
+/// row-variable splitting that makes effect-polymorphic functions work).
+///
+/// Termination: each call performs finitely many type-argument unifications
+/// (on strictly smaller types) and binds row variables, strictly reducing the
+/// number of unsolved row variables. The open/open case introduces one fresh
+/// tail but binds two existing variables, so the count still falls. With the
+/// occurs check on tails rejecting cyclic rows, the recursion is well-founded.
+pub fn unify_row(
+    subst: &mut Subst,
+    expected: &EffectRow,
+    got: &EffectRow,
+    span: Span,
+) -> Result<(), TypeError> {
+    let r1 = subst.resolve_row(expected);
+    let r2 = subst.resolve_row(got);
+
+    // Unify the arguments of same-head effects; collect the per-side surplus.
+    let mut only_in_1 = EffectRow::empty();
+    let mut only_in_2 = EffectRow::empty();
+    unify_shared_heads(subst, &r1, &r2, span, &mut only_in_1, &mut only_in_2)?;
+
+    match (r1.tail(), r2.tail()) {
+        // Closed/closed: every effect must match; any surplus is a mismatch.
+        (None, None) => {
+            if only_in_1.is_empty() && only_in_2.is_empty() {
+                Ok(())
+            } else {
+                Err(effect_mismatch(&r1, &r2, &only_in_1, &only_in_2, span))
+            }
+        }
+        // Open/closed: the open side's surplus has nowhere to go in the closed
+        // side; the closed side's surplus fills the open tail (closed).
+        (Some(t1), None) => {
+            if only_in_1.is_empty() {
+                subst.row_bind(t1, only_in_2.with_tail(None), span)
+            } else {
+                Err(effect_mismatch(&r1, &r2, &only_in_1, &only_in_2, span))
+            }
+        }
+        (None, Some(t2)) => {
+            if only_in_2.is_empty() {
+                subst.row_bind(t2, only_in_1.with_tail(None), span)
+            } else {
+                Err(effect_mismatch(&r1, &r2, &only_in_1, &only_in_2, span))
+            }
+        }
+        // Open/open: a shared fresh tail absorbs both surpluses. The same tail
+        // variable on both sides instead demands the surpluses be empty.
+        (Some(t1), Some(t2)) => {
+            if t1 == t2 {
+                if only_in_1.is_empty() && only_in_2.is_empty() {
+                    Ok(())
+                } else {
+                    Err(effect_mismatch(&r1, &r2, &only_in_1, &only_in_2, span))
+                }
+            } else if only_in_1.is_empty() && only_in_2.is_empty() {
+                // No surplus on either side: the rows agree up to their tails,
+                // so equate the tails directly.
+                subst.row_union(t1, t2);
+                Ok(())
+            } else {
+                let fresh = subst.fresh_row();
+                subst.row_bind(t1, only_in_2.with_tail(Some(fresh)), span)?;
+                subst.row_bind(t2, only_in_1.with_tail(Some(fresh)), span)
+            }
+        }
+    }
+}
+
+/// Unifies the arguments of effects that share a head between the two resolved
+/// rows, accumulating into `only_in_1`/`only_in_2` the effects that appear on
+/// just one side.
+fn unify_shared_heads(
+    subst: &mut Subst,
+    r1: &EffectRow,
+    r2: &EffectRow,
+    span: Span,
+    only_in_1: &mut EffectRow,
+    only_in_2: &mut EffectRow,
+) -> Result<(), TypeError> {
+    for (head, l1) in r1.buckets() {
+        match r2.buckets().get(head) {
+            Some(l2) => unify_head_bucket(subst, l1, l2, span, only_in_1, only_in_2)?,
+            None => {
+                for effect in l1 {
+                    only_in_1.insert(effect.clone());
+                }
+            }
+        }
+    }
+    for (head, l2) in r2.buckets() {
+        if !r1.buckets().contains_key(head) {
+            for effect in l2 {
+                only_in_2.insert(effect.clone());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Unifies the two effect lists sharing one head. Structurally-equal effects
+/// (already-ground duplicates) cancel; a lone effect on each side has its
+/// arguments unified; anything left over is routed to the surplus rows.
+///
+/// Pairing several distinct same-head effects precisely needs multiset
+/// machinery, which v0.1 does not build: the overlap is paired positionally and
+/// the rest becomes surplus. The common shapes — one effect per head, or equal
+/// ground sets — are handled exactly.
+fn unify_head_bucket(
+    subst: &mut Subst,
+    l1: &[Effect],
+    l2: &[Effect],
+    span: Span,
+    only_in_1: &mut EffectRow,
+    only_in_2: &mut EffectRow,
+) -> Result<(), TypeError> {
+    let mut rem1: Vec<&Effect> = Vec::new();
+    let mut rem2: Vec<&Effect> = l2.iter().collect();
+    for e1 in l1 {
+        if let Some(pos) = rem2.iter().position(|e2| *e2 == e1) {
+            // A structurally-equal effect on both sides: cancel the pair.
+            rem2.remove(pos);
+        } else {
+            rem1.push(e1);
+        }
+    }
+    let overlap = rem1.len().min(rem2.len());
+    for (e1, e2) in rem1.iter().zip(&rem2) {
+        unify_effect_args(subst, e1, e2, span)?;
+    }
+    for effect in &rem1[overlap..] {
+        only_in_1.insert((*effect).clone());
+    }
+    for effect in &rem2[overlap..] {
+        only_in_2.insert((*effect).clone());
+    }
+    Ok(())
+}
+
+/// Unifies the type arguments of two same-head effects pairwise. A differing
+/// argument count is an effect mismatch naming the offending effect.
+fn unify_effect_args(
+    subst: &mut Subst,
+    expected: &Effect,
+    got: &Effect,
+    span: Span,
+) -> Result<(), TypeError> {
+    let a1 = expected.args();
+    let a2 = got.args();
+    if a1.len() != a2.len() {
+        return Err(TypeError::EffectMismatch {
+            expected: Box::new(EffectRow::closed([expected.clone()])),
+            got: Box::new(EffectRow::closed([got.clone()])),
+            offending: Some(expected.clone()),
+            span,
+        });
+    }
+    for (x, y) in a1.iter().zip(a2) {
+        unify(subst, x, y, span)?;
+    }
+    Ok(())
+}
+
+/// Builds an [`TypeError::EffectMismatch`] over the resolved rows, naming the
+/// first surplus effect as the offending one.
+fn effect_mismatch(
+    expected: &EffectRow,
+    got: &EffectRow,
+    only_in_1: &EffectRow,
+    only_in_2: &EffectRow,
+    span: Span,
+) -> TypeError {
+    let offending = only_in_1
+        .effects()
+        .chain(only_in_2.effects())
+        .next()
+        .cloned();
+    TypeError::EffectMismatch {
+        expected: Box::new(expected.clone()),
+        got: Box::new(got.clone()),
+        offending,
         span,
     }
 }
@@ -89,7 +286,8 @@ mod tests {
 
     use hird_lex::Span;
 
-    use super::unify;
+    use super::{unify, unify_row};
+    use crate::effect::{Effect, EffectRow};
     use crate::error::TypeError;
     use crate::subst::Subst;
     use crate::ty::Type;
@@ -120,8 +318,8 @@ mod tests {
         let TypeError::TypeMismatch { expected, got, .. } = err else {
             panic!("expected a TypeMismatch, got {err:?}");
         };
-        assert_eq!(expected, Type::int());
-        assert_eq!(got, Type::string());
+        assert_eq!(*expected, Type::int());
+        assert_eq!(*got, Type::string());
     }
 
     // -- variables ---------------------------------------------------------
@@ -182,8 +380,8 @@ mod tests {
         let TypeError::TypeMismatch { expected, got, .. } = err else {
             panic!("expected a TypeMismatch, got {err:?}");
         };
-        assert_eq!(expected, Type::int());
-        assert_eq!(got, Type::string());
+        assert_eq!(*expected, Type::int());
+        assert_eq!(*got, Type::string());
     }
 
     /// `(Int → Int) ~ (Int → Int → Int) ⇒ ⊥` — arity 1 ≠ 2.
@@ -209,7 +407,7 @@ mod tests {
             panic!("expected an InfiniteType, got {err:?}");
         };
         assert_eq!(var, a);
-        assert_eq!(in_type, recursive);
+        assert_eq!(*in_type, recursive);
     }
 
     /// `α ~ β, β ~ List<α> ⇒ ⊥` — occurrence is checked on the class
@@ -343,7 +541,7 @@ mod tests {
     #[test]
     fn quantified_type_is_rejected() {
         let mut s = Subst::new();
-        let forall = Type::TyForall(vec![0], alloc::boxed::Box::new(Type::var(0)));
+        let forall = Type::TyForall(vec![0], vec![], alloc::boxed::Box::new(Type::var(0)));
         assert!(matches!(
             unify(&mut s, &forall, &Type::int(), span()),
             Err(TypeError::QuantifiedType { .. }),
@@ -352,5 +550,228 @@ mod tests {
             unify(&mut s, &Type::int(), &forall, span()),
             Err(TypeError::QuantifiedType { .. }),
         ));
+    }
+
+    // -- effect rows -------------------------------------------------------
+    //
+    // Notation mirrors the surface syntax: `{Log}` a closed row, `{Log | r}`
+    // an open one. A parametric effect `Tool<X>` carries a type argument.
+
+    /// The nullary effect `Name`.
+    fn named(name: &str) -> Effect {
+        Effect::named(name)
+    }
+
+    /// The parametric effect `Tool<Con>` over a nullary constructor.
+    fn tool(con: &str) -> Effect {
+        Effect::parametric("Tool", vec![Type::con(con, vec![])])
+    }
+
+    /// `{Log | r1} ~ {Log | r2}` ⇒ the shared head is not duplicated and the
+    /// tails are merged. Written first and run repeatedly: a buggy residual
+    /// split here loops forever under re-resolution, so idempotence is the
+    /// canary for termination.
+    #[test]
+    fn open_open_overlapping_head_is_idempotent() {
+        let mut s = Subst::new();
+        let r1 = s.fresh_row();
+        let r2 = s.fresh_row();
+        let a = EffectRow::open([named("Log")], r1);
+        let b = EffectRow::open([named("Log")], r2);
+        unify_row(&mut s, &a, &b, span()).unwrap();
+
+        let ra = s.resolve_row(&a);
+        let rb = s.resolve_row(&b);
+        assert_eq!(ra, rb, "both rows resolve to the same row");
+        assert_eq!(ra.effects().count(), 1, "Log is not duplicated");
+        assert!(ra.tail().is_some(), "the row stays open");
+
+        // Re-unifying is a no-op that terminates and changes nothing.
+        unify_row(&mut s, &a, &b, span()).unwrap();
+        assert_eq!(s.resolve_row(&a), ra);
+    }
+
+    /// `{Log} ~ {Log} ⇒ ∅` — equal closed rows unify trivially.
+    #[test]
+    fn closed_rows_equal() {
+        let mut s = Subst::new();
+        let a = EffectRow::closed([named("Log")]);
+        assert!(unify_row(&mut s, &a, &a.clone(), span()).is_ok());
+    }
+
+    /// `{Log} ~ {Spawn} ⇒ ⊥` — different closed rows do not unify.
+    #[test]
+    fn closed_rows_differ() {
+        let mut s = Subst::new();
+        let a = EffectRow::closed([named("Log")]);
+        let b = EffectRow::closed([named("Spawn")]);
+        assert!(matches!(
+            unify_row(&mut s, &a, &b, span()),
+            Err(TypeError::EffectMismatch { .. })
+        ));
+    }
+
+    /// `{Log, Spawn} ~ {Log} ⇒ ⊥` — a closed row cannot drop an effect.
+    #[test]
+    fn closed_row_missing_effect() {
+        let mut s = Subst::new();
+        let a = EffectRow::closed([named("Log"), named("Spawn")]);
+        let b = EffectRow::closed([named("Log")]);
+        assert!(matches!(
+            unify_row(&mut s, &a, &b, span()),
+            Err(TypeError::EffectMismatch { .. })
+        ));
+    }
+
+    /// `{Log | r} ~ {Log, Tool<X>} ⇒ r ↦ {Tool<X>}` — an open row's tail
+    /// absorbs the closed row's surplus.
+    #[test]
+    fn open_closed_binds_tail() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let open = EffectRow::open([named("Log")], r);
+        let closed = EffectRow::closed([named("Log"), tool("X")]);
+        unify_row(&mut s, &open, &closed, span()).unwrap();
+        assert_eq!(s.resolve_row(&open), s.resolve_row(&closed));
+        assert_eq!(
+            s.resolve_row(&open),
+            EffectRow::closed([named("Log"), tool("X")])
+        );
+    }
+
+    /// `{r} ~ {Log} ⇒ r ↦ {Log}` — a bare row variable solves to a closed row.
+    #[test]
+    fn bare_variable_binds_to_closed() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let open = EffectRow::of_var(r);
+        let closed = EffectRow::closed([named("Log")]);
+        unify_row(&mut s, &open, &closed, span()).unwrap();
+        assert_eq!(s.resolve_row(&open), closed);
+    }
+
+    /// `{Log, Spawn | r} ~ {Log} ⇒ ⊥` — the open side's surplus has no home in
+    /// the closed side.
+    #[test]
+    fn open_surplus_against_closed_fails() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let open = EffectRow::open([named("Log"), named("Spawn")], r);
+        let closed = EffectRow::closed([named("Log")]);
+        assert!(matches!(
+            unify_row(&mut s, &open, &closed, span()),
+            Err(TypeError::EffectMismatch { .. })
+        ));
+    }
+
+    /// `{Log | r1} ~ {Tool<X> | r2}` ⇒ both rows resolve to
+    /// `{Log, Tool<X> | r3}` — the row-variable split.
+    #[test]
+    fn open_open_splits_residual() {
+        let mut s = Subst::new();
+        let r1 = s.fresh_row();
+        let r2 = s.fresh_row();
+        let a = EffectRow::open([named("Log")], r1);
+        let b = EffectRow::open([tool("X")], r2);
+        unify_row(&mut s, &a, &b, span()).unwrap();
+        let ra = s.resolve_row(&a);
+        assert_eq!(ra, s.resolve_row(&b), "both rows agree after the split");
+        assert_eq!(ra.effects().count(), 2, "both heads are present");
+        assert!(ra.tail().is_some(), "a shared fresh tail remains");
+    }
+
+    /// `{Tool<a>} ~ {Tool<Int>} ⇒ a ↦ Int` — same-head effects unify their
+    /// type arguments.
+    #[test]
+    fn parametric_effect_unifies_arguments() {
+        let mut s = Subst::new();
+        let a = s.fresh_type();
+        let lhs = EffectRow::closed([Effect::parametric("Tool", vec![a.clone()])]);
+        let rhs = EffectRow::closed([tool("Int")]);
+        unify_row(&mut s, &lhs, &rhs, span()).unwrap();
+        assert_eq!(s.resolve(&a), Type::con("Int", vec![]));
+    }
+
+    /// `{Tool<X>} ~ {Tool<Y>} ⇒ ⊥` — same head, so the arguments are unified
+    /// and the failure surfaces as the underlying type mismatch (`X ~ Y`).
+    #[test]
+    fn parametric_effect_argument_mismatch() {
+        let mut s = Subst::new();
+        let lhs = EffectRow::closed([tool("X")]);
+        let rhs = EffectRow::closed([tool("Y")]);
+        assert!(matches!(
+            unify_row(&mut s, &lhs, &rhs, span()),
+            Err(TypeError::TypeMismatch { .. })
+        ));
+    }
+
+    /// `(Int → Int ! {Log}) ~ (Int → Int ! {r}) ⇒ r ↦ {Log}` — unifying
+    /// function types unifies their effect rows.
+    #[test]
+    fn function_types_unify_effect_rows() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let concrete = Type::func_eff(
+            vec![Type::int()],
+            Type::int(),
+            EffectRow::closed([named("Log")]),
+        );
+        let polymorphic = Type::func_eff(vec![Type::int()], Type::int(), EffectRow::of_var(r));
+        unify(&mut s, &concrete, &polymorphic, span()).unwrap();
+        assert_eq!(
+            s.resolve_row(&EffectRow::of_var(r)),
+            EffectRow::closed([named("Log")])
+        );
+    }
+
+    /// Binding `r ↦ {Log | r}` is rejected: the tail mentions `r`, an infinite
+    /// row. The occurs check is a guard the splitting algorithm never trips,
+    /// so it is exercised directly.
+    #[test]
+    fn row_occurs_check_rejects_infinite_row() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let cyclic = EffectRow::open([named("Log")], r);
+        assert!(matches!(
+            s.row_bind(r, cyclic, span()),
+            Err(TypeError::InfiniteEffectRow { .. })
+        ));
+    }
+
+    /// A second open/open unification reusing a solved tail still terminates
+    /// and stays consistent — a regression guard for the termination measure.
+    #[test]
+    fn chained_open_unifications_terminate() {
+        let mut s = Subst::new();
+        let r1 = s.fresh_row();
+        let r2 = s.fresh_row();
+        let r3 = s.fresh_row();
+        let a = EffectRow::open([named("Log")], r1);
+        let b = EffectRow::open([tool("X")], r2);
+        let c = EffectRow::open([named("Spawn")], r3);
+        unify_row(&mut s, &a, &b, span()).unwrap();
+        unify_row(&mut s, &a, &c, span()).unwrap();
+        // All three rows now share the same resolved effects.
+        let ra = s.resolve_row(&a);
+        assert_eq!(ra, s.resolve_row(&b));
+        assert_eq!(ra, s.resolve_row(&c));
+        assert!(
+            ra.effects()
+                .any(|e| matches!(e, Effect::Named(n) if n.as_str() == "Log"))
+        );
+        assert!(
+            ra.effects()
+                .any(|e| matches!(e, Effect::Named(n) if n.as_str() == "Spawn"))
+        );
+    }
+
+    /// `{r} ~ {r}` — the same tail on both sides needs no binding and does not
+    /// loop.
+    #[test]
+    fn identical_open_rows_unify() {
+        let mut s = Subst::new();
+        let r = s.fresh_row();
+        let a = EffectRow::open([named("Log")], r);
+        assert!(unify_row(&mut s, &a, &a.clone(), span()).is_ok());
     }
 }

@@ -23,7 +23,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use hird_types::Type;
+use hird_types::{EffectRow, Type};
 use serde::{Serialize, Serializer};
 
 /// Serializes a [`Type`] as its canonical textual rendering (e.g. `List<Int>`,
@@ -33,6 +33,15 @@ where
     S: Serializer,
 {
     serializer.serialize_str(&format!("{ty}"))
+}
+
+/// Serializes an [`EffectRow`] as its textual rendering (e.g. `{}`, `{Log}`,
+/// `{Log, Tool<X>}`, `{Log | r}`), mirroring how [`Type`] is serialized.
+fn serialize_effect_row<S>(row: &EffectRow, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("{row}"))
 }
 
 // ── module and declarations ─────────────────────────────────────
@@ -92,7 +101,9 @@ pub struct IrFnDef {
     /// The result type.
     #[serde(serialize_with = "serialize_type")]
     pub return_type: Type,
-    /// The effect row. Empty for now; effect inference will populate it.
+    /// The effect row the function performs, from its declared annotation
+    /// (empty when none is given; body inference is a later pass).
+    #[serde(serialize_with = "serialize_effect_row")]
     pub effect_row: EffectRow,
     /// The body expression.
     pub body: IrExpr,
@@ -149,22 +160,6 @@ where
     S: Serializer,
 {
     serializer.collect_seq(tys.iter().map(|ty| format!("{ty}")))
-}
-
-/// An effect row.
-///
-/// Effect inference is not yet implemented; until then every row is empty. The
-/// type is a placeholder that later gains the inferred effects, and it
-/// serializes as `{}`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-pub struct EffectRow {}
-
-impl EffectRow {
-    /// The empty effect row.
-    #[must_use]
-    pub const fn empty() -> Self {
-        Self {}
-    }
 }
 
 // ── expressions ─────────────────────────────────────────────────

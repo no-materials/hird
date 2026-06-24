@@ -39,11 +39,12 @@ mod ir;
 mod lower;
 mod pretty;
 
+pub use hird_types::EffectRow;
 pub use ir::{
-    EffectRow, IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl,
-    IrExpr, IrExternRef, IrField, IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat,
-    IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrTypeDef,
-    IrVar, IrWildcardPat, LiteralValue,
+    IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl, IrExpr,
+    IrExternRef, IrField, IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
+    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrTypeDef, IrVar,
+    IrWildcardPat, LiteralValue,
 };
 pub use lower::lower_module;
 pub use pretty::pretty_print;

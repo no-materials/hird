@@ -1,5 +1,6 @@
 ---
 source: crates/hird-ir/tests/lowering.rs
+assertion_line: 370
 expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
 ---
 {
@@ -34,7 +35,7 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
         }
       ],
       "return_type": "Int",
-      "effect_row": {},
+      "effect_row": "{}",
       "body": {
         "kind": "Match",
         "scrutinee": {

@@ -25,8 +25,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use hird_ast::TypeExpr;
-use hird_types::Type;
+use hird_ast::{EffectAnn, TypeExpr};
+use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
@@ -43,48 +43,66 @@ enum VarMode {
     Skolem,
 }
 
+/// Per-annotation-site variable scopes, threaded through elaboration so a name
+/// used in several positions of one signature resolves to the same variable.
+/// Type variables and row variables are separate namespaces, distinguished by
+/// position: a name inside `! { … }` is a row variable, elsewhere a type one.
+#[derive(Default)]
+pub(crate) struct Scope {
+    /// Type-variable names to their elaborated types.
+    types: BTreeMap<String, Type>,
+    /// Row-variable names to their allocated row variables.
+    rows: BTreeMap<String, RowVar>,
+}
+
+impl Scope {
+    /// A fresh, empty scope.
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Pre-binds a type-variable name (a type declaration's declared
+    /// parameters, fixed before elaboration begins).
+    pub(crate) fn insert_type(&mut self, name: String, ty: Type) {
+        self.types.insert(name, ty);
+    }
+}
+
 impl Checker {
     /// Elaborates with declared-parameters-only scoping (type declarations).
-    pub(crate) fn elaborate_closed(
-        &mut self,
-        ty: &TypeExpr,
-        scope: &mut BTreeMap<String, Type>,
-    ) -> Checked<Type> {
+    pub(crate) fn elaborate_closed(&mut self, ty: &TypeExpr, scope: &mut Scope) -> Checked<Type> {
         self.elaborate(ty, scope, VarMode::Closed)
     }
 
     /// Elaborates with implicit fresh variables (inferred positions).
-    pub(crate) fn elaborate_fresh(
-        &mut self,
-        ty: &TypeExpr,
-        scope: &mut BTreeMap<String, Type>,
-    ) -> Checked<Type> {
+    pub(crate) fn elaborate_fresh(&mut self, ty: &TypeExpr, scope: &mut Scope) -> Checked<Type> {
         self.elaborate(ty, scope, VarMode::Fresh)
     }
 
     /// Elaborates with rigid skolem variables (annotated function bodies).
-    pub(crate) fn elaborate_skolem(
-        &mut self,
-        ty: &TypeExpr,
-        scope: &mut BTreeMap<String, Type>,
-    ) -> Checked<Type> {
+    pub(crate) fn elaborate_skolem(&mut self, ty: &TypeExpr, scope: &mut Scope) -> Checked<Type> {
         self.elaborate(ty, scope, VarMode::Skolem)
+    }
+
+    /// Elaborates a function's effect-row annotation with implicit fresh row
+    /// variables (a signature position, alongside [`Checker::elaborate_fresh`]).
+    pub(crate) fn elaborate_row_fresh(
+        &mut self,
+        ann: &EffectAnn,
+        scope: &mut Scope,
+    ) -> Checked<EffectRow> {
+        self.elaborate_effect_row(ann, scope, VarMode::Fresh)
     }
 
     /// Elaborates `ty`, resolving variable names through `scope` and
     /// constructor names through the registry.
-    fn elaborate(
-        &mut self,
-        ty: &TypeExpr,
-        scope: &mut BTreeMap<String, Type>,
-        mode: VarMode,
-    ) -> Checked<Type> {
+    fn elaborate(&mut self, ty: &TypeExpr, scope: &mut Scope, mode: VarMode) -> Checked<Type> {
         match ty {
             TypeExpr::Name(name) => {
                 let text = name.text();
                 let span = token_span(name.syntax(), self.source_id);
                 if is_var_name(text) {
-                    if let Some(bound) = scope.get(text) {
+                    if let Some(bound) = scope.types.get(text) {
                         return Ok(bound.clone());
                     }
                     match mode {
@@ -95,7 +113,7 @@ impl Checker {
                         )),
                         VarMode::Fresh => {
                             let fresh = self.subst.fresh_type();
-                            scope.insert(String::from(text), fresh.clone());
+                            scope.types.insert(String::from(text), fresh.clone());
                             Ok(fresh)
                         }
                         VarMode::Skolem => {
@@ -104,7 +122,7 @@ impl Checker {
                             // declared type, and it renders as the variable
                             // it stands for.
                             let skolem = Type::con(text, Vec::new());
-                            scope.insert(String::from(text), skolem.clone());
+                            scope.types.insert(String::from(text), skolem.clone());
                             Ok(skolem)
                         }
                     }
@@ -139,7 +157,13 @@ impl Checker {
                     return Err(Aborted);
                 };
                 let ret = self.elaborate(&ret, scope, mode)?;
-                Ok(Type::func(params, ret))
+                match func.effect_ann() {
+                    Some(ann) => {
+                        let row = self.elaborate_effect_row(&ann, scope, mode)?;
+                        Ok(Type::func_eff(params, ret, row))
+                    }
+                    None => Ok(Type::func(params, ret)),
+                }
             }
             TypeExpr::Tuple(tuple) => {
                 let mut elems = Vec::new();
@@ -172,6 +196,135 @@ impl Checker {
             )),
             Some(_) => Ok(Type::con(name, args)),
         }
+    }
+
+    /// Elaborates an effect-row annotation (`! { E1, E2 }`) into an
+    /// [`EffectRow`]. A lowercase entry is the row's tail variable (at most one
+    /// per row); a `PascalCase` entry — bare or applied — is an effect, checked
+    /// for declaration and arity against the registry.
+    fn elaborate_effect_row(
+        &mut self,
+        ann: &EffectAnn,
+        scope: &mut Scope,
+        mode: VarMode,
+    ) -> Checked<EffectRow> {
+        let mut row = EffectRow::empty();
+        for entry in ann.effects() {
+            if let Some(effect) = self.elaborate_effect(&entry, scope, mode)? {
+                row.insert(effect);
+            } else {
+                // A lowercase entry is the row tail. Only one is allowed.
+                let span = type_expr_span(&entry, self.source_id);
+                let TypeExpr::Name(name) = &entry else {
+                    return Err(Aborted);
+                };
+                let var = self.row_var(name.text(), span, scope, mode)?;
+                if row.tail().is_some_and(|existing| existing != var) {
+                    return Err(self.error(
+                        CheckCode::C0029,
+                        span,
+                        String::from("an effect row may name at most one row variable"),
+                    ));
+                }
+                row = row.with_tail(Some(var));
+            }
+        }
+        Ok(row)
+    }
+
+    /// Elaborates one effect-row entry: `Ok(Some(effect))` for an effect,
+    /// `Ok(None)` for a bare lowercase name (a row variable, handled by the
+    /// caller). Unknown effects and arity mismatches are errors.
+    fn elaborate_effect(
+        &mut self,
+        entry: &TypeExpr,
+        scope: &mut Scope,
+        mode: VarMode,
+    ) -> Checked<Option<Effect>> {
+        match entry {
+            TypeExpr::Name(name) if is_var_name(name.text()) => Ok(None),
+            TypeExpr::Name(name) => {
+                let span = token_span(name.syntax(), self.source_id);
+                self.named_effect(name.text(), Vec::new(), span).map(Some)
+            }
+            TypeExpr::App(app) => {
+                let span = type_expr_span(entry, self.source_id);
+                let Some(name) = app.name() else {
+                    return Err(Aborted);
+                };
+                if is_var_name(name) {
+                    return Err(self.error(
+                        CheckCode::C0027,
+                        span,
+                        format!("`{name}` is a row variable and cannot take arguments"),
+                    ));
+                }
+                let mut args = Vec::new();
+                for arg in app.args() {
+                    args.push(self.elaborate(&arg, scope, mode)?);
+                }
+                self.named_effect(name, args, span).map(Some)
+            }
+            // Functions, tuples, and parentheses are not effects.
+            other => {
+                let span = type_expr_span(other, self.source_id);
+                Err(self.error(
+                    CheckCode::C0027,
+                    span,
+                    String::from("expected an effect, e.g. `Log` or `Tool<ReadRepo>`"),
+                ))
+            }
+        }
+    }
+
+    /// Builds an effect after checking it is declared and applied to the right
+    /// number of type arguments.
+    fn named_effect(
+        &mut self,
+        name: &str,
+        args: Vec<Type>,
+        span: hird_lex::Span,
+    ) -> Checked<Effect> {
+        match self.registry.effect_arity(name) {
+            None => Err(self.error(CheckCode::C0027, span, format!("unknown effect `{name}`"))),
+            Some(arity) if arity != args.len() => Err(self.error(
+                CheckCode::C0028,
+                span,
+                format!(
+                    "effect `{name}` expects {arity} type argument(s), but {} were given",
+                    args.len()
+                ),
+            )),
+            Some(_) if args.is_empty() => Ok(Effect::named(name)),
+            Some(_) => Ok(Effect::parametric(name, args)),
+        }
+    }
+
+    /// Resolves a row-variable name through the scope, allocating per `mode`:
+    /// an error in a closed position, otherwise a fresh row variable bound for
+    /// the rest of the annotation site.
+    fn row_var(
+        &mut self,
+        text: &str,
+        span: hird_lex::Span,
+        scope: &mut Scope,
+        mode: VarMode,
+    ) -> Checked<RowVar> {
+        if let Some(existing) = scope.rows.get(text) {
+            return Ok(*existing);
+        }
+        if mode == VarMode::Closed {
+            return Err(self.error(
+                CheckCode::C0012,
+                span,
+                format!("row variable `{text}` is not declared here"),
+            ));
+        }
+        // Body-vs-annotation effect checking is a later pass, so a fresh row
+        // variable serves both inferred and annotated positions here.
+        let var = self.subst.fresh_row();
+        scope.rows.insert(String::from(text), var);
+        Ok(var)
     }
 }
 

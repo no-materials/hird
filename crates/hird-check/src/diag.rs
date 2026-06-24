@@ -80,6 +80,16 @@ pub enum CheckCode {
     /// A qualified name `Mod.member` references a value the module does not
     /// export.
     C0024,
+    /// Two effect rows could not be unified.
+    C0025,
+    /// A row variable was unified with a row that contains it (infinite row).
+    C0026,
+    /// An effect annotation names an undeclared effect.
+    C0027,
+    /// An effect is applied to the wrong number of type arguments.
+    C0028,
+    /// An effect row lists more than one row variable.
+    C0029,
 }
 
 /// A secondary source location attached to a diagnostic.
@@ -163,6 +173,26 @@ impl CheckDiagnostic {
                     "infinite type: `{}` occurs within `{in_type}`",
                     Type::var(*var)
                 ),
+            ),
+            TypeError::EffectMismatch {
+                expected,
+                got,
+                offending,
+                span,
+            } => Self::error(
+                CheckCode::C0025,
+                *span,
+                match offending {
+                    Some(effect) => format!(
+                        "effect mismatch: expected `{expected}`, got `{got}` (effect `{effect}`)"
+                    ),
+                    None => format!("effect mismatch: expected `{expected}`, got `{got}`"),
+                },
+            ),
+            TypeError::InfiniteEffectRow { var, in_row, span } => Self::error(
+                CheckCode::C0026,
+                *span,
+                format!("infinite effect row: `{var}` occurs within `{in_row}`"),
             ),
             // A checker invariant violation, not a program error; surfaced
             // rather than panicking so a compiler bug never takes the session

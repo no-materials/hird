@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 535
+expression: "check_str(\"fn add(x: Int, y: Int) -> Int ! {} = x + y\")"
+---
+add : Int → Int → Int

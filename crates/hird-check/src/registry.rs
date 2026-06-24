@@ -42,6 +42,8 @@ pub(crate) struct Registry {
     adts: BTreeMap<Name, AdtInfo>,
     /// Declared (and seeded) constructors by constructor name.
     ctors: BTreeMap<Name, CtorInfo>,
+    /// Declared effects by name, mapped to their type-parameter count.
+    effects: BTreeMap<Name, usize>,
 }
 
 impl Registry {
@@ -54,6 +56,7 @@ impl Registry {
         let mut registry = Self {
             adts: BTreeMap::new(),
             ctors: BTreeMap::new(),
+            effects: BTreeMap::new(),
         };
         registry.declare_adt(
             Name::new("Bool"),
@@ -97,6 +100,17 @@ impl Registry {
     /// Registers a constructor.
     pub(crate) fn declare_ctor(&mut self, name: Name, info: CtorInfo) {
         self.ctors.insert(name, info);
+    }
+
+    /// Registers an effect declaration's name and type-parameter count. A later
+    /// declaration sharing a name replaces the earlier one.
+    pub(crate) fn declare_effect(&mut self, name: Name, arity: usize) {
+        self.effects.insert(name, arity);
+    }
+
+    /// The type-parameter count of effect `name`, if it is declared.
+    pub(crate) fn effect_arity(&self, name: &str) -> Option<usize> {
+        self.effects.get(&Name::new(name)).copied()
     }
 
     /// The constructor named `name`, if declared.

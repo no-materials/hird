@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 579
+expression: "check_str(\"fn f(x: Int) -> Int ! {Mystery} = x\")"
+---
+error[C0027] 23..30: unknown effect `Mystery`

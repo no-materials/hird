@@ -29,7 +29,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt::{Display, Write as _};
 
-use hird_types::Type;
+use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
     IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrTypeDef, LiteralValue,
@@ -141,13 +141,13 @@ fn is_expressible(ty: &Type) -> bool {
     match ty {
         Type::TyVar(_) => true,
         Type::TyCon(_, args) => args.iter().all(is_expressible),
-        Type::TyFn(params, ret) => {
+        Type::TyFn(params, ret, _) => {
             !params.is_empty() && params.iter().all(is_expressible) && is_expressible(ret)
         }
         // A 2+-tuple is expressible; unit (and the non-occurring 1-tuple) is not.
         Type::TyTuple(elems) => elems.len() >= 2 && elems.iter().all(is_expressible),
         Type::TyRecord(_) => false,
-        Type::TyForall(_, body) => is_expressible(body),
+        Type::TyForall(_, _, body) => is_expressible(body),
     }
 }
 
@@ -167,10 +167,22 @@ enum VarKey {
 /// A per-signature map assigning each type variable its canonical index.
 type VarMap = BTreeMap<VarKey, u32>;
 
+/// A per-signature map assigning each row variable its canonical index, in a
+/// sequence independent of the type variables' (so they render with their own
+/// `r, r1, …` letters).
+type RowMap = BTreeMap<RowVar, u32>;
+
 /// The canonical index for `key`, allocating the next one on first sight.
 fn intern(map: &mut VarMap, key: VarKey) -> u32 {
     let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
     *map.entry(key).or_insert(next)
+}
+
+/// The canonical index for row variable `var`, allocating the next one on first
+/// sight.
+fn intern_row(map: &mut RowMap, var: RowVar) -> u32 {
+    let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
+    *map.entry(var).or_insert(next)
 }
 
 /// Whether a type name denotes a variable rather than a constructor. The lexer
@@ -182,34 +194,70 @@ fn is_type_var(name: &str) -> bool {
 }
 
 /// A copy of `ty` with every type variable (unification variable or skolem)
-/// rewritten to a [`Type::TyVar`] numbered by first appearance through `map`,
-/// so it renders with canonical `a, b, c, …` letters.
-fn canonical_type(ty: &Type, map: &mut VarMap) -> Type {
+/// rewritten to a [`Type::TyVar`] numbered by first appearance through `vars`,
+/// and every row variable renumbered through `rows`, so it renders with
+/// canonical `a, b, c, …` and `r, r1, …` letters.
+fn canonical_type(ty: &Type, vars: &mut VarMap, rows: &mut RowMap) -> Type {
     match ty {
-        Type::TyVar(id) => Type::TyVar(intern(map, VarKey::Unif(*id))),
+        Type::TyVar(id) => Type::TyVar(intern(vars, VarKey::Unif(*id))),
         Type::TyCon(name, args) if args.is_empty() && is_type_var(name.as_str()) => {
-            Type::TyVar(intern(map, VarKey::Skolem(String::from(name.as_str()))))
+            Type::TyVar(intern(vars, VarKey::Skolem(String::from(name.as_str()))))
         }
         Type::TyCon(name, args) => Type::TyCon(
             name.clone(),
-            args.iter().map(|a| canonical_type(a, map)).collect(),
+            args.iter().map(|a| canonical_type(a, vars, rows)).collect(),
         ),
-        Type::TyFn(params, ret) => Type::TyFn(
-            params.iter().map(|p| canonical_type(p, map)).collect(),
-            Box::new(canonical_type(ret, map)),
+        Type::TyFn(params, ret, row) => Type::TyFn(
+            params
+                .iter()
+                .map(|p| canonical_type(p, vars, rows))
+                .collect(),
+            Box::new(canonical_type(ret, vars, rows)),
+            canonical_effect_row(row, vars, rows),
         ),
-        Type::TyTuple(elems) => {
-            Type::TyTuple(elems.iter().map(|e| canonical_type(e, map)).collect())
-        }
+        Type::TyTuple(elems) => Type::TyTuple(
+            elems
+                .iter()
+                .map(|e| canonical_type(e, vars, rows))
+                .collect(),
+        ),
         Type::TyRecord(fields) => Type::TyRecord(
             fields
                 .iter()
-                .map(|(label, v)| (label.clone(), canonical_type(v, map)))
+                .map(|(label, v)| (label.clone(), canonical_type(v, vars, rows)))
                 .collect(),
         ),
-        Type::TyForall(vars, body) => Type::TyForall(
-            vars.iter().map(|v| intern(map, VarKey::Unif(*v))).collect(),
-            Box::new(canonical_type(body, map)),
+        Type::TyForall(tvars, rvars, body) => Type::TyForall(
+            tvars
+                .iter()
+                .map(|v| intern(vars, VarKey::Unif(*v)))
+                .collect(),
+            rvars
+                .iter()
+                .map(|v| RowVar::new(intern_row(rows, *v)))
+                .collect(),
+            Box::new(canonical_type(body, vars, rows)),
+        ),
+    }
+}
+
+/// A copy of `row` with its effects' type arguments canonicalised through
+/// `vars`/`rows` and its tail row variable renumbered through `rows`.
+fn canonical_effect_row(row: &EffectRow, vars: &mut VarMap, rows: &mut RowMap) -> EffectRow {
+    let mut out = EffectRow::empty();
+    for effect in row.effects() {
+        out.insert(canonical_effect(effect, vars, rows));
+    }
+    out.with_tail(row.tail().map(|rv| RowVar::new(intern_row(rows, rv))))
+}
+
+/// A copy of `effect` with its type arguments canonicalised.
+fn canonical_effect(effect: &Effect, vars: &mut VarMap, rows: &mut RowMap) -> Effect {
+    match effect {
+        Effect::Named(name) => Effect::Named(name.clone()),
+        Effect::Parametric(name, args) => Effect::Parametric(
+            name.clone(),
+            args.iter().map(|a| canonical_type(a, vars, rows)).collect(),
         ),
     }
 }
@@ -218,6 +266,77 @@ fn canonical_type(ty: &Type, map: &mut VarMap) -> Type {
 fn literal_text(value: &LiteralValue) -> &str {
     match value {
         LiteralValue::Int(text) | LiteralValue::Float(text) | LiteralValue::Str(text) => text,
+    }
+}
+
+// ── effect-declaration synthesis ──────────────────────────────────
+
+/// Every effect the printer will emit, mapped from head name to type-argument
+/// count, collected from the declaration-level types it renders (function
+/// signatures, extern types, and constructor fields). Held name-sorted so the
+/// synthesised declarations print deterministically.
+fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
+    let mut effects = BTreeMap::new();
+    for decl in &module.declarations {
+        match decl {
+            IrDecl::Fn(f) => {
+                for param in &f.params {
+                    collect_type_effects(&param.ty, &mut effects);
+                }
+                collect_type_effects(&f.return_type, &mut effects);
+                collect_row_effects(&f.effect_row, &mut effects);
+            }
+            IrDecl::Extern(e) => collect_type_effects(&e.ty, &mut effects),
+            IrDecl::Type(t) => {
+                for ctor in &t.constructors {
+                    for field in &ctor.fields {
+                        collect_type_effects(field, &mut effects);
+                    }
+                }
+            }
+        }
+    }
+    effects
+}
+
+/// Accumulates the effects in every function row reachable from `ty`.
+fn collect_type_effects(ty: &Type, out: &mut BTreeMap<String, usize>) {
+    match ty {
+        Type::TyVar(_) => {}
+        Type::TyCon(_, args) => {
+            for arg in args {
+                collect_type_effects(arg, out);
+            }
+        }
+        Type::TyFn(params, ret, row) => {
+            for param in params {
+                collect_type_effects(param, out);
+            }
+            collect_type_effects(ret, out);
+            collect_row_effects(row, out);
+        }
+        Type::TyTuple(elems) => {
+            for elem in elems {
+                collect_type_effects(elem, out);
+            }
+        }
+        Type::TyRecord(fields) => {
+            for value in fields.values() {
+                collect_type_effects(value, out);
+            }
+        }
+        Type::TyForall(_, _, body) => collect_type_effects(body, out),
+    }
+}
+
+/// Accumulates `row`'s effects (head and arity) plus any effects nested in
+/// their type arguments.
+fn collect_row_effects(row: &EffectRow, out: &mut BTreeMap<String, usize>) {
+    for effect in row.effects() {
+        out.insert(String::from(effect.head().as_str()), effect.args().len());
+        for arg in effect.args() {
+            collect_type_effects(arg, out);
+        }
     }
 }
 
@@ -241,17 +360,29 @@ impl Printer {
         let _ = write!(self.out, "{value}");
     }
 
-    /// Appends a type, canonicalising its variables through `map`.
-    fn push_type(&mut self, ty: &Type, map: &mut VarMap) {
-        self.push_display(&canonical_type(ty, map));
+    /// Appends a type, canonicalising its type and row variables through the
+    /// per-signature `vars`/`rows` maps.
+    fn push_type(&mut self, ty: &Type, vars: &mut VarMap, rows: &mut RowMap) {
+        self.push_display(&canonical_type(ty, vars, rows));
     }
 
-    /// Renders a module: its name, then its declarations separated by blank
+    /// Renders a module: its name, synthesised `effect` declarations for every
+    /// effect the body references, then the declarations separated by blank
     /// lines.
+    ///
+    /// Effect declarations are not IR nodes (only the rows on functions are),
+    /// so the printer reconstructs them from usage. Without this the printed
+    /// source would name effects it never declares and fail to re-check,
+    /// breaking the round-trip property.
     fn module(&mut self, module: &IrModule) {
         self.push("module ");
         self.push(&module.name);
         self.push("\n");
+        for (head, arity) in collect_effects(module) {
+            self.push("\n");
+            self.effect_decl(&head, arity);
+            self.push("\n");
+        }
         for decl in &module.declarations {
             self.push("\n");
             match decl {
@@ -263,11 +394,29 @@ impl Printer {
         }
     }
 
+    /// `effect Head` or `effect Head<t0, …>`. Parameter names are synthesised
+    /// (the IR records only the arity, which is all re-checking needs).
+    fn effect_decl(&mut self, head: &str, arity: usize) {
+        self.push("effect ");
+        self.push(head);
+        if arity > 0 {
+            self.push("<");
+            for i in 0..arity {
+                if i > 0 {
+                    self.push(", ");
+                }
+                let _ = write!(self.out, "t{i}");
+            }
+            self.push(">");
+        }
+    }
+
     /// `fn name(params) → ret = body`. The return annotation is omitted when
     /// the type is not expressible (a record or unit), and the empty effect
     /// row is elided.
     fn fn_def(&mut self, f: &IrFnDef) {
         let mut vars = VarMap::new();
+        let mut rows = RowMap::new();
         self.push("fn ");
         self.push(&f.name);
         self.push("(");
@@ -277,12 +426,19 @@ impl Printer {
             }
             self.push(&param.name);
             self.push(": ");
-            self.push_type(&param.ty, &mut vars);
+            self.push_type(&param.ty, &mut vars, &mut rows);
         }
         self.push(")");
         if is_expressible(&f.return_type) {
             self.push(" \u{2192} ");
-            self.push_type(&f.return_type, &mut vars);
+            self.push_type(&f.return_type, &mut vars, &mut rows);
+        }
+        // A non-empty effect row prints after the return type, sharing the
+        // signature's variable numbering so a row variable that also appears in
+        // a parameter type renders with the same letter.
+        if !f.effect_row.is_empty() {
+            self.push(" ! ");
+            self.push_display(&canonical_effect_row(&f.effect_row, &mut vars, &mut rows));
         }
         self.push(" = ");
         self.expr(&f.body, PREC_LOW);
@@ -326,22 +482,23 @@ impl Printer {
     /// the surface grammar requires.
     fn extern_ref(&mut self, e: &IrExternRef) {
         let mut vars = VarMap::new();
+        let mut rows = RowMap::new();
         self.push("extern fn ");
         self.push(&e.name);
         self.push("(");
         let body = match &e.ty {
-            Type::TyForall(_, inner) => inner.as_ref(),
+            Type::TyForall(_, _, inner) => inner.as_ref(),
             other => other,
         };
         let ret = match body {
-            Type::TyFn(params, ret) => {
+            Type::TyFn(params, ret, _) => {
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
                         self.push(", ");
                     }
                     let _ = write!(self.out, "p{i}");
                     self.push(": ");
-                    self.push_type(param, &mut vars);
+                    self.push_type(param, &mut vars, &mut rows);
                 }
                 ret.as_ref()
             }
@@ -351,7 +508,7 @@ impl Printer {
         };
         self.push(")");
         self.push(" \u{2192} ");
-        self.push_type(ret, &mut vars);
+        self.push_type(ret, &mut vars, &mut rows);
     }
 
     /// Renders `expr`, wrapping it in parentheses when its precedence is below

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 550
+expression: "check_str(\"effect Log\\n\\\n         effect Spawn\\n\\\n         fn worker(x: Int) -> Int ! {Spawn, Log} = x\")"
+---
+worker : Int → Int ! {Log, Spawn}

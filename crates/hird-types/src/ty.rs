@@ -8,6 +8,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt;
 
+use crate::effect::{Effect, EffectRow, RowVar};
 use crate::name::{Label, Name};
 
 /// A semantic type.
@@ -22,18 +23,19 @@ pub enum Type {
     TyVar(u32),
     /// Type constructor applied to zero or more arguments.
     TyCon(Name, Vec<Self>),
-    /// Function from a parameter list to a result. Arity is semantic — BEAM
-    /// functions are n-ary and there is no auto-currying — so `(A, B) → C`
-    /// and `A → (B → C)` are distinct types.
-    TyFn(Vec<Self>, Box<Self>),
+    /// Function from a parameter list to a result, carrying the effect row the
+    /// function performs. Arity is semantic — BEAM functions are n-ary and
+    /// there is no auto-currying — so `(A, B) → C` and `A → (B → C)` are
+    /// distinct types. A pure function carries the empty row.
+    TyFn(Vec<Self>, Box<Self>, EffectRow),
     /// Anonymous tuple.
     TyTuple(Vec<Self>),
     /// Structural record, keyed by label and held label-sorted.
     TyRecord(BTreeMap<Label, Self>),
-    /// Type quantified over the listed variables. Produced by generalisation
-    /// and consumed by instantiation; both are later passes, so this variant
-    /// is represented but never unified directly.
-    TyForall(Vec<u32>, Box<Self>),
+    /// Type quantified over the listed type variables and row variables.
+    /// Produced by generalisation and consumed by instantiation; both are later
+    /// passes, so this variant is represented but never unified directly.
+    TyForall(Vec<u32>, Vec<RowVar>, Box<Self>),
 }
 
 impl Type {
@@ -49,10 +51,17 @@ impl Type {
         Self::TyCon(name.into(), args)
     }
 
-    /// A function type `params -> ret` of arity `params.len()`.
+    /// A pure function type `params -> ret` of arity `params.len()` (empty
+    /// effect row).
     #[must_use]
     pub fn func(params: Vec<Self>, ret: Self) -> Self {
-        Self::TyFn(params, Box::new(ret))
+        Self::TyFn(params, Box::new(ret), EffectRow::empty())
+    }
+
+    /// A function type `params -> ret ! row` of arity `params.len()`.
+    #[must_use]
+    pub fn func_eff(params: Vec<Self>, ret: Self, row: EffectRow) -> Self {
+        Self::TyFn(params, Box::new(ret), row)
     }
 
     /// A tuple of the given element types.
@@ -104,33 +113,41 @@ impl Type {
         Self::con("Option", Vec::from([inner]))
     }
 
-    /// Structurally substitutes the variables listed in `map`, leaving every
-    /// other node unchanged. Quantifier bodies are closed under their binders,
-    /// so no capture occurs.
+    /// Structurally substitutes the type variables in `types` and the row
+    /// variables in `rows`, leaving every other node unchanged. Quantifier
+    /// bodies are closed under their binders, so no capture occurs.
+    ///
+    /// Substitution descends through function effect rows: the type arguments
+    /// of a parametric effect are rewritten through `types`, and an open row's
+    /// tail is rewritten through `rows`. This is how instantiation refreshes a
+    /// quantified row variable.
     #[must_use]
-    pub fn substitute(&self, map: &BTreeMap<u32, Self>) -> Self {
+    pub fn substitute(&self, types: &BTreeMap<u32, Self>, rows: &BTreeMap<RowVar, RowVar>) -> Self {
         match self {
-            Self::TyVar(v) => map.get(v).cloned().unwrap_or_else(|| self.clone()),
+            Self::TyVar(v) => types.get(v).cloned().unwrap_or_else(|| self.clone()),
             Self::TyCon(name, args) => Self::TyCon(
                 name.clone(),
-                args.iter().map(|a| a.substitute(map)).collect(),
+                args.iter().map(|a| a.substitute(types, rows)).collect(),
             ),
-            Self::TyFn(params, ret) => Self::TyFn(
-                params.iter().map(|p| p.substitute(map)).collect(),
-                Box::new(ret.substitute(map)),
+            Self::TyFn(params, ret, row) => Self::TyFn(
+                params.iter().map(|p| p.substitute(types, rows)).collect(),
+                Box::new(ret.substitute(types, rows)),
+                substitute_row(row, types, rows),
             ),
             Self::TyTuple(elems) => {
-                Self::TyTuple(elems.iter().map(|e| e.substitute(map)).collect())
+                Self::TyTuple(elems.iter().map(|e| e.substitute(types, rows)).collect())
             }
             Self::TyRecord(fields) => Self::TyRecord(
                 fields
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.substitute(map)))
+                    .map(|(k, v)| (k.clone(), v.substitute(types, rows)))
                     .collect(),
             ),
-            Self::TyForall(vars, body) => {
-                Self::TyForall(vars.clone(), Box::new(body.substitute(map)))
-            }
+            Self::TyForall(tvars, rvars, body) => Self::TyForall(
+                tvars.clone(),
+                rvars.clone(),
+                Box::new(body.substitute(types, rows)),
+            ),
         }
     }
 
@@ -142,38 +159,43 @@ impl Type {
     /// across distinct types.
     #[must_use]
     pub fn normalized(&self) -> Self {
-        let mut map = BTreeMap::new();
-        self.rename(&mut map)
+        let mut types = BTreeMap::new();
+        let mut rows = BTreeMap::new();
+        self.rename(&mut types, &mut rows)
     }
 
-    /// Rewrites variables through `map`, assigning the next dense id to each
-    /// variable not yet mapped.
-    fn rename(&self, map: &mut BTreeMap<u32, u32>) -> Self {
-        /// The dense id for `var`, allocating it on first sight.
-        fn renumber(map: &mut BTreeMap<u32, u32>, var: u32) -> u32 {
-            let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
-            *map.entry(var).or_insert(next)
-        }
-
+    /// Rewrites type variables through `types` and row variables through `rows`,
+    /// assigning the next dense id to each variable not yet mapped. The two
+    /// kinds renumber in independent sequences, so a type variable and a row
+    /// variable never share an id (and so render with their own letters).
+    fn rename(&self, types: &mut BTreeMap<u32, u32>, rows: &mut BTreeMap<u32, u32>) -> Self {
         match self {
-            Self::TyVar(v) => Self::TyVar(renumber(map, *v)),
-            Self::TyCon(name, args) => {
-                Self::TyCon(name.clone(), args.iter().map(|a| a.rename(map)).collect())
-            }
-            Self::TyFn(params, ret) => Self::TyFn(
-                params.iter().map(|p| p.rename(map)).collect(),
-                Box::new(ret.rename(map)),
+            Self::TyVar(v) => Self::TyVar(renumber(types, *v)),
+            Self::TyCon(name, args) => Self::TyCon(
+                name.clone(),
+                args.iter().map(|a| a.rename(types, rows)).collect(),
             ),
-            Self::TyTuple(elems) => Self::TyTuple(elems.iter().map(|e| e.rename(map)).collect()),
+            Self::TyFn(params, ret, row) => Self::TyFn(
+                params.iter().map(|p| p.rename(types, rows)).collect(),
+                Box::new(ret.rename(types, rows)),
+                rename_row(row, types, rows),
+            ),
+            Self::TyTuple(elems) => {
+                Self::TyTuple(elems.iter().map(|e| e.rename(types, rows)).collect())
+            }
             Self::TyRecord(fields) => Self::TyRecord(
                 fields
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.rename(map)))
+                    .map(|(k, v)| (k.clone(), v.rename(types, rows)))
                     .collect(),
             ),
-            Self::TyForall(vars, body) => {
-                let vars = vars.iter().map(|v| renumber(map, *v)).collect();
-                Self::TyForall(vars, Box::new(body.rename(map)))
+            Self::TyForall(tvars, rvars, body) => {
+                let tvars = tvars.iter().map(|v| renumber(types, *v)).collect();
+                let rvars = rvars
+                    .iter()
+                    .map(|v| RowVar::new(renumber(rows, v.index())))
+                    .collect();
+                Self::TyForall(tvars, rvars, Box::new(body.rename(types, rows)))
             }
         }
     }
@@ -198,7 +220,7 @@ impl Type {
                 }
                 Ok(())
             }
-            Self::TyFn(params, ret) => {
+            Self::TyFn(params, ret, row) => {
                 if fn_operand {
                     f.write_str("(")?;
                 }
@@ -215,6 +237,11 @@ impl Type {
                 }
                 f.write_str(" \u{2192} ")?;
                 ret.write(f, true)?;
+                // The empty row is elided; a non-empty one prints `! {…}`.
+                if !row.is_empty() {
+                    f.write_str(" ! ")?;
+                    fmt::Display::fmt(row, f)?;
+                }
                 if fn_operand {
                     f.write_str(")")?;
                 }
@@ -245,13 +272,22 @@ impl Type {
                 }
                 f.write_str(" }")
             }
-            Self::TyForall(vars, body) => {
+            Self::TyForall(tvars, rvars, body) => {
                 f.write_str("\u{2200}")?;
-                for (i, var) in vars.iter().enumerate() {
-                    if i > 0 {
+                let mut first = true;
+                for var in tvars {
+                    if !first {
                         f.write_str(" ")?;
                     }
+                    first = false;
                     write_var(f, *var)?;
+                }
+                for var in rvars {
+                    if !first {
+                        f.write_str(" ")?;
+                    }
+                    first = false;
+                    fmt::Display::fmt(var, f)?;
                 }
                 f.write_str(". ")?;
                 body.write(f, false)
@@ -263,6 +299,72 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write(f, false)
+    }
+}
+
+/// The dense id for `var`, allocating the next unused one on first sight.
+fn renumber(map: &mut BTreeMap<u32, u32>, var: u32) -> u32 {
+    let next = u32::try_from(map.len()).unwrap_or(u32::MAX);
+    *map.entry(var).or_insert(next)
+}
+
+/// Substitutes a function's effect row: each parametric effect's type arguments
+/// through `types`, and the tail row variable through `rows`. Named effects and
+/// a closed tail pass through unchanged.
+fn substitute_row(
+    row: &EffectRow,
+    types: &BTreeMap<u32, Type>,
+    rows: &BTreeMap<RowVar, RowVar>,
+) -> EffectRow {
+    let mut out = EffectRow::empty();
+    for effect in row.effects() {
+        out.insert(substitute_effect(effect, types, rows));
+    }
+    out.with_tail(row.tail().map(|rv| rows.get(&rv).copied().unwrap_or(rv)))
+}
+
+/// Substitutes one effect's type arguments through `types`/`rows`.
+fn substitute_effect(
+    effect: &Effect,
+    types: &BTreeMap<u32, Type>,
+    rows: &BTreeMap<RowVar, RowVar>,
+) -> Effect {
+    match effect {
+        Effect::Named(name) => Effect::Named(name.clone()),
+        Effect::Parametric(name, args) => Effect::Parametric(
+            name.clone(),
+            args.iter().map(|a| a.substitute(types, rows)).collect(),
+        ),
+    }
+}
+
+/// Renumbers a function's effect row for canonical display: each parametric
+/// effect's type arguments through `types`, and the tail row variable through
+/// the independent `rows` sequence.
+fn rename_row(
+    row: &EffectRow,
+    types: &mut BTreeMap<u32, u32>,
+    rows: &mut BTreeMap<u32, u32>,
+) -> EffectRow {
+    let mut out = EffectRow::empty();
+    for effect in row.effects() {
+        out.insert(rename_effect(effect, types, rows));
+    }
+    out.with_tail(row.tail().map(|rv| RowVar::new(renumber(rows, rv.index()))))
+}
+
+/// Renumbers one effect's type arguments through `types`/`rows`.
+fn rename_effect(
+    effect: &Effect,
+    types: &mut BTreeMap<u32, u32>,
+    rows: &mut BTreeMap<u32, u32>,
+) -> Effect {
+    match effect {
+        Effect::Named(name) => Effect::Named(name.clone()),
+        Effect::Parametric(name, args) => Effect::Parametric(
+            name.clone(),
+            args.iter().map(|a| a.rename(types, rows)).collect(),
+        ),
     }
 }
 
@@ -400,7 +502,7 @@ mod tests {
     #[test]
     fn forall_renders_with_binder() {
         let body = Type::func(vec![Type::var(0)], Type::var(1));
-        let ty = Type::TyForall(vec![0], alloc::boxed::Box::new(body));
+        let ty = Type::TyForall(vec![0], vec![], alloc::boxed::Box::new(body));
         assert_eq!(format!("{ty}"), "\u{2200}a. a \u{2192} b");
     }
 
@@ -415,7 +517,7 @@ mod tests {
     #[test]
     fn normalized_assigns_forall_binders_first() {
         let body = Type::func(vec![Type::var(9)], Type::var(4));
-        let ty = Type::TyForall(vec![9], alloc::boxed::Box::new(body));
+        let ty = Type::TyForall(vec![9], vec![], alloc::boxed::Box::new(body));
         assert_eq!(format!("{}", ty.normalized()), "\u{2200}a. a \u{2192} b");
     }
 }

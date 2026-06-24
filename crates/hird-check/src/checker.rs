@@ -9,12 +9,15 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use hird_ast::{AstNode, Decl, ExternDecl, FnDecl, SourceFile, SyntaxNode, TypeDecl};
+use hird_ast::{
+    AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, SourceFile, SyntaxNode, TypeDecl,
+};
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{Name, Subst, Type, unify};
+use hird_types::{EffectRow, Name, Subst, Type, unify};
 
 use crate::diag::{CheckCode, CheckDiagnostic};
+use crate::elaborate::Scope;
 use crate::env::Env;
 use crate::program::{ExportedType, ModuleInterface};
 use crate::registry::{CtorInfo, Registry};
@@ -40,6 +43,11 @@ pub(crate) struct Checker {
     pub(crate) diags: Vec<CheckDiagnostic>,
     /// Per-node types, recorded raw and resolved in [`Checker::finish`].
     pub(crate) types: Vec<(NodeKey, Type)>,
+    /// Each function node's elaborated effect row, recorded raw and resolved in
+    /// [`Checker::finish_with_interface`]. Shares the body check's variable
+    /// identities, so a row variable in a parameter type and the function's row
+    /// resolve to one variable.
+    effect_rows: Vec<(NodeKey, EffectRow)>,
     /// Top-level bindings in registration order, resolved in
     /// [`Checker::finish_with_interface`].
     bindings: Vec<(String, Type)>,
@@ -78,6 +86,7 @@ impl Checker {
             registry,
             diags: Vec::new(),
             types: Vec::new(),
+            effect_rows: Vec::new(),
             bindings: Vec::new(),
             source_id,
             current_module: None,
@@ -107,15 +116,24 @@ impl Checker {
         let mut type_decls = Vec::new();
         let mut fn_decls = Vec::new();
         let mut extern_decls = Vec::new();
+        let mut effect_decls = Vec::new();
         for decl in file.declarations() {
             match decl {
                 Decl::Type(d) => type_decls.push(d),
                 Decl::Fn(d) => fn_decls.push(d),
                 Decl::Extern(d) => extern_decls.push(d),
-                // Modules and imports are the module system's pass; effects,
-                // tools, actors, and supervisors are later phases.
+                Decl::Effect(d) => effect_decls.push(d),
+                // Modules and imports are the module system's pass; tools,
+                // actors, and supervisors are later phases.
                 _ => {}
             }
+        }
+
+        // Effects are registered before anything elaborates a signature, so an
+        // effect annotation can reference any declared effect regardless of
+        // declaration order.
+        for decl in &effect_decls {
+            self.register_effect(decl);
         }
 
         for decl in &fn_decls {
@@ -284,6 +302,16 @@ impl Checker {
         }
     }
 
+    // ── effect declarations ─────────────────────────────────────
+
+    /// Registers an effect declaration's name and type-parameter count, so
+    /// effect annotations can resolve and arity-check it.
+    fn register_effect(&mut self, decl: &EffectDecl) {
+        let Some(name) = decl.name() else { return };
+        let arity = decl.type_params().count();
+        self.registry.declare_effect(Name::new(name), arity);
+    }
+
     // ── type declarations ───────────────────────────────────────
 
     /// Registers a type declaration's name, arity, and constructor list.
@@ -322,12 +350,12 @@ impl Checker {
         };
         let owner = Name::new(type_name);
         let opaque = decl.is_opaque();
-        let mut scope = BTreeMap::new();
+        let mut scope = Scope::new();
         self.subst.enter_level();
         let mut param_args = Vec::new();
         for param in distinct_params(decl) {
             let ty = self.subst.fresh_type();
-            scope.insert(param, ty.clone());
+            scope.insert_type(param, ty.clone());
             param_args.push(ty);
         }
         let result_ty = Type::con(type_name, param_args);
@@ -397,7 +425,8 @@ impl Checker {
         for param in &params {
             param_types.push(param.ty().expect("checked above"));
         }
-        let scheme = self.signature_scheme(&param_types, &ret)?;
+        // Externs have no effect annotation in the grammar; their row is empty.
+        let scheme = self.signature_scheme(&param_types, &ret, None)?;
         self.env.insert_root(name, scheme.clone());
         self.types
             .push((NodeKey::of_node(decl.syntax()), scheme.clone()));
@@ -415,15 +444,18 @@ impl Checker {
         )
     }
 
-    /// Elaborates a full signature (every parameter type plus the return
-    /// type) into a generalised scheme. Surface type variables are implicitly
-    /// quantified.
+    /// Elaborates a full signature — every parameter type, the return type, and
+    /// the optional effect annotation — into a generalised scheme. Surface type
+    /// and row variables are implicitly quantified; they share one scope, so a
+    /// row variable named in both a parameter type and the effect row is the
+    /// same variable.
     fn signature_scheme(
         &mut self,
         params: &[hird_ast::TypeExpr],
         ret: &hird_ast::TypeExpr,
+        effect_ann: Option<&EffectAnn>,
     ) -> Checked<Type> {
-        let mut scope = BTreeMap::new();
+        let mut scope = Scope::new();
         self.subst.enter_level();
         let mut tys = Vec::new();
         let mut result = Ok(());
@@ -440,9 +472,16 @@ impl Checker {
             Ok(()) => self.elaborate_fresh(ret, &mut scope),
             Err(a) => Err(a),
         };
+        // The row is elaborated in the same scope and level as the types, so its
+        // row variables generalise alongside them.
+        let row = match (&ret_ty, effect_ann) {
+            (Ok(_), Some(ann)) => self.elaborate_row_fresh(ann, &mut scope),
+            _ => Ok(EffectRow::empty()),
+        };
         self.subst.exit_level();
         let ret_ty = ret_ty?;
-        Ok(self.subst.generalize(&Type::func(tys, ret_ty)))
+        let row = row?;
+        Ok(self.subst.generalize(&Type::func_eff(tys, ret_ty, row)))
     }
 
     // ── functions ───────────────────────────────────────────────
@@ -468,7 +507,7 @@ impl Checker {
             };
             let params: Vec<_> = decl.params().filter_map(|p| p.ty()).collect();
             let ret = decl.return_type().expect("fully annotated");
-            match self.signature_scheme(&params, &ret) {
+            match self.signature_scheme(&params, &ret, decl.effect_ann().as_ref()) {
                 Ok(scheme) => {
                     self.env.insert_root(name, scheme.clone());
                     self.types
@@ -526,7 +565,7 @@ impl Checker {
         let Some(body) = decl.body() else {
             return Ok(());
         };
-        let mut scope = BTreeMap::new();
+        let mut scope = Scope::new();
         let params: Vec<_> = decl.params().collect();
         let mut param_tys = Vec::new();
         for param in &params {
@@ -535,6 +574,10 @@ impl Checker {
         }
         let ret = decl.return_type().expect("fully annotated");
         let ret_ty = self.elaborate_skolem(&ret, &mut scope)?;
+        // Record the row in the same scope as the parameters so the IR shares
+        // their row-variable identities. The annotation is already known valid
+        // (its scheme elaborated cleanly), so this cannot add a diagnostic.
+        self.record_fn_row(decl, &mut scope);
 
         self.env.push_scope();
         for (param, ty) in params.iter().zip(&param_tys) {
@@ -547,13 +590,26 @@ impl Checker {
         self.unify_at(&ret_ty, &body_ty, span)
     }
 
+    /// Elaborates and records a function's declared effect row (if any) into the
+    /// side table, reusing `scope` so a row variable shared with a parameter
+    /// type keeps one identity. On an elaboration error the diagnostic is
+    /// already recorded and the function's row is simply omitted from the IR.
+    fn record_fn_row(&mut self, decl: &FnDecl, scope: &mut Scope) {
+        if let Some(ann) = decl.effect_ann()
+            && let Ok(row) = self.elaborate_row_fresh(&ann, scope)
+        {
+            self.effect_rows
+                .push((NodeKey::of_node(decl.syntax()), row));
+        }
+    }
+
     /// Infers a function body, threading partial annotations as hints, and
     /// unifies the result with the component placeholder.
     fn check_inferred_fn(&mut self, decl: &FnDecl, placeholder: &Type) -> Checked<()> {
         let Some(body) = decl.body() else {
             return Ok(());
         };
-        let mut scope = BTreeMap::new();
+        let mut scope = Scope::new();
         let params: Vec<_> = decl.params().collect();
         let mut param_tys = Vec::new();
         for param in &params {
@@ -563,6 +619,9 @@ impl Checker {
             };
             param_tys.push(ty);
         }
+        // An inferred function carries no row in its scheme (body inference is a
+        // later pass), but a declared row is still recorded for the IR.
+        self.record_fn_row(decl, &mut scope);
         self.env.push_scope();
         for (param, ty) in params.iter().zip(&param_tys) {
             self.bind_param(param, ty.clone());
@@ -626,6 +685,11 @@ impl Checker {
             .iter()
             .map(|(key, ty)| (*key, self.subst.resolve(ty)))
             .collect();
+        let effect_rows = self
+            .effect_rows
+            .iter()
+            .map(|(key, row)| (*key, self.subst.resolve_row(row)))
+            .collect();
         let bindings: BTreeMap<String, Type> = self
             .bindings
             .iter()
@@ -678,6 +742,7 @@ impl Checker {
             types,
             bindings,
             adts,
+            effect_rows,
             diagnostics: self.diags,
         };
         (checked, interface)

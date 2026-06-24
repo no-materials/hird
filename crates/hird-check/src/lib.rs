@@ -16,7 +16,10 @@
 //! isolated per declaration: a type error stops that declaration's body
 //! check but the rest of the file is still checked.
 //!
-//! Effect annotations (`! { … }`) are parsed but ignored by this pass.
+//! Effect annotations (`! { … }`) are elaborated into effect rows: a
+//! function's declared row is carried on its scheme and recorded for the IR.
+//! Inferring a body's actual effects and checking them against the annotation
+//! is a later pass.
 //!
 //! # Quick start
 //!
@@ -55,7 +58,7 @@ use core::fmt;
 use hird_ast::{Expr, SourceFile, SyntaxNode, SyntaxToken};
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{Name, Type};
+use hird_types::{EffectRow, Name, Type};
 
 pub use diag::{CheckCode, CheckDiagnostic, RelatedSpan, Severity};
 pub use program::{CheckedProgram, check_program};
@@ -153,6 +156,11 @@ pub struct CheckedFile {
     /// Declared ADTs (including the built-in `Bool`) and their constructor
     /// names in declaration order.
     pub adts: BTreeMap<Name, Vec<Name>>,
+    /// Each function declaration's elaborated effect row, keyed by its CST
+    /// node. Resolved against the same elaboration as the function's parameter
+    /// types, so row variables shared between a parameter and the function's
+    /// own row keep one identity. Absent for functions with no declared row.
+    pub effect_rows: BTreeMap<NodeKey, EffectRow>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
 }
@@ -162,6 +170,12 @@ impl CheckedFile {
     #[must_use]
     pub fn type_at(&self, key: NodeKey) -> Option<&Type> {
         self.types.get(&key)
+    }
+
+    /// The elaborated effect row recorded for the function node `key`, if any.
+    #[must_use]
+    pub fn effect_row_at(&self, key: NodeKey) -> Option<&EffectRow> {
+        self.effect_rows.get(&key)
     }
 
     /// Whether any diagnostic is an error.

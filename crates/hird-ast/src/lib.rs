@@ -290,6 +290,14 @@ impl FnDecl {
     pub fn body(&self) -> Option<Expr> {
         expr_after(&self.0, SyntaxKind::EQ)
     }
+
+    /// The declared effect-row annotation (`! { … }`), if present. This is the
+    /// function's own row; annotations nested inside parameter types are
+    /// reached through those types.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
+    }
 }
 
 ast_node! {
@@ -350,6 +358,17 @@ impl EffectDecl {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The type parameter names (`<a, b>`), in order.
+    pub fn type_params(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
+            .flat_map(|list| list.children_with_tokens())
+            .filter_map(|e| e.into_token())
+            .filter(|t| t.kind() == SyntaxKind::IDENT)
+            .map(|t| t.text())
     }
 }
 
@@ -908,8 +927,8 @@ impl AppType {
 }
 
 ast_node! {
-    /// A function type (`A → B`). Effect annotations on the arrow are not
-    /// projected; reach them via [`AstNode::syntax`].
+    /// A function type (`A → B`), optionally carrying an effect-row annotation
+    /// (`A → B ! { … }`).
     FnType => FN_TYPE
 }
 
@@ -926,6 +945,12 @@ impl FnType {
     #[must_use]
     pub fn return_type(&self) -> Option<TypeExpr> {
         types(&self.0).last()
+    }
+
+    /// The effect-row annotation on the arrow (`A → B ! { … }`), if present.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
     }
 }
 
@@ -1033,6 +1058,22 @@ impl TypeExpr {
             Self::Paren(n) => Some(n.syntax()),
             Self::Name(_) => None,
         }
+    }
+}
+
+// ── effect annotations ───────────────────────────────────────────
+
+ast_node! {
+    /// An effect-row annotation (`! { E1, E2 }`).
+    EffectAnn => EFFECT_ANN
+}
+
+impl EffectAnn {
+    /// The annotated effects, in order. Each is a type expression: a bare
+    /// lowercase name is a row variable, a `PascalCase` name or application is
+    /// an effect (`Log`, `Tool<X>`). The checker classifies them.
+    pub fn effects(&self) -> impl Iterator<Item = TypeExpr> + '_ {
+        types(&self.0)
     }
 }
 
