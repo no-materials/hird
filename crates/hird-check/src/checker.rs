@@ -40,7 +40,7 @@ pub(crate) type Checked<T> = Result<T, Aborted>;
 /// row fails to match the declared one, so the diagnostic can point at the call
 /// that brought in the offending effect rather than the whole signature. The
 /// effect's type arguments carry the capability the effect is linked to, so the
-/// pair is the capability-to-call provenance an audit graph reconstructs later.
+/// pair records the capability-to-call provenance.
 pub(crate) struct EffectIntro {
     /// The effect introduced (resolved when matched against an offending one).
     effect: Effect,
@@ -692,8 +692,8 @@ impl Checker {
         let span = expr_span(&body, self.source_id);
         // Empty when `!` is absent, so an effectful top-level function that
         // omits its effects fails the equality check.
-        if let Ok(declared) = &declared {
-            self.check_effect_row(declared, &inferred, span);
+        if let Ok(declared) = declared {
+            self.check_effect_row(&declared, &inferred, span);
         }
         // The scheme carries the inferred row, generalised alongside the type.
         let fn_ty = Type::func_eff(param_tys, body_ty, inferred);
