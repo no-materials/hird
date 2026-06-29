@@ -53,6 +53,11 @@ pub(crate) struct Scope {
     types: BTreeMap<String, Type>,
     /// Row-variable names to their allocated row variables.
     rows: BTreeMap<String, RowVar>,
+    /// Value-parameter names to their elaborated types, for the
+    /// capability-effect linkage: a lowercase argument of a parametric effect
+    /// (`EtsRead<t>`) that names a value parameter resolves to that
+    /// parameter's type rather than a fresh type variable.
+    caps: BTreeMap<String, Type>,
 }
 
 impl Scope {
@@ -65,6 +70,14 @@ impl Scope {
     /// parameters, fixed before elaboration begins).
     pub(crate) fn insert_type(&mut self, name: String, ty: Type) {
         self.types.insert(name, ty);
+    }
+
+    /// Records a value parameter's name and elaborated type so a parametric
+    /// effect can reference it as a capability (`EtsRead<t>`). Inserted as each
+    /// parameter is elaborated, so a later parameter (or the function's own
+    /// row) may reference an earlier capability parameter.
+    pub(crate) fn insert_cap(&mut self, name: &str, ty: Type) {
+        self.caps.insert(String::from(name), ty);
     }
 }
 
@@ -270,7 +283,7 @@ impl Checker {
                 }
                 let mut args = Vec::new();
                 for arg in app.args() {
-                    args.push(self.elaborate(&arg, scope, mode)?);
+                    args.push(self.elaborate_effect_arg(&arg, scope, mode)?);
                 }
                 self.named_effect(name, args, span).map(RowEntry::Effect)
             }
@@ -284,6 +297,27 @@ impl Checker {
                 ))
             }
         }
+    }
+
+    /// Elaborates one type argument of a parametric effect. A bare lowercase
+    /// name that matches a value parameter in scope resolves to that
+    /// parameter's type — the capability-effect linkage, where `EtsRead<t>`
+    /// carries the type of capability `t` (`EtsRead<Table<…>>`). Anything else
+    /// is an ordinary type, so an effect generic in a type still uses a fresh
+    /// variable.
+    fn elaborate_effect_arg(
+        &mut self,
+        arg: &TypeExpr,
+        scope: &mut Scope,
+        mode: VarMode,
+    ) -> Checked<Type> {
+        if let TypeExpr::Name(name) = arg
+            && is_var_name(name.text())
+            && let Some(cap) = scope.caps.get(name.text())
+        {
+            return Ok(cap.clone());
+        }
+        self.elaborate(arg, scope, mode)
     }
 
     /// Builds an effect after checking it is declared and applied to the right

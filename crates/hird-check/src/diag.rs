@@ -90,6 +90,9 @@ pub enum CheckCode {
     C0028,
     /// An effect row lists more than one row variable.
     C0029,
+    /// A function's body performs effects its declared row omits, or declares
+    /// effects the body never performs (the rows are checked for equality).
+    C0030,
 }
 
 /// A secondary source location attached to a diagnostic.

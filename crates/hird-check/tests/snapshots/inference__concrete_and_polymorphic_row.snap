@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 683
+expression: "check_str(\"effect Log\\n\\\n         fn logged(g: a -> b ! {Log, r}, x: a) -> b ! {Log, r} = g(x)\")"
+---
+logged : ∀a b r. (a → b ! {Log | r}) → a → b ! {Log | r}

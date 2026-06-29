@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 612
+expression: "check_str(\"effect Log\\n\\\n         effect Spawn\\n\\\n         fn f(a: Int -> Int ! {Log}, b: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\\n\\\n           let x = a(0) in b(x)\")"
+---
+f : (Int → Int ! {Log}) → (Int → Int ! {Spawn}) → Int ! {Log, Spawn}

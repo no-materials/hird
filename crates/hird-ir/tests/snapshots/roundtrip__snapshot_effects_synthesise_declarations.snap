@@ -1,6 +1,6 @@
 ---
 source: crates/hird-ir/tests/roundtrip.rs
-assertion_line: 498
+assertion_line: 503
 expression: pretty_print(&module)
 ---
 module Eff
@@ -11,6 +11,6 @@ effect Tool<t0>
 
 type Repo = MkRepo
 
-fn read(x: Int) → Int ! {Log, Tool<Repo>} = x
+fn read(run: Int → Int ! {Log, Tool<Repo>}) → Int ! {Log, Tool<Repo>} = run(0)
 
 fn apply(g: a → b ! {r}, x: a) → b ! {r} = g(x)

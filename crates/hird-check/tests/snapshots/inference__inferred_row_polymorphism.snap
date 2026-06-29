@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 676
+expression: "check_str(r\"fn main() = let apply = \\g x -> g(x) in apply\")"
+---
+main : ∀a b r. () → ((a → b ! {r}) → a → b ! {r})

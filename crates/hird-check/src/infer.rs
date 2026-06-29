@@ -13,6 +13,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::mem;
 
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, IfExpr, LambdaExpr, LetExpr, MatchExpr, Pattern,
@@ -20,7 +21,7 @@ use hird_ast::{
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{Label, Type};
+use hird_types::{EffectRow, Label, Type};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
@@ -169,12 +170,20 @@ impl Checker {
             self.bind_value(name, ty.clone(), *span);
             param_tys.push(ty);
         }
-        let body_ty = match lambda.body() {
+        // A lambda is pure as an expression: its body's effects belong to its
+        // function type, not the enclosing row. Infer the body into a fresh
+        // accumulator, then restore the enclosing one — discarding the lambda's
+        // provenance, which the enclosing function never consults.
+        let saved_row = mem::take(&mut self.current_row);
+        let saved_prov = mem::take(&mut self.current_prov);
+        let body_res = match lambda.body() {
             Some(body) => self.infer_expr(&body),
             None => Err(Aborted),
         };
+        let body_row = mem::replace(&mut self.current_row, saved_row);
+        self.current_prov = saved_prov;
         self.env.pop_scope();
-        Ok(Type::func(param_tys, body_ty?))
+        Ok(Type::func_eff(param_tys, body_res?, body_row))
     }
 
     /// `if c then a else b` — `Bool` condition, unified branches.
@@ -379,7 +388,7 @@ impl Checker {
         }
         let app_span = node_span(app.syntax(), self.source_id);
         match self.subst.resolve(&callee_ty) {
-            Type::TyFn(params, ret, _) => {
+            Type::TyFn(params, ret, row) => {
                 if params.len() != arg_tys.len() {
                     return Err(self.error(
                         CheckCode::C0006,
@@ -395,12 +404,20 @@ impl Checker {
                     let span = expr_span(arg, self.source_id);
                     self.unify_at(param, arg_ty, span)?;
                 }
+                // The callee's effects become the caller's, recorded at this call.
+                self.add_effects(&row, app_span);
                 Ok(*ret)
             }
             _ => {
                 let ret = self.subst.fresh_type();
-                let fn_ty = Type::func(arg_tys, ret.clone());
+                // A not-yet-resolved callee gets a fresh effect-row variable, so
+                // applying it stays effect-polymorphic (the row is generalised
+                // for an interior function, or solved against the declared row
+                // of a top-level one) rather than forced pure.
+                let row = EffectRow::of_var(self.subst.fresh_row());
+                let fn_ty = Type::func_eff(arg_tys, ret.clone(), row.clone());
                 self.unify_at(&fn_ty, &callee_ty, app_span)?;
+                self.add_effects(&row, app_span);
                 Ok(ret)
             }
         }

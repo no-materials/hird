@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 693
+expression: "check_str(\"type Table<k, v, p> = MkTable\\n\\\n         effect EtsRead<t>\\n\\\n         fn query(\\n\\\n           t: Table<Int, String, Bool>,\\n\\\n           run: Table<Int, String, Bool> -> Int ! {EtsRead<t>}\\n\\\n         ) -> Int ! {EtsRead<t>} = run(t)\")"
+---
+MkTable : ∀a b c. Table<a, b, c>
+query : Table<Int, String, Bool> → (Table<Int, String, Bool> → Int ! {EtsRead<Table<Int, String, Bool>>}) → Int ! {EtsRead<Table<Int, String, Bool>>}

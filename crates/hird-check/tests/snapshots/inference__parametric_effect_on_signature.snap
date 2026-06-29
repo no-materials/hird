@@ -1,7 +1,7 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 560
-expression: "check_str(\"effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn read(x: Int) -> Int ! {Tool<Repo>} = x\")"
+assertion_line: 561
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn read(run: Int -> Int ! {Tool<Repo>}) -> Int ! {Tool<Repo>} = run(0)\")"
 ---
 MkRepo : Repo
-read : Int → Int ! {Tool<Repo>}
+read : (Int → Int ! {Tool<Repo>}) → Int ! {Tool<Repo>}

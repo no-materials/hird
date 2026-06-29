@@ -440,9 +440,10 @@ fn row_polymorphic_function() {
 
 #[test]
 fn single_named_effect() {
+    // The body performs its declared effect by applying an effectful parameter.
     assert_roundtrips(
         "effect Log\n\
-         fn log_it(x: Int) -> Int ! {Log} = x",
+         fn log_it(run: Int -> Int ! {Log}) -> Int ! {Log} = run(0)",
     );
 }
 
@@ -452,7 +453,7 @@ fn multiple_and_parametric_effects() {
         "effect Log\n\
          effect Tool<t>\n\
          type Repo = MkRepo\n\
-         fn read(x: Int) -> Int ! {Log, Tool<Repo>} = x",
+         fn read(run: Int -> Int ! {Log, Tool<Repo>}) -> Int ! {Log, Tool<Repo>} = run(0)",
     );
 }
 
@@ -495,7 +496,7 @@ fn snapshot_effects_synthesise_declarations() {
         "effect Log\n\
          effect Tool<t>\n\
          type Repo = MkRepo\n\
-         fn read(x: Int) -> Int ! {Log, Tool<Repo>} = x\n\
+         fn read(run: Int -> Int ! {Log, Tool<Repo>}) -> Int ! {Log, Tool<Repo>} = run(0)\n\
          fn apply(g: a -> b ! {r}, x: a) -> b ! {r} = g(x)",
         "Eff",
     );

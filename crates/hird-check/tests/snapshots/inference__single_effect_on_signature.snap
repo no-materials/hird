@@ -1,6 +1,6 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 541
-expression: "check_str(\"effect Log\\n\\\n         fn log_it(x: Int) -> Int ! {Log} = x\")"
+assertion_line: 542
+expression: "check_str(\"effect Log\\n\\\n         fn log_it(run: Int -> Int ! {Log}) -> Int ! {Log} = run(0)\")"
 ---
-log_it : Int → Int ! {Log}
+log_it : (Int → Int ! {Log}) → Int ! {Log}

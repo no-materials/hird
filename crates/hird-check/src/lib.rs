@@ -16,10 +16,13 @@
 //! isolated per declaration: a type error stops that declaration's body
 //! check but the rest of the file is still checked.
 //!
-//! Effect annotations (`! { … }`) are elaborated into effect rows: a
-//! function's declared row is carried on its scheme and recorded for the IR.
-//! Inferring a body's actual effects and checking them against the annotation
-//! is a later pass.
+//! Effect annotations (`! { … }`) are elaborated into effect rows, and a
+//! function body's effects are inferred by accumulating the rows of the calls
+//! it makes (a lambda's effects attach to its own function type). A top-level
+//! function's inferred row must equal its declared row — the annotation, or the
+//! empty row when `!` is absent — so an effectful function that under-declares
+//! is rejected; interior let-bound functions infer their row and generalise it.
+//! Capability effects (`EtsRead<t>`) carry the type of the named parameter.
 //!
 //! # Quick start
 //!

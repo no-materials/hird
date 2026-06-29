@@ -8,13 +8,15 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::mem;
 
 use hird_ast::{
-    AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, SourceFile, SyntaxNode, TypeDecl,
+    AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, Param, SourceFile, SyntaxNode,
+    TypeDecl,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{EffectRow, Name, Subst, Type, unify};
+use hird_types::{Effect, EffectRow, Name, Subst, Type, TypeError, unify, unify_row};
 
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
@@ -30,6 +32,21 @@ pub(crate) struct Aborted;
 
 /// Result of a checking step within one declaration.
 pub(crate) type Checked<T> = Result<T, Aborted>;
+
+/// One effect introduced while inferring a function body, paired with the span
+/// of the application that introduced it.
+///
+/// Recorded during the body walk and consulted when a body's inferred effect
+/// row fails to match the declared one, so the diagnostic can point at the call
+/// that brought in the offending effect rather than the whole signature. The
+/// effect's type arguments carry the capability the effect is linked to, so the
+/// pair is the capability-to-call provenance an audit graph reconstructs later.
+pub(crate) struct EffectIntro {
+    /// The effect introduced (resolved when matched against an offending one).
+    effect: Effect,
+    /// Span of the introducing application.
+    span: Span,
+}
 
 /// Mutable state of one checking run.
 pub(crate) struct Checker {
@@ -48,6 +65,15 @@ pub(crate) struct Checker {
     /// identities, so a row variable in a parameter type and the function's row
     /// resolve to one variable.
     effect_rows: Vec<(NodeKey, EffectRow)>,
+    /// The effect row accumulated while inferring the current function or lambda
+    /// body — the union of every effect its applications perform. Reset at each
+    /// function body and saved/restored across lambda boundaries (a lambda's
+    /// effects belong to its function type, not the enclosing row).
+    pub(crate) current_row: EffectRow,
+    /// Provenance for [`Checker::current_row`]: which call introduced each
+    /// effect. Cleared alongside the accumulator and consulted to place the
+    /// declared-vs-inferred mismatch diagnostic at the offending call.
+    pub(crate) current_prov: Vec<EffectIntro>,
     /// Top-level bindings in registration order, resolved in
     /// [`Checker::finish_with_interface`].
     bindings: Vec<(String, Type)>,
@@ -87,6 +113,8 @@ impl Checker {
             diags: Vec::new(),
             types: Vec::new(),
             effect_rows: Vec::new(),
+            current_row: EffectRow::empty(),
+            current_prov: Vec::new(),
             bindings: Vec::new(),
             source_id,
             current_module: None,
@@ -421,12 +449,8 @@ impl Checker {
         if !annotated {
             return Err(self.incomplete_extern(name, decl.syntax()));
         }
-        let mut param_types = Vec::new();
-        for param in &params {
-            param_types.push(param.ty().expect("checked above"));
-        }
         // Externs have no effect annotation in the grammar; their row is empty.
-        let scheme = self.signature_scheme(&param_types, &ret, None)?;
+        let scheme = self.signature_scheme(&params, &ret, None)?;
         self.env.insert_root(name, scheme.clone());
         self.types
             .push((NodeKey::of_node(decl.syntax()), scheme.clone()));
@@ -448,10 +472,12 @@ impl Checker {
     /// the optional effect annotation — into a generalised scheme. Surface type
     /// and row variables are implicitly quantified; they share one scope, so a
     /// row variable named in both a parameter type and the effect row is the
-    /// same variable.
+    /// same variable. Each parameter's name is recorded as a capability so the
+    /// effect row may reference it (`EtsRead<t>`); callers pass fully annotated
+    /// parameters, so every `ty()` is present.
     fn signature_scheme(
         &mut self,
-        params: &[hird_ast::TypeExpr],
+        params: &[Param],
         ret: &hird_ast::TypeExpr,
         effect_ann: Option<&EffectAnn>,
     ) -> Checked<Type> {
@@ -460,8 +486,17 @@ impl Checker {
         let mut tys = Vec::new();
         let mut result = Ok(());
         for param in params {
-            match self.elaborate_fresh(param, &mut scope) {
-                Ok(ty) => tys.push(ty),
+            let Some(ty_expr) = param.ty() else {
+                result = Err(Aborted);
+                break;
+            };
+            match self.elaborate_fresh(&ty_expr, &mut scope) {
+                Ok(ty) => {
+                    if let Some(name) = param.name() {
+                        scope.insert_cap(name, ty.clone());
+                    }
+                    tys.push(ty);
+                }
                 Err(a) => {
                     result = Err(a);
                     break;
@@ -505,7 +540,7 @@ impl Checker {
                 sig_ok[i] = false;
                 continue;
             };
-            let params: Vec<_> = decl.params().filter_map(|p| p.ty()).collect();
+            let params: Vec<_> = decl.params().collect();
             let ret = decl.return_type().expect("fully annotated");
             match self.signature_scheme(&params, &ret, decl.effect_ann().as_ref()) {
                 Ok(scheme) => {
@@ -570,41 +605,57 @@ impl Checker {
         let mut param_tys = Vec::new();
         for param in &params {
             let ty_expr = param.ty().expect("fully annotated");
-            param_tys.push(self.elaborate_skolem(&ty_expr, &mut scope)?);
+            let ty = self.elaborate_skolem(&ty_expr, &mut scope)?;
+            if let Some(name) = param.name() {
+                scope.insert_cap(name, ty.clone());
+            }
+            param_tys.push(ty);
         }
         let ret = decl.return_type().expect("fully annotated");
         let ret_ty = self.elaborate_skolem(&ret, &mut scope)?;
-        // Record the row in the same scope as the parameters so the IR shares
-        // their row-variable identities. The annotation is already known valid
-        // (its scheme elaborated cleanly), so this cannot add a diagnostic.
-        self.record_fn_row(decl, &mut scope);
+        // The declared row shares the parameters' scope, so a row variable named
+        // in both, or a capability the row links to, keeps one identity. The
+        // annotation is already known valid (its scheme elaborated cleanly), so
+        // this cannot add a diagnostic.
+        let declared = self.declared_row(decl, &mut scope);
 
         self.env.push_scope();
         for (param, ty) in params.iter().zip(&param_tys) {
             self.bind_param(param, ty.clone());
         }
+        self.begin_effect_scope();
         let body_ty = self.infer_expr(&body);
+        let inferred = self.take_effect_row();
         self.env.pop_scope();
         let body_ty = body_ty?;
         let span = expr_span(&body, self.source_id);
-        self.unify_at(&ret_ty, &body_ty, span)
+        self.unify_at(&ret_ty, &body_ty, span)?;
+        // The body's inferred effects must equal the declared row.
+        if let Ok(declared) = declared {
+            self.check_effect_row(&declared, &inferred, span);
+        }
+        Ok(())
     }
 
-    /// Elaborates and records a function's declared effect row (if any) into the
-    /// side table, reusing `scope` so a row variable shared with a parameter
-    /// type keeps one identity. On an elaboration error the diagnostic is
-    /// already recorded and the function's row is simply omitted from the IR.
-    fn record_fn_row(&mut self, decl: &FnDecl, scope: &mut Scope) {
-        if let Some(ann) = decl.effect_ann()
-            && let Ok(row) = self.elaborate_row_fresh(&ann, scope)
-        {
-            self.effect_rows
-                .push((NodeKey::of_node(decl.syntax()), row));
-        }
+    /// Elaborates a function's declared effect row — the `! {…}` annotation, or
+    /// the empty row when `!` is absent — recording an annotated row for the IR
+    /// in the same `scope` as the parameters, so a shared row variable or a
+    /// linked capability keeps one identity, and returning it for the
+    /// declared-vs-inferred check. An elaboration error is already reported, so
+    /// the row is omitted from the IR and the equality check is skipped.
+    fn declared_row(&mut self, decl: &FnDecl, scope: &mut Scope) -> Checked<EffectRow> {
+        let Some(ann) = decl.effect_ann() else {
+            return Ok(EffectRow::empty());
+        };
+        let row = self.elaborate_row_fresh(&ann, scope)?;
+        self.effect_rows
+            .push((NodeKey::of_node(decl.syntax()), row.clone()));
+        Ok(row)
     }
 
     /// Infers a function body, threading partial annotations as hints, and
-    /// unifies the result with the component placeholder.
+    /// unifies the result with the component placeholder. The inferred effect
+    /// row is carried on the scheme and checked against the declared row.
     fn check_inferred_fn(&mut self, decl: &FnDecl, placeholder: &Type) -> Checked<()> {
         let Some(body) = decl.body() else {
             return Ok(());
@@ -617,16 +668,19 @@ impl Checker {
                 Some(ty_expr) => self.elaborate_fresh(&ty_expr, &mut scope)?,
                 None => self.subst.fresh_type(),
             };
+            if let Some(name) = param.name() {
+                scope.insert_cap(name, ty.clone());
+            }
             param_tys.push(ty);
         }
-        // An inferred function carries no row in its scheme (body inference is a
-        // later pass), but a declared row is still recorded for the IR.
-        self.record_fn_row(decl, &mut scope);
+        let declared = self.declared_row(decl, &mut scope);
         self.env.push_scope();
         for (param, ty) in params.iter().zip(&param_tys) {
             self.bind_param(param, ty.clone());
         }
+        self.begin_effect_scope();
         let body_ty = self.infer_expr(&body);
+        let inferred = self.take_effect_row();
         self.env.pop_scope();
         let mut body_ty = body_ty?;
         if let Some(ret) = decl.return_type() {
@@ -635,13 +689,20 @@ impl Checker {
             self.unify_at(&ret_ty, &body_ty, span)?;
             body_ty = ret_ty;
         }
-        let fn_ty = Type::func(param_tys, body_ty);
+        let span = expr_span(&body, self.source_id);
+        // Empty when `!` is absent, so an effectful top-level function that
+        // omits its effects fails the equality check.
+        if let Ok(declared) = &declared {
+            self.check_effect_row(declared, &inferred, span);
+        }
+        // The scheme carries the inferred row, generalised alongside the type.
+        let fn_ty = Type::func_eff(param_tys, body_ty, inferred);
         let span = node_span(decl.syntax(), self.source_id);
         self.unify_at(placeholder, &fn_ty, span)
     }
 
     /// Binds a parameter, warning on shadowing and recording its type.
-    fn bind_param(&mut self, param: &hird_ast::Param, ty: Type) {
+    fn bind_param(&mut self, param: &Param, ty: Type) {
         let Some(name) = param.name() else { return };
         self.types
             .push((NodeKey::of_node(param.syntax()), ty.clone()));
@@ -674,6 +735,100 @@ impl Checker {
             self.diags.push(CheckDiagnostic::from_type_error(&err));
             Aborted
         })
+    }
+
+    // ── effect inference ────────────────────────────────────────
+
+    /// Starts a fresh effect accumulator for a function or lambda body.
+    fn begin_effect_scope(&mut self) {
+        self.current_row = EffectRow::empty();
+        self.current_prov.clear();
+    }
+
+    /// Takes the accumulated body row, leaving an empty accumulator. Provenance
+    /// is left in place for the mismatch check that immediately follows.
+    fn take_effect_row(&mut self) -> EffectRow {
+        mem::take(&mut self.current_row)
+    }
+
+    /// Unions `row`'s effects into the current accumulator, recording each as
+    /// introduced by the call at `span`. Row tails merge so a row-polymorphic
+    /// callee's tail flows into the enclosing row; both inputs are resolved
+    /// first, so the merged tails are unbound representatives, never solved rows.
+    pub(crate) fn add_effects(&mut self, row: &EffectRow, span: Span) {
+        let added = self.subst.resolve_row(row);
+        if added.is_empty() {
+            return;
+        }
+        let mut acc = self.subst.resolve_row(&self.current_row);
+        for effect in added.effects() {
+            self.current_prov.push(EffectIntro {
+                effect: effect.clone(),
+                span,
+            });
+            acc.insert(effect.clone());
+        }
+        let tail = match (acc.tail(), added.tail()) {
+            (None, other) => other,
+            (Some(a), None) => Some(a),
+            (Some(a), Some(b)) => {
+                if a != b {
+                    // Two row-polymorphic callees: collapse their tails. Bare
+                    // row variables always unify, so this cannot fail.
+                    let _ = unify_row(
+                        &mut self.subst,
+                        &EffectRow::of_var(a),
+                        &EffectRow::of_var(b),
+                        span,
+                    );
+                }
+                Some(a)
+            }
+        };
+        self.current_row = acc.with_tail(tail);
+    }
+
+    /// Checks the body's inferred effect row against the declared row by row
+    /// unification (equality). A surplus or missing effect is reported against
+    /// the call that introduced the offending effect, falling back to `span`; an
+    /// argument-type clash between same-headed effects keeps the generic
+    /// rendering.
+    fn check_effect_row(&mut self, declared: &EffectRow, inferred: &EffectRow, span: Span) {
+        let Err(err) = unify_row(&mut self.subst, declared, inferred, span) else {
+            return;
+        };
+        match err {
+            TypeError::EffectMismatch { offending, .. } => {
+                let at = offending
+                    .as_ref()
+                    .and_then(|effect| self.intro_span(effect))
+                    .unwrap_or(span);
+                let declared = self.subst.resolve_row(declared);
+                let inferred = self.subst.resolve_row(inferred);
+                self.diags.push(CheckDiagnostic::error(
+                    CheckCode::C0030,
+                    at,
+                    format!("declared {declared} but body performs {inferred}"),
+                ));
+            }
+            other => self.diags.push(CheckDiagnostic::from_type_error(&other)),
+        }
+    }
+
+    /// The span of the application that introduced an effect equal (by resolved
+    /// form) to `effect`, from the current body's provenance.
+    fn intro_span(&self, effect: &Effect) -> Option<Span> {
+        let target = self.resolve_effect(effect);
+        self.current_prov
+            .iter()
+            .find(|intro| self.resolve_effect(&intro.effect) == target)
+            .map(|intro| intro.span)
+    }
+
+    /// Resolves an effect's type arguments, so two effects compare equal when
+    /// their arguments resolve equal despite differing unsolved variables.
+    fn resolve_effect(&self, effect: &Effect) -> Effect {
+        effect.map_args(|arg| self.subst.resolve(arg))
     }
 
     /// Assembles the result and the export interface: resolves recorded types,

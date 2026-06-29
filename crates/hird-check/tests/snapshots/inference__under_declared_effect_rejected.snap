@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 738
+expression: "check_str(\"effect Log\\n\\\n         fn f(run: Int -> Int ! {Log}) -> Int = run(0)\")"
+---
+f : (Int → Int ! {Log}) → Int
+error[C0030] 49..56: declared {} but body performs {Log}

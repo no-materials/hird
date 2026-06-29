@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 604
+expression: "check_str(r\"fn apply_pure(g: Int -> Int, x: Int) -> Int = g(x)\")"
+---
+apply_pure : (Int → Int) → Int → Int

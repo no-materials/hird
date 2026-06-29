@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+assertion_line: 706
+expression: "check_str(\"type Table<k, v, p> = MkTable\\n\\\n         effect EtsRead<t>\\n\\\n         fn query(\\n\\\n           t1: Table<Int, String, Bool>,\\n\\\n           t2: Table<Bool, Int, String>,\\n\\\n           r1: Table<Int, String, Bool> -> Int ! {EtsRead<t1>},\\n\\\n           r2: Table<Bool, Int, String> -> Int ! {EtsRead<t2>}\\n\\\n         ) -> Int ! {EtsRead<t1>, EtsRead<t2>} = let a = r1(t1) in r2(t2)\")"
+---
+MkTable : ∀a b c. Table<a, b, c>
+query : Table<Int, String, Bool> → Table<Bool, Int, String> → (Table<Int, String, Bool> → Int ! {EtsRead<Table<Int, String, Bool>>}) → (Table<Bool, Int, String> → Int ! {EtsRead<Table<Bool, Int, String>>}) → Int ! {EtsRead<Table<Bool, Int, String>>, EtsRead<Table<Int, String, Bool>>}

@@ -535,12 +535,13 @@ fn empty_effect_row_elides() {
     insta::assert_snapshot!(check_str("fn add(x: Int, y: Int) -> Int ! {} = x + y"));
 }
 
-/// A single declared effect appears on the function's scheme.
+/// A single declared effect appears on the scheme, and the body — applying an
+/// effectful parameter — performs exactly it.
 #[test]
 fn single_effect_on_signature() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         fn log_it(x: Int) -> Int ! {Log} = x"
+         fn log_it(run: Int -> Int ! {Log}) -> Int ! {Log} = run(0)"
     ));
 }
 
@@ -550,7 +551,7 @@ fn multiple_effects_on_signature() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
          effect Spawn\n\
-         fn worker(x: Int) -> Int ! {Spawn, Log} = x"
+         fn worker(run: Int -> Int ! {Spawn, Log}) -> Int ! {Spawn, Log} = run(0)"
     ));
 }
 
@@ -560,7 +561,7 @@ fn parametric_effect_on_signature() {
     insta::assert_snapshot!(check_str(
         "effect Tool<t>\n\
          type Repo = MkRepo\n\
-         fn read(x: Int) -> Int ! {Tool<Repo>} = x"
+         fn read(run: Int -> Int ! {Tool<Repo>}) -> Int ! {Tool<Repo>} = run(0)"
     ));
 }
 
@@ -592,4 +593,174 @@ fn effect_arity_mismatch_is_rejected() {
 #[test]
 fn multiple_row_variables_rejected() {
     insta::assert_snapshot!(check_str(r"fn f(x: Int) -> Int ! {r, s} = x"));
+}
+
+// ── effect inference and annotation checking ─────────────────────
+
+/// Applying a pure function adds no effects, so a body of pure calls needs no
+/// effect annotation.
+#[test]
+fn pure_application_adds_no_effect() {
+    insta::assert_snapshot!(check_str(
+        r"fn apply_pure(g: Int -> Int, x: Int) -> Int = g(x)"
+    ));
+}
+
+/// Sequential `let` bindings union their effects: the value's and the body's.
+#[test]
+fn sequential_lets_union_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Spawn\n\
+         fn f(a: Int -> Int ! {Log}, b: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+           let x = a(0) in b(x)"
+    ));
+}
+
+/// A match unions the scrutinee's effects with the join of its arms'.
+#[test]
+fn match_unions_scrutinee_and_arms() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Spawn\n\
+         fn f(s: Int -> Bool ! {Log}, a: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+           match s(0) { True -> a(0), False -> 0, }"
+    ));
+}
+
+/// An `if` unions the condition's effects with both branches'.
+#[test]
+fn if_unions_branch_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Spawn\n\
+         fn f(c: Int -> Bool ! {Log}, t: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+           if c(0) then t(0) else 0"
+    ));
+}
+
+/// A lambda's body effects belong to its function type, not the enclosing
+/// function: `make` is pure, but the lambda it returns carries `{Log}`.
+#[test]
+fn lambda_row_on_function_type() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn make(run: Int -> Int ! {Log}) = \\n -> run(n)"
+    ));
+}
+
+/// A lambda that is defined but never applied contributes no effects to its
+/// enclosing function, so the pure annotation holds.
+#[test]
+fn unused_lambda_defers_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int = let h = \\n -> run(n) in 0"
+    ));
+}
+
+/// A nested (let-bound) function's effects reach the enclosing row only where it
+/// is applied.
+#[test]
+fn nested_function_effect_on_call() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log} = let h = \\n -> run(n) in h(0)"
+    ));
+}
+
+/// An interior function infers a row-polymorphic type with no annotation: the
+/// callback's effects flow through to the result's row.
+#[test]
+fn inferred_row_polymorphism() {
+    insta::assert_snapshot!(check_str(r"fn main() = let apply = \g x -> g(x) in apply"));
+}
+
+/// A declared row may mix a concrete effect with a row variable; the body's
+/// inferred row unifies against it.
+#[test]
+fn concrete_and_polymorphic_row() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn logged(g: a -> b ! {Log, r}, x: a) -> b ! {Log, r} = g(x)"
+    ));
+}
+
+/// A capability effect carries the capability parameter's type: `EtsRead<t>`
+/// elaborates to `EtsRead<Table<…>>`.
+#[test]
+fn capability_effect_carries_type() {
+    insta::assert_snapshot!(check_str(
+        "type Table<k, v, p> = MkTable\n\
+         effect EtsRead<t>\n\
+         fn query(\n\
+           t: Table<Int, String, Bool>,\n\
+           run: Table<Int, String, Bool> -> Int ! {EtsRead<t>}\n\
+         ) -> Int ! {EtsRead<t>} = run(t)"
+    ));
+}
+
+/// Two differently-typed capabilities give two distinct effects in the row.
+#[test]
+fn distinct_capability_types_stay_distinct() {
+    insta::assert_snapshot!(check_str(
+        "type Table<k, v, p> = MkTable\n\
+         effect EtsRead<t>\n\
+         fn query(\n\
+           t1: Table<Int, String, Bool>,\n\
+           t2: Table<Bool, Int, String>,\n\
+           r1: Table<Int, String, Bool> -> Int ! {EtsRead<t1>},\n\
+           r2: Table<Bool, Int, String> -> Int ! {EtsRead<t2>}\n\
+         ) -> Int ! {EtsRead<t1>, EtsRead<t2>} = let a = r1(t1) in r2(t2)"
+    ));
+}
+
+/// Two same-typed capabilities collapse to one row element — the documented
+/// v0.1 limitation: the row distinguishes resource *type*, not binding.
+#[test]
+fn same_typed_capabilities_collapse() {
+    insta::assert_snapshot!(check_str(
+        "type Table<k, v, p> = MkTable\n\
+         effect EtsRead<t>\n\
+         fn query(\n\
+           t1: Table<Int, String, Bool>,\n\
+           t2: Table<Int, String, Bool>,\n\
+           r1: Table<Int, String, Bool> -> Int ! {EtsRead<t1>},\n\
+           r2: Table<Int, String, Bool> -> Int ! {EtsRead<t2>}\n\
+         ) -> Int ! {EtsRead<t1>} = let a = r1(t1) in r2(t2)"
+    ));
+}
+
+/// An effectful body under a pure (absent) annotation is rejected, pointing at
+/// the call that introduced the effect.
+#[test]
+fn under_declared_effect_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int = run(0)"
+    ));
+}
+
+/// A mismatch names both rows and points at the call introducing the offending
+/// effect (`tooler(0)`, the `Tool<X>` call), not the whole signature.
+#[test]
+fn mismatch_points_at_offending_call() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type X = MkX\n\
+         fn f(logger: Int -> Int ! {Log}, tooler: Int -> Int ! {Tool<X>}) -> Int ! {Log} =\n\
+           let a = logger(0) in tooler(0)"
+    ));
+}
+
+/// Equality, not subsumption: a declared effect the body never performs is also
+/// rejected, keeping the row honest.
+#[test]
+fn over_declared_effect_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Spawn\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Spawn} = run(0)"
+    ));
 }
