@@ -345,7 +345,8 @@ later fill.
 ## ADR-011: Effect-row representation and crate boundaries
 
 **Date**: 2026-06-24
-**Status**: Accepted
+**Status**: Accepted (§1 crate-placement clause superseded in part by ADR-012;
+the representation, row union-find, and set-semantics decisions stand)
 
 ### Context
 
@@ -417,6 +418,102 @@ effect row is represented so that unification stays sound.
 - Row unification must be shown to terminate (a decreasing measure on the
   residual rows, plus an occurs-check on row tails), not merely be "idempotent".
 - Effect-graph tooling gets a head-keyed index for free.
+
+---
+
+## ADR-012: Effect-inference placement and capability-effect representation
+
+**Date**: 2026-06-29
+**Status**: Accepted (supersedes the crate-placement clause of ADR-011 §1;
+refines the capability-effect linkage of ADR-006)
+
+### Context
+
+Phase 5's effect-inference work — infer effect rows for function bodies, check
+them against declared annotations, and link effects to capabilities — surfaced
+two questions that earlier decisions had over-committed or left open.
+
+First, ADR-011 §1 placed effect *inference* in `hird-effects`. But the
+inference machinery — the substitution table (with its row variables), the type
+environment, the constructor/effect registry, instantiation and row resolution,
+expression inference, and the per-node type side-table — is all private to
+`hird-check`, and effect inference is inseparable from type inference: an
+application's effects are read off the callee's *resolved* function-type row.
+Honouring the original placement would force `hird-effects` to depend on
+`hird-check` and either re-walk a fully typed tree or expose almost all of the
+checker's internals.
+
+Second, ADR-006 and the Phase-5 task call for capability effects that reference
+"the specific capability value" (`EtsRead<t>` for a parameter `t`), so an audit
+graph can show exactly which resources a function touches. But the effect
+representation carries *types*, not values, and the type representation has no
+value or singleton form: two parameters of the same type are structurally
+identical. Distinguishing them inside the type layer would need per-binding
+singleton identities — which fight generalisation, because a non-generalisable
+identity that still flows through instantiation and row-argument unification is
+either unsound under polymorphism (two call sites collapse to one resource node)
+or is a value-substitution dimension in disguise — or it would need to extend
+the row with a value dimension, perturbing the just-stabilised idempotent-set
+row unification of ADR-011. A static type system cannot, even in principle, name
+the runtime value a capability binds to; the most it can know statically is the
+binding site.
+
+### Decision
+
+1. **Effect inference lives in `hird-check`, interleaved with type inference.**
+   An effect accumulator is threaded through the body walk: an application unions
+   its callee's resolved effect row into the enclosing function's row;
+   `let`, sequencing, and `match` union their parts; a lambda's body effects
+   attach to the lambda's *function-type* row, not the enclosing row (the
+   accumulator resets at each lambda boundary). `hird-effects` remains the home
+   for handler lowering and any later pure effect-algebra helpers; it does not
+   host body inference. This supersedes only the crate-placement clause of
+   ADR-011 §1; the representation, row union-find, and set-semantics decisions of
+   ADR-011 stand.
+
+2. **Capability effects are represented at the type level; binding-site identity
+   is carried as provenance, outside the type system.** `EtsRead<t>` elaborates
+   with the capability parameter's *type* as the effect argument
+   (`EtsRead<Table<UserId, User, Read>>`); call sites instantiate it through
+   ordinary type unification, with no new machinery. Which capability *binding*
+   introduced an effect, and the source span of the introducing call, are
+   recorded in a provenance side-table during inference, separate from the
+   effect row. The type system proves *what kind* of resource is touched; the
+   provenance map records *from where*. Audit-graph tooling renders resource
+   edges from provenance, not from row identity.
+
+   Effects of the same head and same resolved type arguments are one element of
+   the idempotent-set row (ADR-011), so two capabilities of the *same* type are
+   not distinguished *within the row*. This is faithful for v0.1: the planner's
+   capabilities are distinctly typed, so no same-typed collision arises. True
+   per-value distinctness — singleton capability identities, or value-indexed
+   effect arguments — is deferred to v0.2+. It is additive: it only refines an
+   effect argument from the capability's type to a finer per-binding identity,
+   forcing no row-representation change.
+
+   This refines ADR-006's "the effect references the specific instance": for
+   v0.1 the static guarantee is the capability's *type* plus binding-site
+   provenance, not runtime-value identity (which is dynamic and not statically
+   knowable).
+
+### Consequences
+
+- Effect inference reuses the checker's substitution, environment, and the row
+  generalisation/occurs-check/level-lowering already established; no cross-crate
+  exposure of checker internals, and no second tree walk.
+- `hird-effects` is thinner than ADR-011 envisioned — handler lowering and
+  helpers only. Acceptable: the row representation and unification it would have
+  shared already live in `hird-types`.
+- The provenance side-table is shared infrastructure: one map drives both the
+  annotation-mismatch diagnostic (offending effect, span at the introducing
+  call) and capability-to-resource linkage. Capability linkage is therefore not
+  extra scope — the diagnostic needs the map regardless.
+- The audit graph is precise on resource *kind* and on *binding site*, but
+  conflates two same-typed capabilities bound to different runtime values. A
+  documented limitation; no v0.1 demo exercises it.
+- The upgrade path to value-precise effects stays open and additive; the type
+  layer is never contaminated with value identity, so adopting singletons later
+  supersedes only this clause.
 
 ---
 
