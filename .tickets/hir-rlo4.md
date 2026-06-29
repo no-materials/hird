@@ -49,7 +49,7 @@ graphs precise enough to show exactly which tables a function touches.
 ## Task sequence
 
 1. [x] [hir-95ld](hir-95ld.md) — Effect row types and row polymorphism
-2. [ ] [hir-0x16](hir-0x16.md) — Effect inference and annotation checking
+2. [x] [hir-0x16](hir-0x16.md) — Effect inference and annotation checking
 3. [ ] [hir-t1cj](hir-t1cj.md) — DI-style effect handlers
 
 ## Open design questions resolved in this phase
@@ -108,3 +108,30 @@ and annotation-vs-inferred checking with spans, capability-effect linkage, and
 DI-style handler blocks. OD7/OD8 remain for hir-t1cj / Phase 7 respectively.
 
 hir-0x16 (effect inference and annotation checking) is now unblocked.
+
+**2026-06-29T08:11:26Z**
+
+Task 2 of 3 complete: hir-0x16 (effect inference and annotation checking)
+landed and is closed.
+
+Delivered: function bodies' effect rows are inferred in hird-check (interleaved
+with type inference, via an accumulator threaded through the body walk; lambdas
+attach their body row to their own function type). A top-level function's
+inferred row is checked for equality against its declared row (the annotation,
+or the empty row when `!` is absent), so pure functions may omit `!` and
+effectful functions that under- or over-declare are rejected (new code C0030,
+pointed at the offending call via a provenance side-table). Interior let-bound
+functions infer and generalise their row, including inferred row polymorphism.
+Capability effects are type-level: EtsRead<t> carries the capability
+parameter's type; same-typed capabilities collapse (documented v0.1 limitation),
+differently-typed stay distinct.
+
+Phase-level acceptance still open (last task): DI-style handler blocks
+(hir-t1cj), now unblocked — parse + type-check `handle` blocks, validate handler
+signatures, compute the handled row (body minus handled plus handler effects),
+and lower to IR. OD7 (handler semantics) is documented there; OD8 remains
+Phase 7. The effect-provenance side-table records (effect -> introducing-call
+span) and drives the mismatch diagnostic but is not yet persisted on
+CheckedFile; audit-graph rendering (Phase 6/10) will surface it.
+
+hir-t1cj (DI-style effect handlers) is now unblocked.

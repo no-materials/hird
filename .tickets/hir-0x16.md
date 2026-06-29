@@ -1,6 +1,6 @@
 ---
 id: hir-0x16
-status: open
+status: closed
 deps: [hir-95ld]
 links: []
 created: 2026-05-22T21:38:53Z
@@ -147,3 +147,53 @@ AC ADJUSTMENTS (supersede the body's ACs where they conflict):
 
 SCOPE BOUNDARY: hir-0x16 RECORDS provenance and proves effect kinds; it does not
 render audit graphs (Phase 6/10) and does not build handler lowering (hir-t1cj).
+
+**2026-06-29T08:10:49Z**
+
+Landed. Effect inference and annotation checking are implemented in hird-check,
+interleaved with type inference (effect-row representation and unification stay
+in hird-types; hird-effects is untouched, still handler-lowering only).
+
+Inference: an effect accumulator (current_row) is threaded through the body
+walk. Application unions the callee's resolved row into it; let/if/match/binop/
+record/tuple/list union their parts through ordinary recursion. A lambda saves,
+resets, and restores the accumulator at its boundary, attaching the body row to
+its own TyFn instead of the enclosing row. An unresolved callee gets a fresh
+effect-row variable, so applying it stays effect-polymorphic: an interior
+let-bound function generalises that row (inferred row polymorphism), while a
+top-level one solves it against its declared row.
+
+Checking = equality via row unification (not subsumption). A top-level
+function's declared row is the `! {…}` annotation, or the empty row when `!` is
+absent; the inferred body row must unify with it, so a pure function may omit
+`!` and an effectful one that under- or over-declares is rejected. Interior
+let-bound functions and lambdas infer their row and generalise it, unchecked.
+New code C0030 renders "declared {X} but body performs {Y}"; a provenance
+side-table (current_prov: effect -> introducing-call span, recorded during
+inference) places the diagnostic at the call that introduced the offending
+effect rather than the whole signature.
+
+Capability-effect linkage is type-level: a bare lowercase argument of a
+parametric effect that names a value parameter (EtsRead<t>) elaborates to that
+parameter's type (EtsRead<Table<Int,String,Bool>>) via a caps map threaded
+through signature/elaboration; call sites instantiate through ordinary unify().
+Two differently-typed capabilities stay distinct in the row; two same-typed
+ones collapse to one element (the documented v0.1 limitation, covered by a
+passing test). No new Type variant, no value-into-effect dimension, no change
+to the ADR-011 row representation.
+
+Tests: 15 new hird-check snapshot tests (pure application; single/multi effect;
+sequential-let union; match scrutinee+arm union; if-branch union; lambda body-
+row on the function type; unused lambda defers; nested function effect on call;
+inferred row polymorphism; concrete+polymorphic row; capability type carried;
+distinct vs same-typed capabilities; under- and over-declared mismatches with
+spans) plus 3 reworked elaboration tests now exercising effectful bodies. Three
+hird-ir round-trip/snapshot tests updated to effectful bodies (a pure body with
+an effect annotation is now correctly an error). The occurs-check snapshot
+gained `! {r}` (an unknown callee now carries an effect-row variable). fmt,
+clippy (-D warnings), and the full workspace test suite pass.
+
+Out of scope (per the scope boundary): audit-graph rendering (Phase 6/10) — the
+provenance is recorded and drives the diagnostic but is not yet persisted on
+CheckedFile for external consumers; DI-style handler lowering (hir-t1cj), now
+unblocked.
