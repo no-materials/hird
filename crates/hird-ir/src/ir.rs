@@ -23,7 +23,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use hird_types::{EffectRow, Type};
+use hird_types::{Effect, EffectRow, Type};
 use serde::{Serialize, Serializer};
 
 /// Serializes a [`Type`] as its canonical textual rendering (e.g. `List<Int>`,
@@ -42,6 +42,15 @@ where
     S: Serializer,
 {
     serializer.serialize_str(&format!("{row}"))
+}
+
+/// Serializes an [`Effect`] as its textual rendering (e.g. `Log`,
+/// `Tool<ReadRepo>`), mirroring how [`Type`] is serialized.
+fn serialize_effect<S>(effect: &Effect, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("{effect}"))
 }
 
 // ── module and declarations ─────────────────────────────────────
@@ -176,6 +185,8 @@ pub enum IrExpr {
     App(IrApp),
     /// `match scrutinee { arms }`
     Match(IrMatch),
+    /// `handle { effect → handler, … } in body`
+    Handle(IrHandle),
     /// A constructor applied to zero or more arguments.
     Constructor(IrConstructor),
     /// A literal.
@@ -255,6 +266,38 @@ pub struct IrArm {
     pub pattern: IrPattern,
     /// The arm's body.
     pub body: IrExpr,
+}
+
+/// A `handle { effect → handler, … } in body` block: DI-style effect handlers.
+///
+/// Each arm binds a declared effect to a handler implementation; within the
+/// body, the handled effects route to those handlers (parameter threading, when
+/// a backend emits it — no resumable continuations). The block's value is its
+/// body's value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrHandle {
+    /// The handler arms, in order.
+    pub arms: Vec<IrHandleArm>,
+    /// The handled body.
+    pub body: Box<IrExpr>,
+    /// The block's effect row: the body's effects minus the handled effects,
+    /// plus the handlers' own effects.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+    /// The block's value type (the body's type).
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// One arm of an [`IrHandle`]: a handled effect and its handler implementation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrHandleArm {
+    /// The handled effect (head and type arguments), e.g. `Log` or
+    /// `Tool<ReadRepo>`.
+    #[serde(serialize_with = "serialize_effect")]
+    pub effect: Effect,
+    /// The handler implementation (a function).
+    pub handler: IrExpr,
 }
 
 /// A constructor applied to zero or more arguments. Operators and `if` lower to

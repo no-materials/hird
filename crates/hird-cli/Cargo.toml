@@ -17,7 +17,6 @@ hird-lex.workspace = true
 hird-parse.workspace = true
 hird-ast.workspace = true
 hird-types.workspace = true
-hird-effects.workspace = true
 hird-actors.workspace = true
 hird-ir.workspace = true
 hird-codegen.workspace = true

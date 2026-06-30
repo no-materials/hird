@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn multi(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\\n\\\n           handle { Log -> lh, Tool<Repo> -> th } in f(0)\")"
+---
+MkRepo : Repo
+multi : (Int → Int ! {Log, Tool<Repo>}) → (Int → Int) → (Int → Int) → Int

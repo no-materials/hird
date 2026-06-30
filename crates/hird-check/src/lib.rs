@@ -61,7 +61,7 @@ use core::fmt;
 use hird_ast::{Expr, SourceFile, SyntaxNode, SyntaxToken};
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{EffectRow, Name, Type};
+use hird_types::{Effect, EffectRow, Name, Type};
 
 pub use diag::{CheckCode, CheckDiagnostic, RelatedSpan, Severity};
 pub use program::{CheckedProgram, check_program};
@@ -159,11 +159,16 @@ pub struct CheckedFile {
     /// Declared ADTs (including the built-in `Bool`) and their constructor
     /// names in declaration order.
     pub adts: BTreeMap<Name, Vec<Name>>,
-    /// Each function declaration's elaborated effect row, keyed by its CST
-    /// node. Resolved against the same elaboration as the function's parameter
-    /// types, so row variables shared between a parameter and the function's
-    /// own row keep one identity. Absent for functions with no declared row.
+    /// Each function declaration's elaborated effect row and each `handle`
+    /// block's computed row, keyed by its CST node. Resolved against the same
+    /// elaboration as the surrounding body, so row variables shared between a
+    /// parameter and the function's own row keep one identity. Absent for
+    /// functions with no declared row.
     pub effect_rows: BTreeMap<NodeKey, EffectRow>,
+    /// Each `handle` arm's handled effect, keyed by the arm's CST node. The
+    /// effect's type arguments are resolved. Lowering reads these to pair an arm
+    /// with the effect it handles.
+    pub handled_effects: BTreeMap<NodeKey, Effect>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
 }
@@ -175,10 +180,17 @@ impl CheckedFile {
         self.types.get(&key)
     }
 
-    /// The elaborated effect row recorded for the function node `key`, if any.
+    /// The elaborated effect row recorded for the function or `handle` node
+    /// `key`, if any.
     #[must_use]
     pub fn effect_row_at(&self, key: NodeKey) -> Option<&EffectRow> {
         self.effect_rows.get(&key)
+    }
+
+    /// The handled effect recorded for the `handle`-arm node `key`, if any.
+    #[must_use]
+    pub fn handled_effect_at(&self, key: NodeKey) -> Option<&Effect> {
+        self.handled_effects.get(&key)
     }
 
     /// Whether any diagnostic is an error.

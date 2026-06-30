@@ -8,8 +8,5 @@ repository.workspace = true
 description = "Hirð actor type system, typed Pid, and message protocols"
 publish = false
 
-[dependencies]
-hird-effects.workspace = true
-
 [lints]
 workspace = true

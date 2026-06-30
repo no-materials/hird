@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn partial(f: Int -> Int ! {Log, Tool<Repo>}, h: Int -> Int) -> Int ! {Tool<Repo>} =\\n\\\n           handle { Log -> h } in f(0)\")"
+---
+MkRepo : Repo
+partial : (Int → Int ! {Log, Tool<Repo>}) → (Int → Int) → Int ! {Tool<Repo>}

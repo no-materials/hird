@@ -120,7 +120,7 @@ fn expr_prec(expr: &IrExpr) -> u8 {
                 PREC_APP
             }
         }
-        IrExpr::Lambda(_) | IrExpr::Let(_) | IrExpr::Match(_) => PREC_LOW,
+        IrExpr::Lambda(_) | IrExpr::Let(_) | IrExpr::Match(_) | IrExpr::Handle(_) => PREC_LOW,
         IrExpr::App(app) => match as_operator(app) {
             Some((_, prec, _)) => prec,
             None => PREC_APP,
@@ -274,6 +274,7 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
                 }
                 collect_type_effects(&f.return_type, &mut effects);
                 collect_row_effects(&f.effect_row, &mut effects);
+                collect_expr_effects(&f.body, &mut effects);
             }
             IrDecl::Extern(e) => collect_type_effects(&e.ty, &mut effects),
             IrDecl::Type(t) => {
@@ -326,6 +327,69 @@ fn collect_row_effects(row: &EffectRow, out: &mut BTreeMap<String, usize>) {
         for arg in effect.args() {
             collect_type_effects(arg, out);
         }
+    }
+}
+
+/// Accumulates the effects a body references but a signature need not name: a
+/// `handle` arm's handled effect (which handling removes from the enclosing
+/// row) and the block's own row, recursing through every sub-expression. The
+/// synthesised `effect` declarations must cover these or the printed `handle`
+/// would name an undeclared effect and fail to re-check.
+fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
+    match expr {
+        IrExpr::Handle(h) => {
+            for arm in &h.arms {
+                out.insert(
+                    String::from(arm.effect.head().as_str()),
+                    arm.effect.args().len(),
+                );
+                for arg in arm.effect.args() {
+                    collect_type_effects(arg, out);
+                }
+                collect_expr_effects(&arm.handler, out);
+            }
+            collect_row_effects(&h.effect_row, out);
+            collect_expr_effects(&h.body, out);
+        }
+        IrExpr::Let(le) => {
+            collect_expr_effects(&le.value, out);
+            collect_expr_effects(&le.body, out);
+        }
+        IrExpr::Lambda(lambda) => collect_expr_effects(&lambda.body, out),
+        IrExpr::App(app) => {
+            collect_expr_effects(&app.func, out);
+            for arg in &app.args {
+                collect_expr_effects(arg, out);
+            }
+        }
+        IrExpr::Match(m) => {
+            collect_expr_effects(&m.scrutinee, out);
+            for arm in &m.arms {
+                collect_expr_effects(&arm.body, out);
+            }
+        }
+        IrExpr::Constructor(ctor) => {
+            for arg in &ctor.args {
+                collect_expr_effects(arg, out);
+            }
+        }
+        IrExpr::Tuple(tuple) => {
+            for elem in &tuple.elems {
+                collect_expr_effects(elem, out);
+            }
+        }
+        IrExpr::List(list) => {
+            for elem in &list.elems {
+                collect_expr_effects(elem, out);
+            }
+        }
+        IrExpr::Record(record) => {
+            for field in &record.fields {
+                collect_expr_effects(&field.value, out);
+            }
+        }
+        IrExpr::Field(field) => collect_expr_effects(&field.receiver, out),
+        IrExpr::Literal(_) | IrExpr::Var(_) => {}
     }
 }
 
@@ -590,6 +654,22 @@ impl Printer {
                     self.expr(&arm.body, PREC_LOW);
                 }
                 self.push(" }");
+            }
+            IrExpr::Handle(h) => {
+                self.push("handle { ");
+                for (i, arm) in h.arms.iter().enumerate() {
+                    if i > 0 {
+                        self.push(", ");
+                    }
+                    // Concrete effect heads (`Log`, `Tool<ReadRepo>`) render
+                    // straight through; the body's effects, not the head, carry
+                    // the type variables the signature renumbers.
+                    self.push_display(&arm.effect);
+                    self.push(" \u{2192} ");
+                    self.expr(&arm.handler, PREC_LOW);
+                }
+                self.push(" } in ");
+                self.expr(&h.body, PREC_LOW);
             }
             IrExpr::App(app) => match as_operator(app) {
                 Some((op, prec, assoc)) => {

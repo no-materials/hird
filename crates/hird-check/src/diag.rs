@@ -93,6 +93,8 @@ pub enum CheckCode {
     /// A function's body performs effects its declared row omits, or declares
     /// effects the body never performs (the rows are checked for equality).
     C0030,
+    /// A `handle` arm's handler expression does not have a function type.
+    C0031,
 }
 
 /// A secondary source location attached to a diagnostic.

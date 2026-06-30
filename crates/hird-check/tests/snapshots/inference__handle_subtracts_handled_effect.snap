@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         fn handled(run: Int -> Int ! {Log}, h: Int -> Int) -> Int = handle { Log -> h } in run(0)\")"
+---
+handled : (Int → Int ! {Log}) → (Int → Int) → Int

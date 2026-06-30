@@ -37,6 +37,18 @@ fn only_fn(module: &IrModule) -> &hird_ir::IrFnDef {
     f
 }
 
+/// The function definition named `name`.
+fn fn_named<'a>(module: &'a IrModule, name: &str) -> &'a hird_ir::IrFnDef {
+    module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Fn(f) if f.name == name => Some(f),
+            _ => None,
+        })
+        .expect("function is present")
+}
+
 /// Renders a type display-canonically.
 fn ty_str(ty: &hird_types::Type) -> String {
     format!("{ty}")
@@ -366,6 +378,46 @@ fn json_pretty_snapshot() {
         "type Option<a> = Some(a) | None\n\
          fn unwrap(opt: Option<Int>) -> Int = match opt { Some(x) -> x, None -> 0, }",
         "Opt",
+    );
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}
+
+// ── handle blocks ────────────────────────────────────────────────
+
+#[test]
+fn handle_block_lowers_to_handle_node() {
+    let module = lower(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
+        "Handle",
+    );
+    let audited = fn_named(&module, "audited");
+    let IrExpr::Handle(h) = &audited.body else {
+        panic!("body should be a handle, got {:?}", audited.body);
+    };
+    // One arm handling `Tool<Repo>`, bound to the `logh` handler.
+    assert_eq!(h.arms.len(), 1);
+    assert_eq!(format!("{}", h.arms[0].effect), "Tool<Repo>");
+    assert!(matches!(&h.arms[0].handler, IrExpr::Var(v) if v.name == "logh"));
+    // The block's row: `Tool<Repo>` is handled away, the handler's `Log` joins.
+    assert_eq!(format!("{}", h.effect_row), "{Log}");
+    // The handled body is the call `f(0)`, and the block's value is its body's.
+    assert!(matches!(h.body.as_ref(), IrExpr::App(_)));
+    assert_eq!(ty_str(&h.result_type), "Int");
+}
+
+#[test]
+fn handle_block_json_snapshot() {
+    let module = lower(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
+        "Handle",
     );
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }

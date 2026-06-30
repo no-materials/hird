@@ -297,9 +297,6 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 [[package]]
 name = "hird-actors"
 version = "0.1.0"
-dependencies = [
- "hird-effects",
-]
 
 [[package]]
 name = "hird-ast"
@@ -328,7 +325,6 @@ dependencies = [
  "hird-actors",
  "hird-ast",
  "hird-codegen",
- "hird-effects",
  "hird-ir",
  "hird-lex",
  "hird-lsp",
@@ -342,13 +338,6 @@ name = "hird-codegen"
 version = "0.1.0"
 dependencies = [
  "hird-ir",
-]
-
-[[package]]
-name = "hird-effects"
-version = "0.1.0"
-dependencies = [
- "hird-types",
 ]
 
 [[package]]

@@ -6,7 +6,6 @@ members = [
     "crates/hird-ast",
     "crates/hird-types",
     "crates/hird-check",
-    "crates/hird-effects",
     "crates/hird-actors",
     "crates/hird-ir",
     "crates/hird-codegen",
@@ -91,7 +90,6 @@ hird-parse = { path = "crates/hird-parse" }
 hird-ast = { path = "crates/hird-ast" }
 hird-types = { path = "crates/hird-types" }
 hird-check = { path = "crates/hird-check" }
-hird-effects = { path = "crates/hird-effects" }
 hird-actors = { path = "crates/hird-actors" }
 hird-ir = { path = "crates/hird-ir" }
 hird-codegen = { path = "crates/hird-codegen" }

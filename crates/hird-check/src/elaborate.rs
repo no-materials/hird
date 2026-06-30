@@ -115,6 +115,24 @@ impl Checker {
         self.elaborate_effect_row(ann, scope, VarMode::Fresh)
     }
 
+    /// Elaborates a `handle`-arm effect head into a concrete [`Effect`],
+    /// checking it names a declared effect at the right arity. Unlike an
+    /// effect-row entry, a handle head may not be a bare row variable.
+    pub(crate) fn elaborate_handle_effect(
+        &mut self,
+        entry: &TypeExpr,
+        scope: &mut Scope,
+    ) -> Checked<Effect> {
+        match self.elaborate_effect(entry, scope, VarMode::Fresh)? {
+            RowEntry::Effect(effect) => Ok(effect),
+            RowEntry::Tail(_) => Err(self.error(
+                CheckCode::C0027,
+                type_expr_span(entry, self.source_id),
+                String::from("expected an effect, e.g. `Log` or `Tool<ReadRepo>`"),
+            )),
+        }
+    }
+
     /// Elaborates `ty`, resolving variable names through `scope` and
     /// constructor names through the registry.
     fn elaborate(&mut self, ty: &TypeExpr, scope: &mut Scope, mode: VarMode) -> Checked<Type> {

@@ -276,12 +276,35 @@ impl fmt::Display for EffectRow {
     }
 }
 
+/// The effect row of a DI-style `handle` block: the body's effects with the
+/// handled effects removed, then the handlers' own effects added — `(body −
+/// handled) ∪ handler`.
+///
+/// All three rows must be resolved (their effect arguments substituted), so
+/// effects compare by concrete head and arguments rather than by unsolved
+/// variable identity. An effect of `body` is dropped iff it equals a `handled`
+/// effect; the body's open tail — its unhandled, unknown remainder — is
+/// preserved, and an open handler row keeps the result open too.
+#[must_use]
+pub fn handle_row(body: &EffectRow, handled: &EffectRow, handler: &EffectRow) -> EffectRow {
+    let mut out = EffectRow::empty();
+    for effect in body.effects() {
+        if !handled.effects().any(|present| present == effect) {
+            out.insert(effect.clone());
+        }
+    }
+    for effect in handler.effects() {
+        out.insert(effect.clone());
+    }
+    out.with_tail(body.tail().or_else(|| handler.tail()))
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::format;
     use alloc::vec;
 
-    use super::{Effect, EffectRow, RowVar};
+    use super::{Effect, EffectRow, RowVar, handle_row};
     use crate::ty::Type;
 
     #[test]
@@ -339,5 +362,52 @@ mod tests {
         ]);
         assert_eq!(row.effects().count(), 2);
         assert_eq!(format!("{row}"), "{Tool<ReadRepo>, Tool<CreateTicket>}");
+    }
+
+    #[test]
+    fn handle_row_subtracts_handled_effect() {
+        let body = EffectRow::closed([Effect::named("Log")]);
+        let handled = EffectRow::closed([Effect::named("Log")]);
+        let row = handle_row(&body, &handled, &EffectRow::empty());
+        assert_eq!(format!("{row}"), "{}");
+    }
+
+    #[test]
+    fn handle_row_leaves_unhandled_effect() {
+        let body = EffectRow::closed([
+            Effect::named("Log"),
+            Effect::parametric("Tool", vec![Type::con("Repo", vec![])]),
+        ]);
+        let handled = EffectRow::closed([Effect::named("Log")]);
+        let row = handle_row(&body, &handled, &EffectRow::empty());
+        assert_eq!(format!("{row}"), "{Tool<Repo>}");
+    }
+
+    #[test]
+    fn handle_row_adds_handler_effects() {
+        let tool = Effect::parametric("Tool", vec![Type::con("Repo", vec![])]);
+        let body = EffectRow::closed([tool.clone()]);
+        let handled = EffectRow::closed([tool]);
+        let handler = EffectRow::closed([Effect::named("Log")]);
+        let row = handle_row(&body, &handled, &handler);
+        assert_eq!(format!("{row}"), "{Log}");
+    }
+
+    #[test]
+    fn handle_row_partially_handles_same_head() {
+        let read = Effect::parametric("Tool", vec![Type::con("ReadRepo", vec![])]);
+        let write = Effect::parametric("Tool", vec![Type::con("CreateTicket", vec![])]);
+        let body = EffectRow::closed([read.clone(), write]);
+        let handled = EffectRow::closed([read]);
+        let row = handle_row(&body, &handled, &EffectRow::empty());
+        assert_eq!(format!("{row}"), "{Tool<CreateTicket>}");
+    }
+
+    #[test]
+    fn handle_row_keeps_open_body_tail() {
+        let body = EffectRow::open([Effect::named("Log")], RowVar::new(0));
+        let handled = EffectRow::closed([Effect::named("Log")]);
+        let row = handle_row(&body, &handled, &EffectRow::empty());
+        assert_eq!(format!("{row}"), "{r}");
     }
 }

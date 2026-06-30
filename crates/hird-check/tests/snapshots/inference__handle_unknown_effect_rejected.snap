@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn bad(h: Int -> Int) -> Int = handle { Bogus -> h } in 0\")"
+---
+bad : (Int → Int) → Int
+error[C0027] 40..45: unknown effect `Bogus`

@@ -13,9 +13,9 @@
 //! - `if c then a else b` becomes `match c { True → a, False → b }`.
 //! - Binary operators become application of a primitive operator reference.
 //! - Parentheses are dropped (they carry no semantics).
-//! - `handle { … } in body` lowers to `body`; the handler arms reference
-//!   effects, which the IR does not yet model, so until then a handle is its
-//!   handled body (exactly what the checker types it as).
+//! - `handle { … } in body` lowers to an [`IrHandle`](crate::ir::IrHandle)
+//!   carrying the handler arms, the body, and the block's computed effect row;
+//!   the checker resolves the handled effect of each arm and the row.
 //!
 //! Functions and applications are n-ary, matching the type system: `f(a, b)`
 //! is a two-argument call, not a curried chain.
@@ -31,8 +31,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl, FieldExpr, FnDecl, IfExpr, LambdaExpr,
-    LetExpr, Literal, MatchExpr, Pattern, RecordLit, SourceFile, TupleLit, TypeDecl,
+    AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr,
+    LambdaExpr, LetExpr, Literal, MatchExpr, Pattern, RecordLit, SourceFile, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -40,9 +40,9 @@ use hird_types::Type;
 
 use crate::ir::{
     IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl, IrExpr,
-    IrExternRef, IrField, IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
-    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrTypeDef, IrVar,
-    IrWildcardPat, LiteralValue,
+    IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral,
+    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple,
+    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -169,13 +169,7 @@ impl Lowerer<'_> {
             Expr::Lambda(lambda) => self.lower_lambda(lambda),
             Expr::If(ife) => self.lower_if(ife),
             Expr::Match(me) => self.lower_match(me),
-            Expr::Handle(handle) => {
-                // Effects are not yet modelled; until then a handle is its body.
-                match handle.body() {
-                    Some(body) => self.lower_expr(&body),
-                    None => self.unit(),
-                }
-            }
+            Expr::Handle(handle) => self.lower_handle(handle),
             Expr::BinOp(op) => self.lower_binop(op),
             Expr::App(app) => self.lower_app(app),
             Expr::Field(field) => self.lower_field(field),
@@ -289,6 +283,37 @@ impl Lowerer<'_> {
             scrutinee: Box::new(self.lower_expr(&scrutinee)),
             arms,
             result_type: self.node_type(me.syntax()),
+        })
+    }
+
+    /// `handle { effect → handler, … } in body`. The handled effect of each arm
+    /// and the block's row come from the checker's side-tables.
+    fn lower_handle(&self, handle: &HandleBlock) -> IrExpr {
+        let body = handle.body().expect("handle has a body");
+        let arms = handle
+            .arms()
+            .filter_map(|arm| {
+                let effect = self
+                    .checked
+                    .handled_effect_at(NodeKey::of_node(arm.syntax()))?
+                    .clone();
+                let handler = arm.handler()?;
+                Some(IrHandleArm {
+                    effect,
+                    handler: self.lower_expr(&handler),
+                })
+            })
+            .collect();
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(handle.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        IrExpr::Handle(IrHandle {
+            arms,
+            body: Box::new(self.lower_expr(&body)),
+            effect_row,
+            result_type: self.node_type(handle.syntax()),
         })
     }
 

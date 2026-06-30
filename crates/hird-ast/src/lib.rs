@@ -1258,12 +1258,19 @@ impl MatchArm {
 }
 
 ast_node! {
-    /// A handle arm (`Effect → handler`). The effect is reachable via
-    /// [`AstNode::syntax`].
+    /// A handle arm (`Effect → handler`).
     HandleArm => HANDLE_ARM
 }
 
 impl HandleArm {
+    /// The handled effect head (before `→`), e.g. `Log` or `Tool<ReadRepo>`. A
+    /// bare lowercase name is rejected by the checker; the effect is the arm's
+    /// first type operand.
+    #[must_use]
+    pub fn effect(&self) -> Option<TypeExpr> {
+        first_type(&self.0)
+    }
+
     /// The handler implementation (after `→`).
     #[must_use]
     pub fn handler(&self) -> Option<Expr> {

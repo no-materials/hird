@@ -274,8 +274,11 @@ fn handle_block_parts() {
     };
     assert_eq!(e.arms().count(), 2);
     assert!(matches!(e.body(), Some(Expr::Name(_))));
-    let first = e.arms().next().unwrap();
-    assert!(matches!(first.handler(), Some(Expr::Name(_))));
+    let arms: Vec<_> = e.arms().collect();
+    // A bare effect head is a name; a parametric one is a type application.
+    assert!(matches!(arms[0].effect(), Some(TypeExpr::Name(_))));
+    assert!(matches!(arms[0].handler(), Some(Expr::Name(_))));
+    assert!(matches!(arms[1].effect(), Some(TypeExpr::App(_))));
 }
 
 #[test]

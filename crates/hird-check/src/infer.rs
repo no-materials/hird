@@ -7,8 +7,9 @@
 //! argument is an n-ary argument list (`f(a, b)` is a 2-ary call, `f()` a
 //! 0-ary one), anything else is a single argument, and a tuple *value* is
 //! passed as `f((a, b))`. Operators are monomorphic (`Int` arithmetic and
-//! ordering, polymorphic equality, `Bool` connectives). `handle` blocks
-//! type as their body; effect handling is a later phase.
+//! ordering, polymorphic equality, `Bool` connectives). A `handle` block types
+//! as its body; its effect row is the body's effects minus the handled effects
+//! plus the handlers' own effects.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -16,12 +17,12 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, IfExpr, LambdaExpr, LetExpr, MatchExpr, Pattern,
-    RecordLit,
+    AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr, LetExpr,
+    MatchExpr, Pattern, RecordLit,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{EffectRow, Label, Type};
+use hird_types::{EffectRow, Label, Type, handle_row};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
@@ -68,14 +69,7 @@ impl Checker {
             Expr::Lambda(lambda) => self.infer_lambda(lambda),
             Expr::If(ife) => self.infer_if(ife),
             Expr::Match(me) => self.infer_match(me),
-            Expr::Handle(handle) => {
-                // DI-style handlers replace effect implementations without
-                // changing the value type; arms are a later phase's concern.
-                let Some(body) = handle.body() else {
-                    return Err(Aborted);
-                };
-                self.infer_expr(&body)
-            }
+            Expr::Handle(handle) => self.infer_handle(handle),
             Expr::BinOp(op) => self.infer_binop(op),
             Expr::App(app) => self.infer_app(app),
             Expr::Field(field) => self.infer_field(field),
@@ -184,6 +178,81 @@ impl Checker {
         self.current_prov = saved_prov;
         self.env.pop_scope();
         Ok(Type::func_eff(param_tys, body_res?, body_row))
+    }
+
+    /// `handle { Effect → handler, … } in body` — DI-style effect handlers.
+    ///
+    /// The block's value type is the body's type. Each arm must name a declared
+    /// effect at the correct arity and bind it to a function; validating the
+    /// handler's argument and result types against the effect's operation
+    /// signature waits for tool declarations, so the check is structural —
+    /// unknown effect, wrong arity, and a non-function handler are the reported
+    /// shapes. The block's effect row is the body's effects minus the handled
+    /// effects plus the handlers' own effects.
+    fn infer_handle(&mut self, handle: &HandleBlock) -> Checked<Type> {
+        let Some(body) = handle.body() else {
+            return Err(Aborted);
+        };
+        let handle_span = node_span(handle.syntax(), self.source_id);
+
+        // The body's effects belong to the handle, not yet the enclosing row:
+        // infer them into a fresh accumulator the way a lambda body's are, so
+        // the handled effects can be subtracted before the result rejoins the
+        // enclosing row.
+        let saved_row = mem::take(&mut self.current_row);
+        let saved_prov = mem::take(&mut self.current_prov);
+        let body_res = self.infer_expr(&body);
+        let body_row = mem::replace(&mut self.current_row, saved_row);
+        self.current_prov = saved_prov;
+        let body_ty = body_res?;
+
+        // Each arm names a declared effect (validated for arity) and binds it to
+        // a function whose own effects join the block's row. Evaluating a
+        // handler expression performs its effects at the handle site, so those
+        // accrue to the enclosing row as any expression's do.
+        let mut handled = EffectRow::empty();
+        let mut handler_effects = EffectRow::empty();
+        for arm in handle.arms() {
+            if let Some(effect_expr) = arm.effect() {
+                let mut scope = Scope::new();
+                if let Ok(effect) = self.elaborate_handle_effect(&effect_expr, &mut scope) {
+                    self.handled_effects
+                        .push((NodeKey::of_node(arm.syntax()), effect.clone()));
+                    handled.insert(effect);
+                }
+            }
+            if let Some(handler) = arm.handler() {
+                let handler_ty = self.infer_expr(&handler)?;
+                let span = expr_span(&handler, self.source_id);
+                match self.subst.resolve(&handler_ty) {
+                    Type::TyFn(_, _, row) => {
+                        for effect in self.subst.resolve_row(&row).effects() {
+                            handler_effects.insert(effect.clone());
+                        }
+                    }
+                    other => {
+                        let _ = self.error(
+                            CheckCode::C0031,
+                            span,
+                            format!(
+                                "a handle arm's handler must be a function, but this has type `{other}`"
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        // (body − handled) ∪ handler effects, recorded for the IR and rejoined
+        // to the enclosing row at the handle's span.
+        let body_row = self.subst.resolve_row(&body_row);
+        let handled = self.subst.resolve_row(&handled);
+        let handler_effects = self.subst.resolve_row(&handler_effects);
+        let net = handle_row(&body_row, &handled, &handler_effects);
+        self.effect_rows
+            .push((NodeKey::of_node(handle.syntax()), net.clone()));
+        self.add_effects(&net, handle_span);
+        Ok(body_ty)
     }
 
     /// `if c then a else b` — `Bool` condition, unified branches.

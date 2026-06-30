@@ -1,0 +1,13 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Handle
+
+effect Log
+
+effect Tool<t0>
+
+type Repo = MkRepo
+
+fn audited(f: Int → Int ! {Tool<Repo>}, logh: Int → Int ! {Log}) → Int ! {Log} = handle { Tool<Repo> → logh } in f(0)

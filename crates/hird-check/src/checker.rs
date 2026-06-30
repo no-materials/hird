@@ -60,11 +60,15 @@ pub(crate) struct Checker {
     pub(crate) diags: Vec<CheckDiagnostic>,
     /// Per-node types, recorded raw and resolved in [`Checker::finish`].
     pub(crate) types: Vec<(NodeKey, Type)>,
-    /// Each function node's elaborated effect row, recorded raw and resolved in
+    /// Each function node's elaborated effect row and each `handle` block's
+    /// computed row, recorded raw and resolved in
     /// [`Checker::finish_with_interface`]. Shares the body check's variable
     /// identities, so a row variable in a parameter type and the function's row
     /// resolve to one variable.
-    effect_rows: Vec<(NodeKey, EffectRow)>,
+    pub(crate) effect_rows: Vec<(NodeKey, EffectRow)>,
+    /// Each `handle` arm's handled effect, keyed by the arm node, recorded raw
+    /// and resolved in [`Checker::finish_with_interface`] for the IR.
+    pub(crate) handled_effects: Vec<(NodeKey, Effect)>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -113,6 +117,7 @@ impl Checker {
             diags: Vec::new(),
             types: Vec::new(),
             effect_rows: Vec::new(),
+            handled_effects: Vec::new(),
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),
@@ -845,6 +850,11 @@ impl Checker {
             .iter()
             .map(|(key, row)| (*key, self.subst.resolve_row(row)))
             .collect();
+        let handled_effects = self
+            .handled_effects
+            .iter()
+            .map(|(key, effect)| (*key, effect.map_args(|arg| self.subst.resolve(arg))))
+            .collect();
         let bindings: BTreeMap<String, Type> = self
             .bindings
             .iter()
@@ -898,6 +908,7 @@ impl Checker {
             bindings,
             adts,
             effect_rows,
+            handled_effects,
             diagnostics: self.diags,
         };
         (checked, interface)

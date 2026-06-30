@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         fn bad() -> Int = handle { Log -> 42 } in 0\")"
+---
+bad : () → Int
+error[C0031] 45..47: a handle arm's handler must be a function, but this has type `Int`

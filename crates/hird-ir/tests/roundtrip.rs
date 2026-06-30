@@ -19,9 +19,9 @@
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
     IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField,
-    IrFnDef, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
-    pretty_print,
+    IrFnDef, IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
+    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrVar,
+    IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -255,6 +255,19 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
                 .collect(),
             result_type: canon_type(&m.result_type, map),
         }),
+        IrExpr::Handle(h) => IrExpr::Handle(IrHandle {
+            arms: h
+                .arms
+                .iter()
+                .map(|arm| IrHandleArm {
+                    effect: canon_effect(&arm.effect, map),
+                    handler: canon_expr(&arm.handler, map),
+                })
+                .collect(),
+            body: Box::new(canon_expr(&h.body, map)),
+            effect_row: canon_effect_row(&h.effect_row, map),
+            result_type: canon_type(&h.result_type, map),
+        }),
         IrExpr::Constructor(ctor) => IrExpr::Constructor(IrConstructor {
             name: ctor.name.clone(),
             type_name: ctor.type_name.clone(),
@@ -457,6 +470,47 @@ fn multiple_and_parametric_effects() {
     );
 }
 
+// ── handle blocks ────────────────────────────────────────────────
+//
+// A handle lowers to an `IrHandle` carrying its arms, body, and row. The
+// printer re-emits the surface form, so the arms' effect heads and the body
+// must survive the round-trip.
+
+#[test]
+fn handle_block_round_trips() {
+    // Handling the body's `Tool<Repo>` with a logging handler trades it for
+    // `Log`; both the arm and the resulting row must come back unchanged.
+    assert_roundtrips(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
+    );
+}
+
+#[test]
+fn handle_multi_arm_round_trips() {
+    assert_roundtrips(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+           handle { Log -> lh, Tool<Repo> -> th } in f(0)",
+    );
+}
+
+#[test]
+fn handle_effect_only_in_arm_round_trips() {
+    // `Log` is named only by the handle arm — handling it leaves the function
+    // pure — so the printer must synthesise `effect Log` from the body, not just
+    // from signatures.
+    assert_roundtrips(
+        "effect Log\n\
+         fn run(lh: Int -> Int) -> Int = handle { Log -> lh } in 0",
+    );
+}
+
 // ── pretty-printer snapshots ─────────────────────────────────────
 
 #[test]
@@ -484,6 +538,21 @@ fn snapshot_polymorphic_and_extern() {
         "extern fn map(f: a -> b, xs: List<a>) -> List<b>\n\
          fn snd(x: b, y: a) -> a = y",
         "Poly",
+    );
+    insta::assert_snapshot!(pretty_print(&module));
+}
+
+#[test]
+fn snapshot_handle_block() {
+    // The handled `Tool<Repo>` leaves the row, the handler's `Log` joins it, and
+    // the printer re-emits the `handle { … } in …` surface form.
+    let module = lower_src(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
+        "Handle",
     );
     insta::assert_snapshot!(pretty_print(&module));
 }

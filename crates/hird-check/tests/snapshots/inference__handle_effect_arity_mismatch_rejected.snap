@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         fn bad(h: Int -> Int) -> Int = handle { Tool -> h } in 0\")"
+---
+bad : (Int → Int) → Int
+error[C0028] 55..59: effect `Tool` expects 1 type argument(s), but 0 were given

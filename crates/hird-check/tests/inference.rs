@@ -764,3 +764,98 @@ fn over_declared_effect_rejected() {
          fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Spawn} = run(0)"
     ));
 }
+
+// ── DI-style effect handlers ─────────────────────────────────────
+//
+// A `handle` block's row is the body's effects minus the handled effects plus
+// the handlers' own effects, so the enclosing function declares only what
+// escapes the block.
+
+/// Handling the effect a body performs removes it from the block's row, so the
+/// enclosing function may declare itself pure.
+#[test]
+fn handle_subtracts_handled_effect() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn handled(run: Int -> Int ! {Log}, h: Int -> Int) -> Int = handle { Log -> h } in run(0)"
+    ));
+}
+
+/// An effect the body performs but no arm handles stays in the block's row.
+#[test]
+fn handle_leaves_unhandled_effect() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn partial(f: Int -> Int ! {Log, Tool<Repo>}, h: Int -> Int) -> Int ! {Tool<Repo>} =\n\
+           handle { Log -> h } in f(0)"
+    ));
+}
+
+/// A handler's own effects join the block's row: handling `Tool<Repo>` with a
+/// logging handler trades the tool effect for `Log`.
+#[test]
+fn handle_adds_handler_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)"
+    ));
+}
+
+/// Several arms handle several effects at once; handling them all clears the
+/// row.
+#[test]
+fn handle_multiple_arms() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn multi(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+           handle { Log -> lh, Tool<Repo> -> th } in f(0)"
+    ));
+}
+
+/// Nested handles each subtract one effect; the inner block's row becomes the
+/// outer block's body.
+#[test]
+fn handle_nested_blocks() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+           handle { Log -> lh } in handle { Tool<Repo> -> th } in f(0)"
+    ));
+}
+
+/// An arm whose head is not a declared effect is rejected (unknown effect).
+#[test]
+fn handle_unknown_effect_rejected() {
+    insta::assert_snapshot!(check_str(
+        "fn bad(h: Int -> Int) -> Int = handle { Bogus -> h } in 0"
+    ));
+}
+
+/// An arm head applied at the wrong arity is rejected (`Tool` takes one
+/// argument).
+#[test]
+fn handle_effect_arity_mismatch_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         fn bad(h: Int -> Int) -> Int = handle { Tool -> h } in 0"
+    ));
+}
+
+/// A handler that is not a function is rejected: v0.1 checks the handler's
+/// shape, not its signature against the effect's operation type.
+#[test]
+fn handle_non_function_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn bad() -> Int = handle { Log -> 42 } in 0"
+    ));
+}

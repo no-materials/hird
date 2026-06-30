@@ -346,8 +346,9 @@ later fill.
 ## ADR-011: Effect-row representation and crate boundaries
 
 **Date**: 2026-06-24
-**Status**: Accepted (§1 crate-placement clause superseded in part by ADR-012;
-the representation, row union-find, and set-semantics decisions stand)
+**Status**: Accepted (§1 crate-placement clause superseded in part by ADR-012
+and the remainder by ADR-014, which removes `hird-effects`; the representation,
+row union-find, and set-semantics decisions stand)
 
 ### Context
 
@@ -426,7 +427,8 @@ effect row is represented so that unification stays sound.
 
 **Date**: 2026-06-29
 **Status**: Accepted (supersedes the crate-placement clause of ADR-011 §1;
-refines the capability-effect linkage of ADR-006)
+refines the capability-effect linkage of ADR-006; its `hird-effects` placement
+superseded by ADR-014)
 
 ### Context
 
@@ -521,7 +523,8 @@ binding site.
 ## ADR-013: v0.1 effect-handler checking scope and lowering
 
 **Date**: 2026-06-30
-**Status**: Accepted (refines ADR-004)
+**Status**: Accepted (refines ADR-004; `hird-effects` lowering placement
+superseded by ADR-014)
 
 ### Context
 
@@ -580,6 +583,46 @@ end to end.
 
 ---
 
+## ADR-014: The handler-row helper lives in `hird-types`; `hird-effects` is removed
+
+**Date**: 2026-06-30
+**Status**: Accepted (supersedes the crate-placement clauses of ADR-011 §1 and
+ADR-012 §1, and the lowering-placement consequence of ADR-013)
+
+### Context
+
+ADR-011 §1 created a `hird-effects` crate for effect inference and handler
+lowering; ADR-012 §1 moved inference into `hird-check`, leaving `hird-effects`
+"handler lowering and helpers only". The one piece of that scope that exists in
+v0.1 — DI-style `handle` blocks — needs a single pure helper: the handled-row
+computation `(body − handled) ∪ handler`. It operates only on `EffectRow` and
+`Effect`, whose representation and the rest of the row algebra (`unify_row`,
+`resolve_row`) already live in `hird-types`. A crate holding one such function,
+justified only by an Erlang backend that does not yet exist (source emission is
+staged as later work by ADR-002), is a speculative seam rather than a
+load-bearing boundary, and it splits the row algebra across two crates.
+
+### Decision
+
+The handled-row computation lives in `hird-types` as the free function
+`handle_row`, beside `EffectRow` and the row unification it complements. The
+`hird-effects` crate is removed, along with its (unused) entries in the
+workspace and in `hird-cli` and `hird-actors`. When the backend is built,
+handler lowering (parameter threading, per ADR-013) belongs with code generation
+in `hird-codegen`; whether it earns its own crate is decided then, against real
+code rather than a placeholder.
+
+### Consequences
+
+- One fewer crate and one fewer dependency edge; all effect-row algebra lives in
+  one place.
+- No crate boundary stands around code that does not exist yet; the backend's
+  handler lowering finds its home when it is written.
+- ADR-011 §1's and ADR-012 §1's "lives in `hird-effects`" clauses, and ADR-013's
+  "computed in `hird-effects`" consequence, now read: `hird-types`.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -592,5 +635,4 @@ when resolved:
 | OD3 | Audit log fidelity | Phase 6 | hir-yum3 |
 | OD4 | Tool effect replay semantics | Phase 6 | hir-v3pv |
 | OD5 | Actor protocol typing richness | Phase 7 | hir-b2gn |
-| OD7 | Handler semantics in v0.1 | Phase 5 | hir-mzhn |
 | OD8 | Send/reply effect tracking | Phase 7 | hir-actn |

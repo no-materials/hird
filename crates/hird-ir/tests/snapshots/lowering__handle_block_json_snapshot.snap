@@ -1,0 +1,69 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Handle",
+  "declarations": [
+    {
+      "kind": "Type",
+      "name": "Repo",
+      "params": [],
+      "constructors": [
+        {
+          "name": "MkRepo",
+          "fields": []
+        }
+      ]
+    },
+    {
+      "kind": "Fn",
+      "name": "audited",
+      "params": [
+        {
+          "name": "f",
+          "type": "Int → Int ! {Tool<Repo>}"
+        },
+        {
+          "name": "logh",
+          "type": "Int → Int ! {Log}"
+        }
+      ],
+      "return_type": "Int",
+      "effect_row": "{Log}",
+      "body": {
+        "kind": "Handle",
+        "arms": [
+          {
+            "effect": "Tool<Repo>",
+            "handler": {
+              "kind": "Var",
+              "name": "logh",
+              "type": "Int → Int ! {Log}"
+            }
+          }
+        ],
+        "body": {
+          "kind": "App",
+          "func": {
+            "kind": "Var",
+            "name": "f",
+            "type": "Int → Int ! {Tool<Repo>}"
+          },
+          "args": [
+            {
+              "kind": "Literal",
+              "value": {
+                "Int": "0"
+              },
+              "type": "Int"
+            }
+          ],
+          "result_type": "Int"
+        },
+        "effect_row": "{Log}",
+        "result_type": "Int"
+      }
+    }
+  ]
+}
