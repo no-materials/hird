@@ -137,6 +137,22 @@ impl Checker {
         body_ty
     }
 
+    /// Infers with a fresh, empty effect accumulator, returning the result and
+    /// the effects it performed. The enclosing row and provenance are saved
+    /// across the call and restored after, so a lambda's or `handle` body's
+    /// effects stay out of the row they sit in instead of folding into it.
+    fn infer_in_fresh_row(
+        &mut self,
+        infer: impl FnOnce(&mut Self) -> Checked<Type>,
+    ) -> (Checked<Type>, EffectRow) {
+        let saved_row = mem::take(&mut self.current_row);
+        let saved_prov = mem::take(&mut self.current_prov);
+        let res = infer(self);
+        let row = mem::replace(&mut self.current_row, saved_row);
+        self.current_prov = saved_prov;
+        (res, row)
+    }
+
     /// `λx y → body` — monomorphic parameters, n-ary function type.
     fn infer_lambda(&mut self, lambda: &LambdaExpr) -> Checked<Type> {
         let mut params: Vec<(String, Span, NodeKey)> = Vec::new();
@@ -166,16 +182,12 @@ impl Checker {
         }
         // A lambda is pure as an expression: its body's effects belong to its
         // function type, not the enclosing row. Infer the body into a fresh
-        // accumulator, then restore the enclosing one — discarding the lambda's
-        // provenance, which the enclosing function never consults.
-        let saved_row = mem::take(&mut self.current_row);
-        let saved_prov = mem::take(&mut self.current_prov);
-        let body_res = match lambda.body() {
-            Some(body) => self.infer_expr(&body),
+        // accumulator so they stay apart; the lambda's provenance is discarded,
+        // as the enclosing function never consults it.
+        let (body_res, body_row) = self.infer_in_fresh_row(|c| match lambda.body() {
+            Some(body) => c.infer_expr(&body),
             None => Err(Aborted),
-        };
-        let body_row = mem::replace(&mut self.current_row, saved_row);
-        self.current_prov = saved_prov;
+        });
         self.env.pop_scope();
         Ok(Type::func_eff(param_tys, body_res?, body_row))
     }
@@ -199,11 +211,7 @@ impl Checker {
         // infer them into a fresh accumulator the way a lambda body's are, so
         // the handled effects can be subtracted before the result rejoins the
         // enclosing row.
-        let saved_row = mem::take(&mut self.current_row);
-        let saved_prov = mem::take(&mut self.current_prov);
-        let body_res = self.infer_expr(&body);
-        let body_row = mem::replace(&mut self.current_row, saved_row);
-        self.current_prov = saved_prov;
+        let (body_res, body_row) = self.infer_in_fresh_row(|c| c.infer_expr(&body));
         let body_ty = body_res?;
 
         // Each arm names a declared effect (validated for arity) and binds it to
@@ -226,7 +234,10 @@ impl Checker {
                 let span = expr_span(&handler, self.source_id);
                 match self.subst.resolve(&handler_ty) {
                     Type::TyFn(_, _, row) => {
-                        for effect in self.subst.resolve_row(&row).effects() {
+                        // `resolve` already resolved the function type's row, so
+                        // its effects are canonical; a later arm's solving is
+                        // caught by the final resolve of `handler_effects`.
+                        for effect in row.effects() {
                             handler_effects.insert(effect.clone());
                         }
                     }

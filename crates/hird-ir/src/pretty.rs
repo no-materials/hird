@@ -29,7 +29,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt::{Display, Write as _};
 
-use hird_types::{EffectRow, RowVar, Type};
+use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
     IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrTypeDef, LiteralValue,
@@ -323,10 +323,16 @@ fn collect_type_effects(ty: &Type, out: &mut BTreeMap<String, usize>) {
 /// their type arguments.
 fn collect_row_effects(row: &EffectRow, out: &mut BTreeMap<String, usize>) {
     for effect in row.effects() {
-        out.insert(String::from(effect.head().as_str()), effect.args().len());
-        for arg in effect.args() {
-            collect_type_effects(arg, out);
-        }
+        collect_effect(effect, out);
+    }
+}
+
+/// Accumulates one effect's head and arity, plus any effects nested in its type
+/// arguments.
+fn collect_effect(effect: &Effect, out: &mut BTreeMap<String, usize>) {
+    out.insert(String::from(effect.head().as_str()), effect.args().len());
+    for arg in effect.args() {
+        collect_type_effects(arg, out);
     }
 }
 
@@ -339,13 +345,7 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
     match expr {
         IrExpr::Handle(h) => {
             for arm in &h.arms {
-                out.insert(
-                    String::from(arm.effect.head().as_str()),
-                    arm.effect.args().len(),
-                );
-                for arg in arm.effect.args() {
-                    collect_type_effects(arg, out);
-                }
+                collect_effect(&arm.effect, out);
                 collect_expr_effects(&arm.handler, out);
             }
             collect_row_effects(&h.effect_row, out);
