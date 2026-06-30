@@ -90,7 +90,8 @@ is a thin Erlang wrapper, not a replacement for OTP.
 ## ADR-004: DI-style effect handlers in v0.1
 
 **Date**: 2026-05-22
-**Status**: Accepted
+**Status**: Accepted (v0.1 handler-checking scope and lowering strategy refined
+by ADR-013)
 
 ### Context
 
@@ -514,6 +515,68 @@ binding site.
 - The upgrade path to value-precise effects stays open and additive; the type
   layer is never contaminated with value identity, so adopting singletons later
   supersedes only this clause.
+
+---
+
+## ADR-013: v0.1 effect-handler checking scope and lowering
+
+**Date**: 2026-06-30
+**Status**: Accepted (refines ADR-004)
+
+### Context
+
+ADR-004 commits v0.1 to DI-style `handle` blocks. Implementing them surfaces two
+questions, each gated by machinery that does not exist yet.
+
+First, a handle arm `Effect → impl` would ideally be type-checked by matching
+`impl` against the effect's operation signature — `Tool<ReadRepo> → mock_read`
+should verify `mock_read` accepts `{ path: Path }` and returns `RepoState`. But
+v0.1 effects are bare labels: an `effect` declaration records only a name and a
+type-parameter arity. The operation signature a handler would be checked against
+is introduced by `tool` declarations (Phase 6), which depend on this phase. So
+there is nothing to check a handler signature against yet.
+
+Second, a handler must eventually reroute effectful calls in generated Erlang —
+by threading handler implementations as parameters, or by process-dictionary
+lookup. But there is no Erlang backend yet: `hird-codegen` is a stub and ADR-002
+stages source emission as later work, so no lowering strategy can be exercised
+end to end.
+
+### Decision
+
+1. **v0.1 handler checking is structural, not signature-directed.** A handle arm
+   type-checks iff its head names a declared effect applied at the correct arity
+   and its handler expression has a function type. Validating handler argument
+   and result types against the effect's operation signature is deferred until
+   `tool` declarations introduce those signatures. Unknown effect, wrong effect
+   arity, and a non-function handler are the handler-shape errors v0.1 reports.
+
+2. **v0.1 handlers lower to IR only; the chosen Erlang strategy is parameter
+   threading.** A handle block lowers to a dedicated IR node carrying the handler
+   bindings and the handled body; no Erlang is emitted in this phase. When the
+   backend is built, a handler lowers by threading its implementation as an
+   explicit parameter through the handled scope, and an effectful call resolves
+   to the threaded handler.
+
+   *Rejected*: storing handlers in the process dictionary and looking them up at
+   the call site. It needs less plumbing and no arity growth, but introduces
+   per-process hidden mutable state, contradicting ADR-005's explicit per-process
+   semantics and the explicit-over-implicit tenet. Parameter threading keeps
+   handler routing visible in the IR and in any code generated from it.
+
+### Consequences
+
+- v0.1 accepts a handler whose shape is wrong for the effect in ways only an
+  operation signature could catch (e.g. wrong argument types); the structural
+  check still rejects unknown effects, wrong arity, and non-function handlers.
+  The gap closes when tool-declaration signatures land.
+- The handled effect row — body effects minus handled effects plus handler
+  effects — is computed in `hird-effects` per ADR-011/012; the structural arm
+  check and that row computation are what gate a `handle` block in v0.1.
+- The IR gains a handler node now; the backend consumes it later with no IR
+  change forced by the chosen strategy.
+- Parameter threading grows function arity in generated code — acceptable for
+  the explicitness, and invisible until the backend exists.
 
 ---
 

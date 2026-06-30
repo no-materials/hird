@@ -71,3 +71,28 @@ document in DECISIONS.md.
   effect subtraction in handle block's row, handler introducing new effects.
 - At least 8 snapshot tests.
 
+
+## Notes
+
+**2026-06-30T10:13:25Z**
+
+Locked the two open implementation decisions (recorded as ADR-013).
+
+Decision 1 — Handler checking is structural in v0.1. A handle arm checks iff its
+head is a declared effect at the correct arity and the handler expression has a
+function type. Exact handler-signature validation (handler args/return vs the
+effect's operation type) is deferred to hir-4g3y (tool declarations), which is
+what introduces operation signatures. This narrows the "Handler signature
+validated against effect declaration" / "Handler type mismatches produce compile
+errors" criteria to: unknown effect, wrong arity, and non-function handler.
+
+Decision 2 — Lower to IR only. Add an IR handle node carrying the handler
+bindings and body; emit no Erlang (hird-codegen is a stub; backend is later per
+ADR-002). Parameter threading is the chosen eventual Erlang strategy (explicit,
+no hidden state); process-dictionary lookup rejected. "At least one lowering
+strategy implemented" is satisfied at the IR level.
+
+Surface syntax follows phrasebook + ADR-009: whole-effect handler arms
+(`Log -> fn(...) ...`, not `Log.info -> ...`) and a bare expression after `in`
+(no `{ }` block). The ticket's `Log.info` and `in { ... }` examples are
+illustrative only, not the implemented grammar.
