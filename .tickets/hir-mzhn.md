@@ -1,6 +1,6 @@
 ---
 id: hir-mzhn
-status: open
+status: closed
 deps: []
 links: [hir-t1cj]
 created: 2026-05-22T21:43:40Z
@@ -46,3 +46,9 @@ CPS transformation, only where it pays off.
 - Documentation explicitly states what handlers can and cannot do in v0.1.
 - Koka-style handlers documented as future work.
 
+
+## Notes
+
+**2026-06-30T10:49:32Z**
+
+Resolved by hir-t1cj. OD7 is DI-style handler semantics, documented in ADR-004 (decision, what handlers can/cannot do, Koka-style deferred to v0.2+) and refined by ADR-013 (v0.1 structural checking scope and lowering). Removed from the open-decision-slots table. DI-style handlers are implemented in hird-check/hird-effects/hird-ir.

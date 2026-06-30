@@ -1,6 +1,6 @@
 ---
 id: hir-t1cj
-status: open
+status: closed
 deps: [hir-0x16]
 links: [hir-mzhn]
 created: 2026-05-22T21:39:14Z
@@ -96,3 +96,43 @@ Surface syntax follows phrasebook + ADR-009: whole-effect handler arms
 (`Log -> fn(...) ...`, not `Log.info -> ...`) and a bare expression after `in`
 (no `{ }` block). The ticket's `Log.info` and `in { ... }` examples are
 illustrative only, not the implemented grammar.
+
+**2026-06-30T10:48:45Z**
+
+Implemented and verified.
+
+Parsing and AST were already in place (handle/in keywords, HANDLE_EXPR/
+HANDLE_ARM, HandleBlock/HandleArm); added a HandleArm::effect() accessor for the
+effect head.
+
+Type-checking (hird-check): infer_handle infers the body into a fresh effect
+accumulator (mirroring lambda), validates each arm structurally per ADR-013 —
+the head must be a declared effect at the right arity (reuses C0027/C0028) and
+the handler must have a function type (new C0031) — and computes the block's row
+as (body − handled) ∪ handler effects. The block types as its body. The net row
+and each arm's handled effect are recorded on CheckedFile (effect_rows /
+handled_effects) for the IR.
+
+Row algebra (hird-effects): the crate gains handle_row(body, handled, handler),
+the pure (body − handled ∪ handler) computation ADR-013 places here; hird-check
+now depends on hird-effects.
+
+IR: new IrHandle/IrHandleArm carrying the arms (handled effect + handler), body,
+computed row, and result type. Lowering reads the checker side-tables; the
+pretty-printer re-emits `handle { Effect → handler, … } in body` and synthesises
+effect declarations from handle arms (collect_expr_effects), so a handled effect
+named only in an arm still re-checks. No Erlang emitted (IR-only per ADR-013;
+parameter threading is the recorded eventual strategy).
+
+OD7: documented in ADR-004 (DI-style) and ADR-013 (v0.1 checking scope +
+lowering); removed from the open-decision-slots table.
+
+Tests: 8 checker inference snapshots (subtraction, unhandled remainder, handler-
+introduced effect, multi-arm, nested, unknown effect, arity, non-function
+handler), 3 IR snapshots/round-trips (pretty-print, JSON, structural) plus 2
+round-trip property tests, 5 hird-effects unit tests, and a HandleArm::effect()
+AST assertion. cargo fmt, clippy -D warnings, and test --workspace all pass.
+
+**2026-06-30T12:07:37Z**
+
+Follow-up refactor (post-close): the handled-row helper was a single ~15-line pure function over EffectRow/Effect and did not justify its own crate. Moved hird_effects::handle_row into hird-types as a free function beside EffectRow/unify_row/resolve_row (where the rest of the row algebra lives), and removed the hird-effects crate entirely — including its unused entries in the workspace and in hird-cli/hird-actors. Recorded as ADR-014 (supersedes the crate-placement clauses of ADR-011 §1 / ADR-012 §1 and ADR-013's lowering-placement consequence); future handler lowering will live with codegen. fmt, clippy -D warnings, and test --workspace all pass.

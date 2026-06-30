@@ -1,6 +1,6 @@
 ---
 id: hir-rlo4
-status: open
+status: closed
 deps: [hir-0rzf]
 links: []
 created: 2026-05-22T21:33:23Z
@@ -50,7 +50,7 @@ graphs precise enough to show exactly which tables a function touches.
 
 1. [x] [hir-95ld](hir-95ld.md) — Effect row types and row polymorphism
 2. [x] [hir-0x16](hir-0x16.md) — Effect inference and annotation checking
-3. [ ] [hir-t1cj](hir-t1cj.md) — DI-style effect handlers
+3. [x] [hir-t1cj](hir-t1cj.md) — DI-style effect handlers
 
 ## Open design questions resolved in this phase
 
@@ -135,3 +135,32 @@ span) and drives the mismatch diagnostic but is not yet persisted on
 CheckedFile; audit-graph rendering (Phase 6/10) will surface it.
 
 hir-t1cj (DI-style effect handlers) is now unblocked.
+
+**2026-06-30T10:49:08Z**
+
+Task 3 of 3 complete: hir-t1cj (DI-style effect handlers) landed and is closed.
+Phase 5 is functionally complete.
+
+Delivered: `handle { Effect → handler, … } in body` now type-checks. Each arm is
+validated structurally (declared effect at the right arity; handler must be a
+function — new code C0031, reusing C0027/C0028 for the head), and the block's
+row is (body effects − handled effects) ∪ handler effects, computed by a new
+hird-effects::handle_row helper. The block types as its body; the net row and
+per-arm handled effect are recorded on CheckedFile and consumed by a new IrHandle
+IR node (lowering + pretty-print + round-trip). No Erlang is emitted — IR-only,
+with parameter threading as the recorded eventual strategy.
+
+Exact-signature handler validation (handler args/return vs the effect's
+operation type) is deferred to hir-4g3y, which introduces tool operation
+signatures; v0.1's structural check is the agreed scope.
+
+OD7 (handler semantics) is documented in ADR-004/013 and removed from the open-
+decision-slots table; hir-mzhn is closed. OD8 (Send/reply effect tracking)
+remains for Phase 7. Phase-level acceptance — effect row types, inference and
+annotation checking, capability linkage, DI handlers, and the snapshot suite —
+is now met; cargo clippy and cargo test pass for hird-effects, hird-check, and
+hird-ir.
+
+**2026-06-30T12:10:48Z**
+
+All three children are closed (hir-95ld, hir-0x16, hir-t1cj) and the phase's acceptance criteria are met: effect-row types and row polymorphism, effect inference and annotation checking, capability-effect linkage, DI-style handlers, and the snapshot suite. OD7 is documented (ADR-004/013); OD8 (Send/reply effect tracking) carries forward to Phase 7. Closing the epic; hir-jt39 (Phase 6 — Tool Effects) and hir-y85q (Phase 7 — Actors) are unblocked.
