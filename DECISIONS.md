@@ -623,6 +623,137 @@ code rather than a placeholder.
 
 ---
 
+## ADR-015: Tool declarations — desugaring, invocation records, and the standard-library boundary
+
+**Date**: 2026-07-01
+**Status**: Accepted (resolves OD2)
+
+### Context
+
+`tool` declarations are the surface for the tool-effect primitive: an auditable,
+structured invocation of an external (often LLM-mediated) operation. A
+declaration such as
+
+```
+tool ReadRepo : { path: Path } → RepoState
+tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn ParseError}
+```
+
+must give rise to three things: an effect usable in a row (`Tool<ReadRepo>`), a
+callable function (`read_repo`), and a structured invocation record describing
+each call (tool name, arguments, result, plus a timestamp and caller identity).
+Implementing this surfaced four questions earlier decisions had not settled.
+
+First, `Tool<ReadRepo>` is a parametric effect whose argument is a *type*
+(effects carry `Type` arguments — ADR-011). But `ReadRepo` is introduced by a
+`tool` declaration, not a `type` declaration, so nothing binds `ReadRepo` in the
+type namespace for the effect argument to resolve against.
+
+Second, the invocation record is written as a *named record type*
+(`ReadRepoInvocation = { tool, args, result, timestamp, caller }`). The type
+system has only structural records (anonymous, keyed by label) and nominal ADTs
+(named, but built from positional constructors — ADR-010). It has no named-record
+type and no type alias: no existing form is simultaneously named and
+record-shaped.
+
+Third, `Exn ParseError` shows a tool declaration may carry its own trailing
+effect row beyond the implicit `Tool<…>`, and `LLMCall<t>` shows a tool may be
+generic. Neither the parser nor the checker handled these.
+
+Fourth, the standard tools (`llm_call`, `http_get`, `http_post`, `read_file`,
+`write_file`, `shell`) and their supporting types must exist, but standard-library
+resolution is deferred (ADR-010): there is no prelude and no library search path,
+only modules handed to the checker.
+
+### Decision
+
+1. **A `tool` declaration desugars to a marker type, a function, and an effect
+   use — over a single built-in `Tool` effect.** Declaring `tool ReadRepo`
+   registers a nullary nominal type `ReadRepo` (a marker with no constructors), so
+   `Tool<ReadRepo>` resolves through ordinary effect-argument elaboration against
+   the one built-in parametric effect `Tool` at arity 1 — not a distinct effect
+   per tool. It registers a function (`read_repo`) whose type is
+   `(args) → result ! ({Tool<ReadRepo>} ∪ declared_row)`, generalised and bound in
+   the value environment exactly as an ADT constructor is. A generic tool binds
+   its type parameters in a closed elaboration scope and generalises — the path
+   ADT constructors already take — and a tool's optional trailing row is unioned
+   into the function's row.
+
+2. **The invocation record is a compiler-derived, named *structural* record held
+   in a checker side-table — not a nominal type in the surface namespace.** For
+   each tool the checker derives a record type
+   `{ tool: String, args: <input>, result: <output>, timestamp: Timestamp,
+   caller: CallerId }` and stores it under a generated name (`ReadRepoInvocation`)
+   in a side-table on the checked file, beside the effect rows and handled effects
+   already kept there. `args` and `result` are projected from the tool signature;
+   `tool`, `timestamp`, and `caller` are fixed schema fields the signature cannot
+   supply (`timestamp` and `caller` are runtime-injected). The record is
+   snapshot-testable by name — satisfying "compiler-generated invocation record
+   with correct fields" — without minting a constructor or a new type form.
+
+   *Rejected — a single-constructor ADT wrapping the record*
+   (`type ReadRepoInvocation = ReadRepoInvocation({ … })`). It reuses existing ADT
+   machinery, but the name is skin-deep: reading a field means unwrapping a
+   constructor, the constructor tag leaks a nesting layer into any future
+   serialisation, and a generic tool forces a *generic* ADT threading the tool's
+   type parameters — machinery, not free reuse.
+
+   *Rejected — adding named record types / type aliases to the language.*
+   Genuinely useful, but a language feature in its own right (parser, elaboration,
+   unification, IR), too large to seed as a side effect of this work and prone to
+   being half-designed under its pressure.
+
+   Because the record is derived and not user-referenced, its representation is
+   not load-bearing: when an audit sink defines how records are consumed and the
+   JSON wire schema is fixed, the derived record can be promoted to whatever form
+   that consumer needs — additively, with no migration of user code. Field order
+   is deterministic (records are keyed by label), which audit reproducibility
+   needs.
+
+3. **LLM calls are schema-typed (resolves OD2).** The standard LLM tool is
+   `llm_call<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn ParseError}`:
+   the caller supplies a `Schema<t>`, the result type `t` is tied to it through
+   ordinary unification, and a result that does not conform raises
+   `Exn ParseError`. Raw-text, opaque-response, and distribution-typed (`Dist<t>`)
+   alternatives are rejected for v0.1 — the first two discard the typing story,
+   the third is deferred as materially more complex. This is the generic-tool case
+   of clause 1; it needs no machinery beyond it.
+
+4. **The tool-declaration mechanism ships now; the specific standard tools live in
+   test fixtures until stdlib resolution is unlocked.** The general machinery
+   (clauses 1–3) is part of the compiler. The concrete standard tools and their
+   supporting types (`Prompt`, `Schema<t>`, `Path`, `Url`, `Headers`,
+   `HttpResponse`, `Timestamp`, `CallerId`, `TicketId`, `RepoState`, and the
+   `Tool`/`Exn` effects) are declared in `.hird` fixtures fed to the checker by the
+   test suite, which asserts they parse and type-check. They are *not* hard-coded
+   into the checker as built-ins (that ossifies a prelude the checker can never
+   unlearn and smuggles stdlib content past ADR-010) and *not* loaded from an
+   implicit prelude module (that reopens the resolution ADR-010 defers). When
+   ADR-010 is superseded and a library search path exists, the fixtures graduate
+   to a real prelude module unchanged.
+
+### Consequences
+
+- One built-in `Tool` effect, parameterised by a per-tool marker type, keeps the
+  effect row's head-keyed index meaningful (`Tool<ReadRepo>` and
+  `Tool<CreateTicket>` share the `Tool` bucket — ADR-011) and needs no per-tool
+  effect registration.
+- The invocation-record representation is deliberately not frozen. The audit-log
+  work that consumes records inherits an unconstrained choice of wire schema and
+  pins field-ordering and singleton-tag concerns then; this decision fixes only
+  the field *shape*.
+- `tool` is typed `String` in the record because v0.1 has no singleton/literal
+  types; its value is compiler-fixed. A later literal-type feature can narrow it
+  without changing the record's other fields.
+- Handler arms over tool effects can now, in principle, be checked against a
+  tool's operation signature (the gap ADR-013 left open). That validation is not
+  taken on here; it remains deferred so this work stays declarations-plus-record.
+- Standard tools proven by fixtures are exercised end to end by the checker but
+  are not importable by user programs until stdlib resolution lands — an accepted,
+  documented limitation for v0.1, consistent with ADR-010.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -631,7 +762,6 @@ when resolved:
 | ID | Topic | Resolves in | Ticket |
 |----|-------|-------------|--------|
 | OD1 | Crash vs error boundary | Phase 8 | hir-fbze |
-| OD2 | LLM call typing | Phase 6 | hir-x6cx |
 | OD3 | Audit log fidelity | Phase 6 | hir-yum3 |
 | OD4 | Tool effect replay semantics | Phase 6 | hir-v3pv |
 | OD5 | Actor protocol typing richness | Phase 7 | hir-b2gn |

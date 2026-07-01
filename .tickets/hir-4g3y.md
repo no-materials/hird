@@ -65,3 +65,65 @@ This ticket resolves **OD2 (LLM call typing)**: confirm schema-typed approach.
   record structure, standard library tool types.
 - At least 8 snapshot tests.
 
+
+## Notes
+
+**2026-07-01T13:47:08Z**
+
+Design decisions locked (D1/D2 via council; D3–D6 by owner intuition). Recorded
+in DECISIONS.md as ADR-015 (tool declarations); OD2 resolved and removed from the
+open-decision-slots table.
+
+D1 — Invocation record representation: a compiler-DERIVED, named STRUCTURAL record
+held in a checker side-table (keyed by generated name, e.g. ReadRepoInvocation),
+NOT a single-constructor ADT wrapper and NOT a new named-record language feature.
+Fields: { tool: String, args: <input>, result: <output>, timestamp: Timestamp,
+caller: CallerId } — args/result projected from the signature; tool/timestamp/
+caller are fixed schema fields (timestamp and caller are runtime-injected, so the
+record is not purely signature-derived). Snapshot the derived record by name to
+satisfy the "compiler-generated record with correct fields" AC; no first-class
+value type is required because v0.1 has no in-language consumer (mock handlers,
+IR-only, no backend). Representation stays unlocked — the audit-log sibling pins
+the JSON wire contract and may promote it additively with no user migration.
+
+D2 — Standard-library boundary: the tool-declaration MECHANISM lands here (in the
+compiler). The six standard tools + supporting types (Prompt, Schema<t>, Path,
+Url, Headers, HttpResponse, Timestamp, CallerId, TicketId, RepoState) + the
+Tool/Exn effects are declared in .hird TEST FIXTURES fed through check_str — NOT
+hardcoded built-ins (ossifies / smuggles a prelude past ADR-010) and NOT an
+implicit prelude module (reopens ADR-010). The snapshot harness already asserts
+fixtures parse and type-check, so a rotted fixture fails CI. Fixtures graduate to
+a real prelude unchanged when ADR-010 is superseded. Standard tools are proven by
+fixtures but are NOT importable by user programs in v0.1 — documented limitation.
+
+D3 — Desugaring model: `tool ReadRepo` registers (a) a nullary marker type
+ReadRepo so Tool<ReadRepo> resolves (effect args are types), (b) the function
+read_repo : (args) → result ! ({Tool<ReadRepo>} ∪ declared_row), generalised and
+bound like an ADT constructor, (c) the derived invocation record (D1). ONE
+built-in Tool effect at arity 1, parameterised by the marker — not a per-tool
+effect. Naming: use Tool<LLMCall> (marker = the tool's own name); the OD2 draft's
+`Tool<LLM>` is superseded by this convention.
+
+D4 — Generic tools & trailing rows (the shape of OD2): parse_tool_decl must gain
+(i) an optional `<t,…>` type-param list (currently missing) and (ii) an optional
+trailing `! {row}`. Generic tools bind their params in a closed elaboration scope
+and generalise (reuse the ADT type-param path); the trailing row unions into the
+function's row. llm_call<t> is the only generic standard tool.
+
+D5 — `tool` field type: String for v0.1 (no singleton/literal types); value is
+compiler-fixed. Narrowable later by a literal-type feature without touching the
+other fields.
+
+D6 — Handler-signature checking: OUT OF SCOPE here. ADR-013 deferred
+signature-directed handler checking "until tool declarations introduce those
+signatures"; those signatures now exist, but validating handler arms against them
+is a separate follow-up so this work stays declarations-plus-record. Tracked
+separately (linked).
+
+AC interpretation: "invocation record types compiler-generated with correct
+fields" and the "record structure" snapshot are met by the named side-table
+structural record — no requirement that it be a user-referenceable type. Suggested
+≥8 snapshots: basic tool decl; generic tool decl; tool call in an effect row; tool
+with a trailing Exn row; derived record structure; handler substitution over a
+tool effect; standard-library tool types (fixture); unknown-effect / wrong-arity
+errors.

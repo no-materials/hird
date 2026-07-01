@@ -52,6 +52,7 @@ structured types.
 
 1. [ ] [hir-4g3y](hir-4g3y.md) — Tool declarations and invocation records
 2. [ ] [hir-jgs1](hir-jgs1.md) — Audit log integration and tool effect docs
+3. [ ] [hir-uvui](hir-uvui.md) — Signature-directed handler checking for tool effects
 
 ## Open design questions resolved in this phase
 

@@ -37,3 +37,20 @@ Exn ParseError is raised.
 - Tool declaration for llm_call reflects the chosen typing.
 - At least one example in phrasebook.md showing LLM call usage.
 
+
+## Notes
+
+**2026-07-01T13:47:08Z**
+
+OD2 (LLM call typing) resolved: schema-typed, confirmed. Documented in DECISIONS.md
+as ADR-015 clause 3 and removed from the open-decision-slots table.
+
+Locked shape:
+  llm_call<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn ParseError}
+The caller supplies Schema<t>; the result type t is tied to it by ordinary
+unification; a non-conforming result raises Exn ParseError. Raw-text,
+opaque-response, and Dist<t> alternatives rejected for v0.1.
+
+Remaining ACs (the llm_call tool declaration reflecting this typing, and a
+phrasebook.md example of LLM call usage) are implemented as part of the tool
+declarations work — left open here until that lands.
