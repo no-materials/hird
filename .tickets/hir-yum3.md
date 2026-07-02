@@ -40,3 +40,15 @@ upgrade path is documented but not implemented.
 - Audit log format specified in docs/tool-effects.md.
 - Implementation matches the specified format.
 
+
+## Notes
+
+**2026-07-02T13:18:20Z**
+
+Resolution locked in hir-jgs1 (council, 2026-07-02), matching this ticket's
+recommendation: JSON-lines, deterministic byte-exact ordering (hand-rolled
+canonical writer, sorted labels for value records / fixed envelope order),
+required schema_version field for the upgrade path, no tamper-proofing in
+v0.1. Additions beyond the recommendation: tagged ok/err result encoding and
+a checker-enforced wire-representability constraint on tool signatures. ADR
+to be written in DECISIONS.md during hir-jgs1 implementation.

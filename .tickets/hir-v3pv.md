@@ -34,3 +34,16 @@ structured arguments and full structured results for every tool invocation.
 - Replay handler implemented and tested.
 - Audit log contains sufficient information for replay.
 
+
+## Notes
+
+**2026-07-02T13:18:20Z**
+
+Resolution locked in hir-jgs1 (council, 2026-07-02): both modes as handler
+choices, as recommended. Replay handler semantics pinned to strict-sequential
+matching with a hard structured Divergence error on mismatch;
+keyed-by-(tool,args) matching and live fall-through are explicitly out of
+scope (nondeterminism). Log contains full args and tagged ok/err results,
+sufficient for replay including failures. Only divergence-reporting
+ergonomics remain provisional pending real runs. ADR to be written in
+DECISIONS.md during hir-jgs1 implementation.
