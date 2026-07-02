@@ -1,6 +1,6 @@
 ---
 id: hir-4g3y
-status: open
+status: closed
 deps: [hir-t1cj]
 links: [hir-x6cx]
 created: 2026-05-22T21:39:26Z
@@ -127,3 +127,39 @@ structural record — no requirement that it be a user-referenceable type. Sugge
 with a trailing Exn row; derived record structure; handler substitution over a
 tool effect; standard-library tool types (fixture); unknown-effect / wrong-arity
 errors.
+
+**2026-07-02T06:32:45Z**
+
+Implemented per the locked design (ADR-015, D1-D6).
+
+Landed in commit 79c69ca:
+- Grammar: record types { name: Type } join the type-atom grammar (braces in
+  type position are unambiguous); parse_tool_decl gains the optional <t,...>
+  type-param list and optional trailing ! {row} (D4). New AST projections:
+  TypeExpr::Record, ToolDecl::{type_params,input,output,effect_ann}.
+- Checker: each tool registers a nullary marker type; binds the generated
+  snake_case function (input) -> output ! ({Tool<Marker>} u declared_row),
+  elaborated in a closed scope over the tool's type params and generalised
+  like an ADT constructor (D3); derives the invocation record
+  { tool: String, args, result, timestamp: Timestamp, caller: CallerId }
+  into the new CheckedFile::invocation_records side-table keyed by
+  NameInvocation (D1, D5). Tools occupy both namespaces for duplicate
+  detection (marker type + generated function).
+- Standard tools llm_call/http_get/http_post/read_file/write_file/shell +
+  supporting types + Tool/Exn effects live in
+  crates/hird-check/tests/fixtures/std_tools.hird, checked by the snapshot
+  suite (D2); not importable by user programs in v0.1 as documented.
+- Tests: 13 checker tests in tests/tools.rs (12 snapshots incl. basic decl,
+  generic decl, call in row, trailing row union, record structure, handle
+  substitution, std fixture, unknown-effect/wrong-arity/dup-param/collision/
+  open-row errors) + 5 parser smoke snapshots + AST projection tests.
+- OD2 remaining ACs: llm_call declaration reflects schema-typing; phrasebook
+  gains an llm_call usage example.
+
+Surface-syntax note: the epic/phrasebook wrote 'Exn ParseError' (juxtaposed);
+every other parametric effect uses angle brackets and D4 listed no row-grammar
+work, so the exception row is spelled Exn<ParseError> with 'effect Exn<t>'
+declared in fixtures. Phrasebook aligned.
+
+Handler-signature checking stays deferred per D6 (hir-uvui); record wire
+format / audit sink is hir-jgs1.

@@ -50,7 +50,7 @@ structured types.
 
 ## Task sequence
 
-1. [ ] [hir-4g3y](hir-4g3y.md) — Tool declarations and invocation records
+1. [x] [hir-4g3y](hir-4g3y.md) — Tool declarations and invocation records
 2. [ ] [hir-jgs1](hir-jgs1.md) — Audit log integration and tool effect docs
 3. [ ] [hir-uvui](hir-uvui.md) — Signature-directed handler checking for tool effects
 
@@ -92,3 +92,9 @@ structured types.
   substitution, invocation record generation, audit log output format.
 - `cargo clippy` and `cargo test` pass.
 
+
+## Notes
+
+**2026-07-02T06:33:22Z**
+
+hir-4g3y (tool declarations and invocation records) closed; landed in commit 79c69ca. OD2 resolved and hir-x6cx closed with it. The tool-declaration mechanism, record types, generated functions, derived invocation records, and the six standard-tool fixture declarations are in. Remaining: hir-jgs1 (audit log + docs, resolves OD3/OD4) and hir-uvui (signature-directed handler checking), both now unblocked.

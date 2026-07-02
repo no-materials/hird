@@ -1,6 +1,6 @@
 ---
 id: hir-x6cx
-status: open
+status: closed
 deps: []
 links: [hir-4g3y]
 created: 2026-05-22T21:43:02Z
@@ -54,3 +54,7 @@ opaque-response, and Dist<t> alternatives rejected for v0.1.
 Remaining ACs (the llm_call tool declaration reflecting this typing, and a
 phrasebook.md example of LLM call usage) are implemented as part of the tool
 declarations work — left open here until that lands.
+
+**2026-07-02T06:32:53Z**
+
+All ACs now met: OD2 documented in DECISIONS.md (ADR-015 clause 3); the llm_call tool declaration in the checked std-tools fixture reflects the schema-typed shape llm_call<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>, Tool<LLMCall>}; phrasebook.md shows an llm_call usage example (schema argument fixes the result type). Landed with hir-4g3y in commit 79c69ca. Note: the exception effect is spelled Exn<ParseError> (ordinary parametric-effect syntax), not the draft's juxtaposed 'Exn ParseError'.
