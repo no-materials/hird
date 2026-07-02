@@ -1,0 +1,29 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(include_str!(\"fixtures/std_tools.hird\"))"
+---
+CallerId : String → CallerId
+Headers : List<(String, String)> → Headers
+HttpError : Int → String → HttpError
+HttpResponse : Int → String → HttpResponse
+IoError : String → IoError
+ParseError : String → ParseError
+Path : String → Path
+Prompt : String → Prompt
+RepoState : String → RepoState
+Schema : ∀a. String → Schema<a>
+TicketId : String → TicketId
+Timestamp : Int → Timestamp
+Url : String → Url
+http_get : { headers: Headers, url: Url } → HttpResponse ! {Exn<HttpError>, Tool<HttpGet>}
+http_post : { body: String, headers: Headers, url: Url } → HttpResponse ! {Exn<HttpError>, Tool<HttpPost>}
+llm_call : ∀a. { prompt: Prompt, schema: Schema<a> } → a ! {Exn<ParseError>, Tool<LLMCall>}
+read_file : { path: Path } → String ! {Exn<IoError>, Tool<ReadFile>}
+shell : { command: String } → { code: Int, stderr: String, stdout: String } ! {Exn<IoError>, Tool<Shell>}
+write_file : { contents: String, path: Path } → () ! {Exn<IoError>, Tool<WriteFile>}
+record HttpGetInvocation : { args: { headers: Headers, url: Url }, caller: CallerId, result: HttpResponse, timestamp: Timestamp, tool: String }
+record HttpPostInvocation : { args: { body: String, headers: Headers, url: Url }, caller: CallerId, result: HttpResponse, timestamp: Timestamp, tool: String }
+record LLMCallInvocation : { args: { prompt: Prompt, schema: Schema<a> }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }
+record ReadFileInvocation : { args: { path: Path }, caller: CallerId, result: String, timestamp: Timestamp, tool: String }
+record ShellInvocation : { args: { command: String }, caller: CallerId, result: { code: Int, stderr: String, stdout: String }, timestamp: Timestamp, tool: String }
+record WriteFileInvocation : { args: { contents: String, path: Path }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }

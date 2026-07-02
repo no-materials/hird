@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         effect Exn<t>\\n\\\n         type Prompt = Prompt(String)\\n\\\n         type Schema<t> = Schema(String)\\n\\\n         type ParseError = ParseError(String)\\n\\\n         tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\\n\\\n         fn ask(p: Prompt, s: Schema<Int>) -> Int ! {Exn<ParseError>, Tool<LLMCall>} =\\n\\\n           llm_call({ prompt: p, schema: s })\")"
+---
+ParseError : String → ParseError
+Prompt : String → Prompt
+Schema : ∀a. String → Schema<a>
+ask : Prompt → Schema<Int> → Int ! {Exn<ParseError>, Tool<LLMCall>}
+llm_call : ∀a. { prompt: Prompt, schema: Schema<a> } → a ! {Exn<ParseError>, Tool<LLMCall>}
+record LLMCallInvocation : { args: { prompt: Prompt, schema: Schema<a> }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }

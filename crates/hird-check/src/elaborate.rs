@@ -26,7 +26,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ast::{EffectAnn, TypeExpr};
-use hird_types::{Effect, EffectRow, RowVar, Type};
+use hird_types::{Effect, EffectRow, Label, RowVar, Type};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
@@ -113,6 +113,16 @@ impl Checker {
         scope: &mut Scope,
     ) -> Checked<EffectRow> {
         self.elaborate_effect_row(ann, scope, VarMode::Fresh)
+    }
+
+    /// Elaborates an effect-row annotation with declared-parameters-only
+    /// scoping (tool declarations, alongside [`Checker::elaborate_closed`]).
+    pub(crate) fn elaborate_row_closed(
+        &mut self,
+        ann: &EffectAnn,
+        scope: &mut Scope,
+    ) -> Checked<EffectRow> {
+        self.elaborate_effect_row(ann, scope, VarMode::Closed)
     }
 
     /// Elaborates a `handle`-arm effect head into a concrete [`Effect`],
@@ -210,6 +220,20 @@ impl Checker {
                     elems.push(self.elaborate(&elem, scope, mode)?);
                 }
                 Ok(Type::tuple(elems))
+            }
+            TypeExpr::Record(record) => {
+                let mut fields = Vec::new();
+                for field in record.fields() {
+                    let Some(name) = field.name() else {
+                        return Err(Aborted);
+                    };
+                    let Some(field_ty) = field.ty() else {
+                        return Err(Aborted);
+                    };
+                    let ty = self.elaborate(&field_ty, scope, mode)?;
+                    fields.push((Label::new(name), ty));
+                }
+                Ok(Type::record(fields))
             }
             TypeExpr::Paren(paren) => {
                 let Some(inner) = paren.inner() else {

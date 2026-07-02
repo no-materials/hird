@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         tool Leaky : { x: Int } -> Int ! {r}\")"
+---
+error[C0012] 49..50: row variable `r` is not declared here

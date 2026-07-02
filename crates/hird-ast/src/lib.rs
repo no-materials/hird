@@ -389,6 +389,36 @@ impl ToolDecl {
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
     }
+
+    /// The type parameter names (`<t, u>`), in order.
+    pub fn type_params(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
+            .flat_map(|list| list.children_with_tokens())
+            .filter_map(|e| e.into_token())
+            .filter(|t| t.kind() == SyntaxKind::IDENT)
+            .map(|t| t.text())
+    }
+
+    /// The input (argument) type, between `:` and `→`.
+    #[must_use]
+    pub fn input(&self) -> Option<TypeExpr> {
+        type_after(&self.0, SyntaxKind::COLON)
+    }
+
+    /// The output (result) type, after `→`.
+    #[must_use]
+    pub fn output(&self) -> Option<TypeExpr> {
+        type_after(&self.0, SyntaxKind::ARROW)
+    }
+
+    /// The trailing effect-row annotation (`! { … }`), if present. Unioned into
+    /// the generated function's row alongside the tool's own effect.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
+    }
 }
 
 ast_node! {
@@ -967,6 +997,42 @@ impl TupleType {
 }
 
 ast_node! {
+    /// A record type (`{ name: Type, … }`).
+    RecordType => RECORD_TYPE
+}
+
+impl RecordType {
+    /// The record's fields, in order.
+    pub fn fields(&self) -> impl Iterator<Item = RecordTypeField> + '_ {
+        children(&self.0)
+    }
+}
+
+ast_node! {
+    /// A record-type field (`name: Type`).
+    RecordTypeField => RECORD_TYPE_FIELD
+}
+
+impl RecordTypeField {
+    /// The field name. May be a keyword spelling (e.g. `tool`).
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        self.0
+            .children_with_tokens()
+            .take_while(|e| element_kind(*e) != SyntaxKind::COLON)
+            .filter_map(|e| e.into_token())
+            .find(|t| !is_trivia(t.kind()))
+            .map(|t| t.text())
+    }
+
+    /// The field type (after `:`).
+    #[must_use]
+    pub fn ty(&self) -> Option<TypeExpr> {
+        type_after(&self.0, SyntaxKind::COLON)
+    }
+}
+
+ast_node! {
     /// A parenthesised type (`(T)`).
     ParenType => PAREN_TYPE
 }
@@ -1010,6 +1076,8 @@ pub enum TypeExpr {
     Fn(FnType),
     /// `(.., ..)`
     Tuple(TupleType),
+    /// `{ .., .. }`
+    Record(RecordType),
     /// `(T)`
     Paren(ParenType),
     /// A named type or type variable.
@@ -1023,6 +1091,7 @@ impl TypeExpr {
             SyntaxKind::APP_TYPE => Self::App(AppType(node)),
             SyntaxKind::FN_TYPE => Self::Fn(FnType(node)),
             SyntaxKind::TUPLE_TYPE => Self::Tuple(TupleType(node)),
+            SyntaxKind::RECORD_TYPE => Self::Record(RecordType(node)),
             SyntaxKind::PAREN_TYPE => Self::Paren(ParenType(node)),
             _ => return None,
         };
@@ -1055,6 +1124,7 @@ impl TypeExpr {
             Self::App(n) => Some(n.syntax()),
             Self::Fn(n) => Some(n.syntax()),
             Self::Tuple(n) => Some(n.syntax()),
+            Self::Record(n) => Some(n.syntax()),
             Self::Paren(n) => Some(n.syntax()),
             Self::Name(_) => None,
         }

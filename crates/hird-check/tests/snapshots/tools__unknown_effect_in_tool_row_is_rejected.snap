@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         tool Risky : { input: String } -> String ! {Nope}\")"
+---
+error[C0027] 59..63: unknown effect `Nope`

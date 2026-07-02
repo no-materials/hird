@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn mock(args: { path: Path }) -> RepoState = RepoState(\\\"clean\\\")\\n\\\n         fn dry_run(p: Path) -> RepoState = handle { Tool<ReadRepo> -> mock } in read_repo({ path: p })\")"
+---
+Path : String → Path
+RepoState : String → RepoState
+dry_run : Path → RepoState
+mock : { path: Path } → RepoState
+read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
+record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }

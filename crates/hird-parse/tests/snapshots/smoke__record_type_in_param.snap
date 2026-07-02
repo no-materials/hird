@@ -1,0 +1,42 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn get(r: { x: Int, y: Int }) -> Int = 1\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "get"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "r"
+        COLON ":"
+        RECORD_TYPE
+          WHITESPACE " "
+          L_BRACE "{"
+          RECORD_TYPE_FIELD
+            WHITESPACE " "
+            IDENT "x"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "Int"
+          COMMA ","
+          RECORD_TYPE_FIELD
+            WHITESPACE " "
+            IDENT "y"
+            COLON ":"
+            WHITESPACE " "
+            IDENT "Int"
+          WHITESPACE " "
+          R_BRACE "}"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Int"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "1"

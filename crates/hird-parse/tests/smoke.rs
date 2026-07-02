@@ -338,6 +338,35 @@ fn tool_decl() {
     insta::assert_snapshot!(render_cst("tool Fetch : Url -> Response"));
 }
 
+#[test]
+fn tool_decl_record_input() {
+    insta::assert_snapshot!(render_cst("tool ReadRepo : { path: Path } -> RepoState"));
+}
+
+#[test]
+fn tool_decl_generic_with_trailing_row() {
+    insta::assert_snapshot!(render_cst(
+        "tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}"
+    ));
+}
+
+// ── record types ────────────────────────────────────────────────
+
+#[test]
+fn record_type_in_param() {
+    insta::assert_snapshot!(render_cst("fn get(r: { x: Int, y: Int }) -> Int = 1"));
+}
+
+#[test]
+fn record_type_empty() {
+    insta::assert_snapshot!(render_cst("fn take(r: {}) -> Int = 1"));
+}
+
+#[test]
+fn record_type_keyword_field_name() {
+    insta::assert_snapshot!(render_cst("fn take(r: { tool: String }) -> Int = 1"));
+}
+
 // ── extern declarations ─────────────────────────────────────────
 
 #[test]

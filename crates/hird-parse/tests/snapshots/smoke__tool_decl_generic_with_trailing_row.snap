@@ -1,0 +1,54 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\")"
+---
+SOURCE_FILE
+  TOOL_DECL
+    TOOL_KW "tool"
+    WHITESPACE " "
+    IDENT "LLMCall"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "t"
+      GT ">"
+    WHITESPACE " "
+    COLON ":"
+    RECORD_TYPE
+      WHITESPACE " "
+      L_BRACE "{"
+      RECORD_TYPE_FIELD
+        WHITESPACE " "
+        IDENT "prompt"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Prompt"
+      COMMA ","
+      RECORD_TYPE_FIELD
+        WHITESPACE " "
+        IDENT "schema"
+        COLON ":"
+        APP_TYPE
+          WHITESPACE " "
+          IDENT "Schema"
+          TYPE_ARGS
+            LT "<"
+            IDENT "t"
+            GT ">"
+      WHITESPACE " "
+      R_BRACE "}"
+    WHITESPACE " "
+    ARROW "->"
+    WHITESPACE " "
+    IDENT "t"
+    EFFECT_ANN
+      WHITESPACE " "
+      BANG "!"
+      WHITESPACE " "
+      L_BRACE "{"
+      APP_TYPE
+        IDENT "Exn"
+        TYPE_ARGS
+          LT "<"
+          IDENT "ParseError"
+          GT ">"
+      R_BRACE "}"

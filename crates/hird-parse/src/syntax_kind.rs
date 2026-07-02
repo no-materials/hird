@@ -251,6 +251,10 @@ pub enum SyntaxKind {
     PAREN_TYPE,
     /// Tuple type (`(A, B)`).
     TUPLE_TYPE,
+    /// Record type (`{ name: Type }`).
+    RECORD_TYPE,
+    /// Record-type field (`name: Type`).
+    RECORD_TYPE_FIELD,
     /// Constructor pattern (`Foo(a, b)`).
     CONSTRUCTOR_PAT,
     /// Tuple pattern (`(a, b)`).

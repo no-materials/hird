@@ -530,6 +530,47 @@ fn type_tuple_and_paren() {
 }
 
 #[test]
+fn type_record() {
+    // Field names project in source order; a keyword spelling (`tool`) is a
+    // valid field name.
+    let TypeExpr::Record(r) = param_type("{ x: Int, tool: String }") else {
+        panic!("expected record type");
+    };
+    let names: Vec<String> = r
+        .fields()
+        .filter_map(|f| f.name().map(str::to_owned))
+        .collect();
+    assert_eq!(names, ["x", "tool"]);
+    assert!(
+        r.fields()
+            .all(|f| matches!(f.ty(), Some(TypeExpr::Name(_))))
+    );
+
+    let TypeExpr::Record(empty) = param_type("{}") else {
+        panic!("expected record type");
+    };
+    assert_eq!(empty.fields().count(), 0);
+}
+
+#[test]
+fn tool_decl_projects() {
+    let file =
+        file("tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}");
+    let tool = file
+        .declarations()
+        .find_map(|d| match d {
+            Decl::Tool(t) => Some(t),
+            _ => None,
+        })
+        .expect("a tool declaration");
+    assert_eq!(tool.name(), Some("LLMCall"));
+    assert_eq!(owned(tool.type_params()), ["t"]);
+    assert!(matches!(tool.input(), Some(TypeExpr::Record(_))));
+    assert!(matches!(tool.output(), Some(TypeExpr::Name(_))));
+    assert!(tool.effect_ann().is_some());
+}
+
+#[test]
 fn fn_signature_types() {
     let file = file("fn add(x: Int, y: List<a>) -> Int = x");
     let f = first_fn(&file);

@@ -842,16 +842,23 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `tool Name: Input → Output`.
+    /// `tool Name<params> : Input → Output ! {Effects}`. The type-parameter
+    /// list and the trailing effect row are optional.
     fn parse_tool_decl(&mut self) {
         self.start_node(SyntaxKind::TOOL_DECL);
         self.parse_visibility();
         self.expect(SyntaxKind::TOOL_KW);
         self.expect(SyntaxKind::IDENT);
+        if self.at(SyntaxKind::LT) {
+            self.parse_type_params();
+        }
         self.expect(SyntaxKind::COLON);
         self.parse_app_type();
         self.expect(SyntaxKind::ARROW);
         self.parse_type_expr();
+        if self.at(SyntaxKind::BANG) {
+            self.parse_effect_ann();
+        }
         self.finish_node();
     }
 
@@ -913,12 +920,14 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
-    /// An atomic type: a name, or a parenthesised type, tuple, or `()`.
+    /// An atomic type: a name, a record type, or a parenthesised type, tuple,
+    /// or `()`.
     fn parse_atom_type(&mut self) {
         match self.current() {
             SyntaxKind::IDENT => {
                 self.bump();
             }
+            SyntaxKind::L_BRACE => self.parse_record_type(),
             SyntaxKind::L_PAREN => {
                 let cp = self.checkpoint();
                 self.bump();
@@ -953,6 +962,34 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 );
             }
         }
+    }
+
+    /// `{ name: Type, ... }` — a structural record type. A `{` where a type is
+    /// expected always begins one; braces never delimit anything else in type
+    /// position.
+    fn parse_record_type(&mut self) {
+        self.start_node(SyntaxKind::RECORD_TYPE);
+        self.expect(SyntaxKind::L_BRACE);
+        if !self.at(SyntaxKind::R_BRACE) {
+            self.parse_record_type_field();
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACE) {
+                    break;
+                }
+                self.parse_record_type_field();
+            }
+        }
+        self.expect(SyntaxKind::R_BRACE);
+        self.finish_node();
+    }
+
+    /// `name: Type`.
+    fn parse_record_type_field(&mut self) {
+        self.start_node(SyntaxKind::RECORD_TYPE_FIELD);
+        self.expect_field_name();
+        self.expect(SyntaxKind::COLON);
+        self.parse_type_expr();
+        self.finish_node();
     }
 
     /// `<A, B, ...>` — type-application arguments.

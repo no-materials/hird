@@ -1,0 +1,26 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"tool ReadRepo : { path: Path } -> RepoState\")"
+---
+SOURCE_FILE
+  TOOL_DECL
+    TOOL_KW "tool"
+    WHITESPACE " "
+    IDENT "ReadRepo"
+    WHITESPACE " "
+    COLON ":"
+    RECORD_TYPE
+      WHITESPACE " "
+      L_BRACE "{"
+      RECORD_TYPE_FIELD
+        WHITESPACE " "
+        IDENT "path"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Path"
+      WHITESPACE " "
+      R_BRACE "}"
+    WHITESPACE " "
+    ARROW "->"
+    WHITESPACE " "
+    IDENT "RepoState"

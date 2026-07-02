@@ -12,11 +12,11 @@ use core::mem;
 
 use hird_ast::{
     AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, Param, SourceFile, SyntaxNode,
-    TypeDecl,
+    ToolDecl, TypeDecl,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{Effect, EffectRow, Name, Subst, Type, TypeError, unify, unify_row};
+use hird_types::{Effect, EffectRow, Label, Name, Subst, Type, TypeError, unify, unify_row};
 
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
@@ -69,6 +69,9 @@ pub(crate) struct Checker {
     /// Each `handle` arm's handled effect, keyed by the arm node, recorded raw
     /// and resolved in [`Checker::finish_with_interface`] for the IR.
     pub(crate) handled_effects: Vec<(NodeKey, Effect)>,
+    /// Each tool declaration's derived invocation record, keyed by generated
+    /// name, recorded raw and resolved in [`Checker::finish_with_interface`].
+    invocation_records: Vec<(Name, Type)>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -118,6 +121,7 @@ impl Checker {
             types: Vec::new(),
             effect_rows: Vec::new(),
             handled_effects: Vec::new(),
+            invocation_records: Vec::new(),
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),
@@ -150,14 +154,16 @@ impl Checker {
         let mut fn_decls = Vec::new();
         let mut extern_decls = Vec::new();
         let mut effect_decls = Vec::new();
+        let mut tool_decls = Vec::new();
         for decl in file.declarations() {
             match decl {
                 Decl::Type(d) => type_decls.push(d),
                 Decl::Fn(d) => fn_decls.push(d),
                 Decl::Extern(d) => extern_decls.push(d),
                 Decl::Effect(d) => effect_decls.push(d),
-                // Modules and imports are the module system's pass; tools,
-                // actors, and supervisors are later phases.
+                Decl::Tool(d) => tool_decls.push(d),
+                // Modules and imports are the module system's pass; actors
+                // and supervisors are later phases.
                 _ => {}
             }
         }
@@ -182,6 +188,12 @@ impl Checker {
         for decl in &type_decls {
             self.register_adt_header(decl);
         }
+        // Tool markers are nullary types, registered with the headers so any
+        // signature can name them (`Tool<ReadRepo>` in a row, a constructor
+        // field, another tool's input).
+        for decl in &tool_decls {
+            self.register_tool_marker(decl);
+        }
         for decl in &type_decls {
             // Per-declaration error isolation: a bad constructor field stops
             // this declaration only.
@@ -189,6 +201,9 @@ impl Checker {
         }
         for decl in &extern_decls {
             let _ = self.declare_extern(decl);
+        }
+        for decl in &tool_decls {
+            let _ = self.declare_tool(decl);
         }
         self.check_functions(&fn_decls);
         self.finish_with_interface()
@@ -330,6 +345,15 @@ impl Checker {
                         }
                     }
                 }
+                Decl::Tool(d) => {
+                    // A tool occupies both namespaces: its marker type and its
+                    // generated function.
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_type_name(name, span);
+                        self.note_value_name(&tool_fn_name(name), span);
+                    }
+                }
                 _ => {}
             }
         }
@@ -437,6 +461,97 @@ impl Checker {
             self.bindings.push((ctor_name, scheme));
         }
         if failed { Err(Aborted) } else { Ok(()) }
+    }
+
+    // ── tool declarations ───────────────────────────────────────
+
+    /// Registers a tool declaration's marker type: a nullary nominal type with
+    /// no constructors, so `Tool<Name>` resolves through ordinary
+    /// effect-argument elaboration. One shared `Tool` effect parameterised by
+    /// the marker — not an effect per tool.
+    fn register_tool_marker(&mut self, decl: &ToolDecl) {
+        let Some(name) = decl.name() else { return };
+        self.registry.declare_adt(Name::new(name), 0, Vec::new());
+    }
+
+    /// Desugars a tool declaration into its function binding and derived
+    /// invocation record.
+    ///
+    /// The function's type is `(input) → output ! ({Tool<Name>} ∪
+    /// declared_row)`, elaborated in a closed scope over the tool's type
+    /// parameters and generalised like an ADT constructor. The record
+    /// `{ tool, args, result, timestamp, caller }` projects `args`/`result`
+    /// from the signature (`tool`, `timestamp`, and `caller` are fixed,
+    /// runtime-injected fields) and files under the generated name
+    /// `NameInvocation`.
+    fn declare_tool(&mut self, decl: &ToolDecl) -> Checked<()> {
+        let Some(name) = decl.name() else {
+            return Ok(());
+        };
+        let (Some(input), Some(output)) = (decl.input(), decl.output()) else {
+            return Ok(());
+        };
+        let params: Vec<&str> = decl.type_params().collect();
+        for (i, param) in params.iter().enumerate() {
+            if params[..i].contains(param) {
+                let span = name_token_span(decl.syntax(), self.source_id);
+                self.diags.push(CheckDiagnostic::error(
+                    CheckCode::C0013,
+                    span,
+                    format!("type parameter `{param}` is declared twice"),
+                ));
+            }
+        }
+
+        let mut scope = Scope::new();
+        self.subst.enter_level();
+        let mut seen: Vec<&str> = Vec::new();
+        for param in &params {
+            // First occurrence wins, consistent with ADT headers.
+            if seen.contains(param) {
+                continue;
+            }
+            seen.push(param);
+            scope.insert_type(String::from(*param), self.subst.fresh_type());
+        }
+        // Collect without `?` so `exit_level` runs on the error paths too.
+        let input_ty = self.elaborate_closed(&input, &mut scope);
+        let output_ty = match &input_ty {
+            Ok(_) => self.elaborate_closed(&output, &mut scope),
+            Err(_) => Err(Aborted),
+        };
+        let row = match (&output_ty, decl.effect_ann()) {
+            (Ok(_), Some(ann)) => self.elaborate_row_closed(&ann, &mut scope),
+            (Ok(_), None) => Ok(EffectRow::empty()),
+            (Err(_), _) => Err(Aborted),
+        };
+        self.subst.exit_level();
+        let input_ty = input_ty?;
+        let output_ty = output_ty?;
+        let mut row = row?;
+
+        row.insert(Effect::parametric(
+            "Tool",
+            Vec::from([Type::con(name, Vec::new())]),
+        ));
+        let fn_ty = Type::func_eff(Vec::from([input_ty.clone()]), output_ty.clone(), row);
+        let scheme = self.subst.generalize(&fn_ty);
+        let fn_name = tool_fn_name(name);
+        self.env.insert_root(&fn_name, scheme.clone());
+        self.types
+            .push((NodeKey::of_node(decl.syntax()), scheme.clone()));
+        self.bindings.push((fn_name, scheme));
+
+        let record = Type::record([
+            (Label::new("tool"), Type::string()),
+            (Label::new("args"), input_ty),
+            (Label::new("result"), output_ty),
+            (Label::new("timestamp"), Type::con("Timestamp", Vec::new())),
+            (Label::new("caller"), Type::con("CallerId", Vec::new())),
+        ]);
+        self.invocation_records
+            .push((Name::new(format!("{name}Invocation")), record));
+        Ok(())
     }
 
     // ── externs ─────────────────────────────────────────────────
@@ -855,6 +970,11 @@ impl Checker {
             .iter()
             .map(|(key, effect)| (*key, effect.map_args(|arg| self.subst.resolve(arg))))
             .collect();
+        let invocation_records = self
+            .invocation_records
+            .iter()
+            .map(|(name, ty)| (name.clone(), self.subst.resolve(ty)))
+            .collect();
         let bindings: BTreeMap<String, Type> = self
             .bindings
             .iter()
@@ -909,6 +1029,7 @@ impl Checker {
             adts,
             effect_rows,
             handled_effects,
+            invocation_records,
             diagnostics: self.diags,
         };
         (checked, interface)
@@ -939,6 +1060,27 @@ fn note_duplicate(
 /// Whether every parameter and the return type carry annotations.
 fn is_fully_annotated(decl: &FnDecl) -> bool {
     decl.return_type().is_some() && decl.params().all(|p| p.ty().is_some())
+}
+
+/// The generated function name of a tool: the `PascalCase` tool name in
+/// `snake_case`, with acronym runs kept whole (`ReadRepo` → `read_repo`,
+/// `LLMCall` → `llm_call`).
+fn tool_fn_name(name: &str) -> String {
+    let bytes = name.as_bytes();
+    let mut out = String::with_capacity(bytes.len() + 4);
+    for (i, &b) in bytes.iter().enumerate() {
+        if b.is_ascii_uppercase() {
+            let after_lower = i > 0 && !bytes[i - 1].is_ascii_uppercase();
+            let acronym_end = i > 0
+                && bytes[i - 1].is_ascii_uppercase()
+                && bytes.get(i + 1).is_some_and(u8::is_ascii_lowercase);
+            if after_lower || acronym_end {
+                out.push('_');
+            }
+        }
+        out.push(b.to_ascii_lowercase() as char);
+    }
+    out
 }
 
 /// The declaration's type parameters with duplicates removed, first

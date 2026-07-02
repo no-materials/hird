@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn take(r: {}) -> Int = 1\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "take"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "r"
+        COLON ":"
+        RECORD_TYPE
+          WHITESPACE " "
+          L_BRACE "{"
+          R_BRACE "}"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Int"
+    WHITESPACE " "
+    EQ "="
+    WHITESPACE " "
+    INT "1"

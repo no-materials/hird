@@ -45,7 +45,7 @@ one non-associative precedence tier. Write `(a == b) == c`, never
 ```
 fn add(x: Int, y: Int) → Int ! {} = x + y
 
-fn read_config(path: Path) → Config ! {Tool<ReadFile>, Exn ParseError} = ...
+fn read_config(path: Path) → Config ! {Tool<ReadFile>, Exn<ParseError>} = ...
 
 fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ```
@@ -107,13 +107,23 @@ Parametric effects reference specific capabilities or message types.
 ```
 tool ReadRepo : { path: Path } → RepoState
 tool CreateTicket : { title: String, body: String } → TicketId
-tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t
+tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn<ParseError>}
 ```
 
 Each tool declaration creates:
-1. An effect (`Tool<ReadRepo>`).
-2. A callable function.
-3. A compiler-generated invocation record type.
+1. An effect (`Tool<ReadRepo>` — one shared `Tool` effect, applied to the
+   tool's marker type).
+2. A callable function (`read_repo`, `create_ticket`, `llm_call`).
+3. A compiler-generated invocation record type (`ReadRepoInvocation`).
+
+A trailing `! {…}` row unions into the function's row. LLM calls are
+schema-typed: the schema argument fixes the result type, and a
+non-conforming response raises `Exn<ParseError>`.
+
+```
+fn triage(p: Prompt, s: Schema<Ticket>) → Ticket
+  ! {Tool<LLMCall>, Exn<ParseError>} = llm_call({ prompt: p, schema: s })
+```
 
 ---
 
@@ -207,7 +217,7 @@ fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 
 ## Errors vs Crashes
 
-- **Domain errors**: `Exn ParseError`, `Exn HttpError` — values in effect rows.
+- **Domain errors**: `Exn<ParseError>`, `Exn<HttpError>` — values in effect rows.
   Handled with pattern matching or effect handlers. Do not kill the process.
 - **Crashes**: `crash!("msg")` — divergent, reaches supervisor. For truly
   unrecoverable situations. Cannot be caught in normal code.

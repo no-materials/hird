@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn plan(p: Path) -> RepoState ! {Tool<ReadRepo>} = read_repo({ path: p })\")"
+---
+Path : String → Path
+RepoState : String → RepoState
+plan : Path → RepoState ! {Tool<ReadRepo>}
+read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
+record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }

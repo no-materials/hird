@@ -1,0 +1,27 @@
+// Standard library tool declarations and their supporting types, checked by
+// the test suite. They graduate unchanged to a real prelude module once a
+// library search path exists; until then user programs cannot import them.
+
+effect Tool<t>
+effect Exn<t>
+
+type Path = Path(String)
+type Url = Url(String)
+type Headers = Headers(List<(String, String)>)
+type HttpResponse = HttpResponse(Int, String)
+type Timestamp = Timestamp(Int)
+type CallerId = CallerId(String)
+type TicketId = TicketId(String)
+type RepoState = RepoState(String)
+type Prompt = Prompt(String)
+type Schema<t> = Schema(String)
+type ParseError = ParseError(String)
+type HttpError = HttpError(Int, String)
+type IoError = IoError(String)
+
+tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}
+tool HttpGet : { url: Url, headers: Headers } -> HttpResponse ! {Exn<HttpError>}
+tool HttpPost : { url: Url, headers: Headers, body: String } -> HttpResponse ! {Exn<HttpError>}
+tool ReadFile : { path: Path } -> String ! {Exn<IoError>}
+tool WriteFile : { path: Path, contents: String } -> () ! {Exn<IoError>}
+tool Shell : { command: String } -> { code: Int, stdout: String, stderr: String } ! {Exn<IoError>}

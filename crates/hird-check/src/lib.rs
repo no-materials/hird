@@ -24,6 +24,12 @@
 //! is rejected; interior let-bound functions infer their row and generalise it.
 //! Capability effects (`EtsRead<t>`) carry the type of the named parameter.
 //!
+//! A `tool` declaration desugars into a nullary marker type (so `Tool<Name>`
+//! resolves as an ordinary parametric effect argument), a function
+//! `(input) → output ! ({Tool<Name>} ∪ declared_row)` bound like an ADT
+//! constructor, and a derived invocation record kept in
+//! [`CheckedFile::invocation_records`].
+//!
 //! # Quick start
 //!
 //! ```
@@ -169,6 +175,13 @@ pub struct CheckedFile {
     /// effect's type arguments are resolved. Lowering reads these to pair an arm
     /// with the effect it handles.
     pub handled_effects: BTreeMap<NodeKey, Effect>,
+    /// Each tool declaration's derived invocation record, keyed by generated
+    /// name (`ReadRepo` derives `ReadRepoInvocation`). The record's shape is
+    /// `{ tool: String, args: <input>, result: <output>, timestamp: Timestamp,
+    /// caller: CallerId }`, with `args` and `result` projected from the tool's
+    /// signature. A checker-side artefact for audit tooling — not a type in the
+    /// surface namespace.
+    pub invocation_records: BTreeMap<Name, Type>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
 }
@@ -191,6 +204,13 @@ impl CheckedFile {
     #[must_use]
     pub fn handled_effect_at(&self, key: NodeKey) -> Option<&Effect> {
         self.handled_effects.get(&key)
+    }
+
+    /// The derived invocation record registered under `name`
+    /// (e.g. `ReadRepoInvocation`), if any.
+    #[must_use]
+    pub fn invocation_record(&self, name: &str) -> Option<&Type> {
+        self.invocation_records.get(&Name::new(name))
     }
 
     /// Whether any diagnostic is an error.
