@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         pub opaque type Sink = Sink(String)\\n\\\n         tool Emit : { sink: Sink, line: String } -> ()\")"
+---
+Sink : String → Sink
+error[C0032] 56..60: tool `Emit` args are not wire-representable: `Sink` is an opaque capability

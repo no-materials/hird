@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Callback = MkCallback(Int -> Int)\\n\\\n         tool Sneaky : { cb: Callback } -> Int\")"
+---
+MkCallback : (Int → Int) → Callback
+error[C0032] 59..65: tool `Sneaky` args are not wire-representable: function type `Int → Int` cannot be serialised

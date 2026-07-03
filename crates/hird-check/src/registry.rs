@@ -131,6 +131,16 @@ impl Registry {
         }
     }
 
+    /// Whether `name` is a declared ADT whose constructors are module-private
+    /// (an opaque capability type).
+    pub(crate) fn adt_is_opaque(&self, name: &str) -> bool {
+        self.adts.get(&Name::new(name)).is_some_and(|info| {
+            info.constructors
+                .iter()
+                .any(|ctor| self.ctors.get(ctor).is_some_and(|info| info.opaque))
+        })
+    }
+
     /// Declared ADTs with their constructor lists, in name order.
     pub(crate) fn adt_summaries(&self) -> impl Iterator<Item = (&Name, &Vec<Name>)> {
         self.adts

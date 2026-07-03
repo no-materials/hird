@@ -4,7 +4,7 @@
 //! The checking pass over one source file: declaration registration,
 //! dependency-ordered function checking, and result assembly.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -529,6 +529,27 @@ impl Checker {
         let input_ty = input_ty?;
         let output_ty = output_ty?;
         let mut row = row?;
+
+        // Tool args and results cross the audit-log wire boundary, so both
+        // sides must be wire-representable.
+        for (side, ty) in [("args", &input_ty), ("result", &output_ty)] {
+            if let Some(violation) = wire_violation(&self.registry, ty, &mut BTreeSet::new()) {
+                let span = name_token_span(decl.syntax(), self.source_id);
+                let detail = match violation {
+                    WireViolation::Function(ty) => {
+                        format!("function type `{ty}` cannot be serialised")
+                    }
+                    WireViolation::Capability(name) => {
+                        format!("`{name}` is an opaque capability")
+                    }
+                };
+                return Err(self.error(
+                    CheckCode::C0032,
+                    span,
+                    format!("tool `{name}` {side} are not wire-representable: {detail}"),
+                ));
+            }
+        }
 
         row.insert(Effect::parametric(
             "Tool",
@@ -1081,6 +1102,92 @@ fn tool_fn_name(name: &str) -> String {
         out.push(b.to_ascii_lowercase() as char);
     }
     out
+}
+
+/// A type that cannot cross the tool wire boundary.
+enum WireViolation {
+    /// A function type: not serialisable.
+    Function(Type),
+    /// An opaque capability type: minting one from a log would forge it.
+    Capability(Name),
+}
+
+/// The first wire-representability violation in `ty`, if any.
+///
+/// Walks the type structurally and through the constructor fields of every
+/// declared ADT it applies, so a nested declaration cannot smuggle a
+/// function or capability past the check. `visited` breaks recursive types
+/// (by ADT name, an approximation that is sound because arguments are walked
+/// at every application site). Type variables pass: a generic tool's
+/// instantiations are validated at the wire layer, value by value.
+fn wire_violation(
+    registry: &Registry,
+    ty: &Type,
+    visited: &mut BTreeSet<Name>,
+) -> Option<WireViolation> {
+    match ty {
+        Type::TyVar(_) => None,
+        Type::TyFn(..) => Some(WireViolation::Function(ty.clone())),
+        Type::TyTuple(elems) => elems
+            .iter()
+            .find_map(|e| wire_violation(registry, e, visited)),
+        Type::TyRecord(fields) => fields
+            .values()
+            .find_map(|f| wire_violation(registry, f, visited)),
+        Type::TyForall(_, _, body) => wire_violation(registry, body, visited),
+        Type::TyCon(name, args) => {
+            if registry.adt_is_opaque(name.as_str()) {
+                return Some(WireViolation::Capability(name.clone()));
+            }
+            if let Some(v) = args
+                .iter()
+                .find_map(|a| wire_violation(registry, a, visited))
+            {
+                return Some(v);
+            }
+            if !visited.insert(name.clone()) {
+                return None;
+            }
+            let ctors = registry.adt_constructors(name.as_str()).unwrap_or(&[]);
+            for ctor in ctors {
+                let Some(info) = registry.ctor(ctor.as_str()) else {
+                    continue;
+                };
+                for field in ctor_fields(&info.scheme, args) {
+                    if let Some(v) = wire_violation(registry, &field, visited) {
+                        return Some(v);
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+/// A constructor's field types, instantiated at the owning ADT's type
+/// arguments `args`.
+///
+/// The scheme is `∀params. fields → Adt<params>` (or the bare instance type
+/// when nullary); the return type's variables are matched positionally
+/// against `args` to build the instantiation.
+fn ctor_fields(scheme: &Type, args: &[Type]) -> Vec<Type> {
+    let body = match scheme {
+        Type::TyForall(_, _, body) => body,
+        other => other,
+    };
+    let Type::TyFn(fields, ret, _) = body else {
+        return Vec::new();
+    };
+    let mut map = BTreeMap::new();
+    if let Type::TyCon(_, ret_args) = ret.as_ref() {
+        for (ret_arg, actual) in ret_args.iter().zip(args) {
+            if let Type::TyVar(v) = ret_arg {
+                map.insert(*v, actual.clone());
+            }
+        }
+    }
+    let rows = BTreeMap::new();
+    fields.iter().map(|f| f.substitute(&map, &rows)).collect()
 }
 
 /// The declaration's type parameters with duplicates removed, first

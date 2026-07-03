@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         tool Apply : { f: Int -> Int } -> Int\")"
+---
+error[C0032] 20..25: tool `Apply` args are not wire-representable: function type `Int → Int` cannot be serialised

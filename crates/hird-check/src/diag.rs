@@ -95,6 +95,9 @@ pub enum CheckCode {
     C0030,
     /// A `handle` arm's handler expression does not have a function type.
     C0031,
+    /// A tool signature contains a type that is not wire-representable: a
+    /// function type or an opaque capability.
+    C0032,
 }
 
 /// A secondary source location attached to a diagnostic.

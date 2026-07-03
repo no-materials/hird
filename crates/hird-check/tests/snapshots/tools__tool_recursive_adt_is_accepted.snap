@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Tree = Leaf(Int) | Node(Tree, Tree)\\n\\\n         tool Sum : { tree: Tree } -> Int\")"
+---
+Leaf : Int → Tree
+Node : Tree → Tree → Tree
+sum : { tree: Tree } → Int ! {Tool<Sum>}
+record SumInvocation : { args: { tree: Tree }, caller: CallerId, result: Int, timestamp: Timestamp, tool: String }

@@ -215,3 +215,56 @@ fn open_row_in_tool_decl_is_rejected() {
          tool Leaky : { x: Int } -> Int ! {r}"
     ));
 }
+
+// ── wire-representability ───────────────────────────────────────
+
+/// A function type in a tool's args cannot cross the wire boundary.
+#[test]
+fn tool_function_arg_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         tool Apply : { f: Int -> Int } -> Int"
+    ));
+}
+
+/// A function type in a tool's result is rejected too.
+#[test]
+fn tool_function_result_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         tool Make : { seed: Int } -> (Int -> Int)"
+    ));
+}
+
+/// An opaque capability in a tool signature is rejected: a capability minted
+/// from a log would be forged.
+#[test]
+fn tool_capability_arg_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         pub opaque type Sink = Sink(String)\n\
+         tool Emit : { sink: Sink, line: String } -> ()"
+    ));
+}
+
+/// The check walks constructor fields: an ADT wrapping a function type
+/// cannot smuggle it into a tool signature.
+#[test]
+fn tool_nested_function_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Callback = MkCallback(Int -> Int)\n\
+         tool Sneaky : { cb: Callback } -> Int"
+    ));
+}
+
+/// Recursive ADTs in a tool signature are representable and terminate the
+/// check.
+#[test]
+fn tool_recursive_adt_is_accepted() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Tree = Leaf(Int) | Node(Tree, Tree)\n\
+         tool Sum : { tree: Tree } -> Int"
+    ));
+}
