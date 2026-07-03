@@ -1,0 +1,1 @@
+{"schema_version":1,"tool":"HttpGet","args":{"url":"https://ci.example/status"},"result":{"err":{"ctor":"HttpError","args":[503,"service unavailable"]}},"timestamp":"2026-05-22T12:00:02.000Z","caller":"Planner.check_ci","meta":{"duration_ms":1200}}

@@ -1,0 +1,3 @@
+{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo","meta":{"duration_ms":42}}
+{"schema_version":1,"tool":"CreateTicket","args":{"body":"Investigate flaky CI on main","title":"Flaky CI"},"result":{"ok":{"ctor":"TicketId","args":["TCK-42"]}},"timestamp":"2026-05-22T12:00:01.250Z","caller":"Planner.plan_repo"}
+{"schema_version":1,"tool":"HttpGet","args":{"url":"https://ci.example/status"},"result":{"err":{"ctor":"HttpError","args":[503,"service unavailable"]}},"timestamp":"2026-05-22T12:00:02.000Z","caller":"Planner.check_ci","meta":{"duration_ms":1200}}

@@ -28,7 +28,10 @@
 //! resolves as an ordinary parametric effect argument), a function
 //! `(input) → output ! ({Tool<Name>} ∪ declared_row)` bound like an ADT
 //! constructor, and a derived invocation record kept in
-//! [`CheckedFile::invocation_records`].
+//! [`CheckedFile::invocation_records`]. Tool args and results must be
+//! wire-representable (no function types, no opaque capabilities); the
+//! [`wire`] module is the reference implementation of the audit-log wire
+//! format those records serialise to, and of replay over a recorded log.
 //!
 //! # Quick start
 //!
@@ -57,6 +60,7 @@ mod exhaustive;
 mod infer;
 mod program;
 mod registry;
+pub mod wire;
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;

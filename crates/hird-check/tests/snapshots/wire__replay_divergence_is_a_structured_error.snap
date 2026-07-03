@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/wire.rs
+expression: out
+---
+replay diverged at position 0: log has `ReadRepo`, `CreateTicket` requested
+replay diverged at position 0: same tool, different args
+ArgsMismatch { position: 0, logged: Record({Label("path"): String("/home/user/repo")}), requested: Record({Label("path"): String("/other/repo")}) }
+replay diverged at position 3: log exhausted, `ReadRepo` requested

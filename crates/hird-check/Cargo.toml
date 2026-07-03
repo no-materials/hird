@@ -15,6 +15,7 @@ hird-parse.workspace = true
 hird-types.workspace = true
 
 [dev-dependencies]
+hird-types.workspace = true
 insta = "1"
 proptest = "1"
 

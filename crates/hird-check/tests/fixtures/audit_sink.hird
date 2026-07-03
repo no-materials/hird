@@ -1,0 +1,27 @@
+// The audit sink is a capability, not ambient state: emission requires the
+// sink parameter, and audited dispatch is a handler wrapping the tool
+// effect, so `Audit<sink>` stays visible in the enclosing effect row.
+
+effect Tool<t>
+effect Audit<t>
+
+type Path = Path(String)
+type RepoState = RepoState(String)
+type AuditSink = AuditSink(String)
+
+tool ReadRepo : { path: Path } -> RepoState
+
+fn audited_read(
+  sink: AuditSink,
+  emit: { sink: AuditSink, line: String } -> () ! {Audit<sink>},
+  args: { path: Path }
+) -> RepoState ! {Audit<sink>, Tool<ReadRepo>} =
+  let logged = emit({ sink: sink, line: "ReadRepo" }) in read_repo(args)
+
+fn plan_audited(
+  sink: AuditSink,
+  emit: { sink: AuditSink, line: String } -> () ! {Audit<sink>},
+  p: Path
+) -> RepoState ! {Audit<sink>, Tool<ReadRepo>} =
+  handle { Tool<ReadRepo> -> \args -> audited_read(sink, emit, args) } in
+    read_repo({ path: p })

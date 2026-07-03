@@ -1,0 +1,1 @@
+{"schema_version":1,"tool":"CreateTicket","args":{"body":"Investigate flaky CI on main","title":"Flaky CI"},"result":{"ok":{"ctor":"TicketId","args":["TCK-42"]}},"timestamp":"2026-05-22T12:00:01.250Z","caller":"Planner.plan_repo"}

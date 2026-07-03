@@ -1,0 +1,1 @@
+{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo","meta":{"duration_ms":42}}

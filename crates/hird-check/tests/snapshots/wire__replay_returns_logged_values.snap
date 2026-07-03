@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/wire.rs
+expression: out
+---
+0 ReadRepo -> ok {"files":[],"status":"clean"}
+1 CreateTicket -> ok {"ctor":"TicketId","args":["TCK-42"]}
+2 HttpGet -> err {"ctor":"HttpError","args":[503,"service unavailable"]}

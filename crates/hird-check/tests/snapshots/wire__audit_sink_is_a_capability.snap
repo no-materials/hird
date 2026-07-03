@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/wire.rs
+expression: "render(&check(include_str!(\"fixtures/audit_sink.hird\")))"
+---
+AuditSink : String → AuditSink
+Path : String → Path
+RepoState : String → RepoState
+audited_read : AuditSink → ({ line: String, sink: AuditSink } → () ! {Audit<AuditSink>}) → { path: Path } → RepoState ! {Audit<AuditSink>, Tool<ReadRepo>}
+plan_audited : AuditSink → ({ line: String, sink: AuditSink } → () ! {Audit<AuditSink>}) → Path → RepoState ! {Audit<AuditSink>, Tool<ReadRepo>}
+read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
+record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }
