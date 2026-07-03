@@ -754,6 +754,105 @@ only modules handed to the checker.
 
 ---
 
+## ADR-016: Audit-log wire format and strict-sequential replay
+
+**Date**: 2026-07-02
+**Status**: Accepted (resolves OD3 and OD4)
+
+### Context
+
+Tool effects exist to make external invocations auditable (ADR-015 gives
+each tool a derived invocation record) and replaceable (ADR-004/013 give
+DI-style handlers). Two open decisions remained: what guarantees the audit
+log provides (OD3), and whether replay re-executes tools or returns logged
+values (OD4). Both had to be resolved without a backend — `hird-codegen`
+is a stub and ADR-002 stages Erlang emission as later work — so "implement
+the audit log" cannot mean runtime integration. It can, however, mean a
+locked wire format with a reference implementation, because the format is
+pure data and the future runtime is only one of its producers.
+
+### Decision
+
+1. **Shape and placement.** The audit log is specified as a wire format
+   with a Rust reference implementation: a `wire` module in `hird-check`,
+   beside the derived invocation records — no new crate (the ADR-014
+   lesson; extraction waits for the Erlang emitter as a second consumer)
+   and no interpreter (which would contradict ADR-002's staging). The
+   implementation's outputs are snapshotted as language-agnostic golden
+   files in a versioned `conformance/` directory; the Erlang runtime must
+   later reproduce them byte-exactly. The Rust implementation is the
+   conformance oracle, not a rival source of truth. The normative format
+   specification lives in `docs/tool-effects.md`.
+
+2. **Wire format (resolves OD3).** JSON lines, one record per invocation,
+   with envelope fields in fixed order: `schema_version` (required, `1`),
+   `tool`, `args`, `result`, `timestamp`, `caller`, and an optional
+   observer-populated `meta` object. The writer is canonical and
+   deterministic — hand-rolled, `no_std`-compatible, no `serde_json`; no
+   whitespace; records in sorted label order; integers exact within `i64`;
+   floats shortest-round-trip in plain notation with NaN/infinities not
+   wire-representable; ADT values as `{"ctor":…,"args":…}` (`Bool`
+   uniformly included); unit as `null`; lists and tuples as arrays.
+   Encoding is injective per type, and decoding is type-directed against
+   the tool's signature, validating shape, labels, constructors, and
+   arities (round-trip property tested).
+
+   Three consequences of the format are locked with it:
+
+   - **`result` is tagged** `{"ok":…}`/`{"err":…}` — failed invocations
+     are first-class and replayable.
+   - **`duration_ms` is not a record field.** The compiler-derived record
+     keeps ADR-015's five fields (`tool`, `args`, `result`, `timestamp`,
+     `caller`); transport metadata lives in the optional `meta` envelope
+     field, populated by the observer.
+   - **Wire-representability is checker-enforced**: function types and
+     opaque capability types are rejected in tool signatures (walking
+     through nested ADT constructor fields), so every declarable tool's
+     records are encodable and a decoded log can never mint a capability.
+
+   Timestamps are RFC 3339 UTC at millisecond precision; timestamps and
+   caller ids are injected, never read from an ambient clock. The caller
+   id is `"Module.function"` in v0.1; an actor form
+   (`"Planner.handle_msg/PlanRepo"`) is a documented provisional extension
+   absorbed via a `schema_version` bump when Phase 7 needs it. No
+   tamper-proofing in v0.1 — content addressing, chaining, and signatures
+   are the upgrade path `schema_version` exists to admit.
+
+   The audit sink is itself a capability: `AuditSink` is passed in, not
+   ambient, and audit emission is a handler wrapping the tool effect,
+   visible in the effect row. A fixture omitting the sink parameter fails
+   to type-check. The default sink writes canonical JSON lines.
+
+3. **Replay (resolves OD4).** Replay returns logged values; re-execution
+   is the same program under a live handler. The choice is a handler
+   decision, not a language mode. The core is a pure function
+   `(log, position, tool, args) → Result<result, Divergence>` with
+   **strict sequential** matching: the record at the position must match
+   tool and args exactly, and any mismatch — exhausted log, tool
+   mismatch, args mismatch — is a hard error carrying a structured
+   `Divergence` value. Keyed matching and live fall-through are rejected:
+   both reintroduce the nondeterminism replay exists to remove. The log's
+   full args and tagged results make failures replay as faithfully as
+   successes. Only divergence-reporting ergonomics remain provisional
+   pending real runs.
+
+### Consequences
+
+- The wire format is locked and conformance-tested before any runtime
+  exists; the Erlang backend inherits a byte-exact contract instead of
+  defining one ad hoc.
+- Determinism everywhere: canonical bytes make logs diffable, golden
+  files stable, and replay divergence detectable by equality.
+- The checker gains a new error (wire-representability), closing the gap
+  between "declarable tool" and "auditable tool" at compile time.
+- Cross-language float formatting is the riskiest byte-exactness
+  obligation; the conformance files pin the expected bytes so any
+  divergence surfaces as a failing golden test, not a silent drift.
+- `meta` is unvalidated, self-describing JSON by design; nothing
+  compiler-derived may ever move into it without a schema bump.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -762,7 +861,5 @@ when resolved:
 | ID | Topic | Resolves in | Ticket |
 |----|-------|-------------|--------|
 | OD1 | Crash vs error boundary | Phase 8 | hir-fbze |
-| OD3 | Audit log fidelity | Phase 6 | hir-yum3 |
-| OD4 | Tool effect replay semantics | Phase 6 | hir-v3pv |
 | OD5 | Actor protocol typing richness | Phase 7 | hir-b2gn |
 | OD8 | Send/reply effect tracking | Phase 7 | hir-actn |
