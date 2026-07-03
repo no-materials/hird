@@ -1,6 +1,6 @@
 ---
 id: hir-jgs1
-status: open
+status: closed
 deps: [hir-4g3y]
 links: [hir-yum3, hir-v3pv]
 created: 2026-05-22T21:39:42Z
@@ -150,3 +150,37 @@ schema_version); replay locked to strict-sequential with hard Divergence
 error (keyed matching / live fall-through rejected as nondeterminism);
 implementation is a wire module in hird-check plus golden-file conformance
 snapshots — no new crate, no interpreter.
+
+**2026-07-03T09:44:36Z**
+
+Implemented per the locked decision set; landed in commits 36e0aff (checker
+wire-representability), bea7971 (wire module + conformance suite), f388ddf
+(docs + ADR-016).
+
+- Checker: C0032 rejects function types and opaque capabilities in tool
+  signatures, walking nested ADT constructor fields (visited-set bounded);
+  generic tool params pass and are validated per-value at the wire layer.
+- Wire module (hird-check::wire, no_std): WireValue + canonical hand-rolled
+  JSON writer (fixed envelope order, sorted labels, shortest round-trip
+  plain-notation floats, NaN/Inf rejected, i64-exact ints, ADTs as
+  {"ctor","args"}, unit null, Bool uniform); tagged ok/err results;
+  optional self-describing meta; type-directed decoder validating against
+  ToolWireSig (args/result/Exn error types) via an AdtTable derived from
+  CheckedFile; JsonLinesSink default sink; pure strict-sequential
+  replay(log, position, tool, args) -> Result<&ToolResult, Divergence>
+  with Exhausted/ToolMismatch/ArgsMismatch variants.
+- Conformance: conformance/v1/{read_repo_ok,create_ticket_ok,http_get_err}.json
+  + planner_log.jsonl, byte-exact-tested both directions (encode reproduces
+  bytes; decode against checked signatures round-trips). Erlang runtime
+  later reproduces these files exactly.
+- Fixtures: audit_sink.hird proves capability threading (Audit<sink> visible
+  in rows through a handler wrapping Tool<ReadRepo>); the negative fixture
+  omitting the sink fails with C0003 (no ambient sink), snapshot-tested.
+- Property test: encode/decode round-trip over randomly generated well-typed
+  values (proptest, type-directed generation incl. generic Opt ADT).
+- docs/tool-effects.md written (all ticket sections; normative wire spec;
+  provisional items marked: divergence-reporting ergonomics, actor caller
+  form). ADR-016 records OD3/OD4; open-slots table updated.
+
+12 snapshot/golden tests + 27 wire unit tests + property test; workspace
+fmt/clippy(-D warnings)/tests all green (521 passed).

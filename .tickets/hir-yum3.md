@@ -1,6 +1,6 @@
 ---
 id: hir-yum3
-status: open
+status: closed
 deps: []
 links: [hir-jgs1]
 created: 2026-05-22T21:43:09Z
@@ -52,3 +52,12 @@ required schema_version field for the upgrade path, no tamper-proofing in
 v0.1. Additions beyond the recommendation: tagged ok/err result encoding and
 a checker-enforced wire-representability constraint on tool signatures. ADR
 to be written in DECISIONS.md during hir-jgs1 implementation.
+
+**2026-07-03T09:44:45Z**
+
+Resolved and documented as ADR-016 in DECISIONS.md, implemented in hir-jgs1
+(commits bea7971, f388ddf): JSON-lines with required schema_version, canonical
+byte-exact writer, tagged ok/err results, meta envelope field for observer
+metadata, capability-based sink, no tamper-proofing in v0.1 (upgrade path via
+schema_version). Format specified normatively in docs/tool-effects.md and
+pinned by conformance/v1 golden files.

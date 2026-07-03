@@ -1,6 +1,6 @@
 ---
 id: hir-v3pv
-status: open
+status: closed
 deps: []
 links: [hir-jgs1]
 created: 2026-05-22T21:43:16Z
@@ -47,3 +47,14 @@ scope (nondeterminism). Log contains full args and tagged ok/err results,
 sufficient for replay including failures. Only divergence-reporting
 ergonomics remain provisional pending real runs. ADR to be written in
 DECISIONS.md during hir-jgs1 implementation.
+
+**2026-07-03T09:44:45Z**
+
+Resolved and documented as ADR-016 in DECISIONS.md, implemented in hir-jgs1
+(commits bea7971, f388ddf): replay returns logged values, re-execute is the
+same program under a live handler (handler choice, not a language mode); core
+is the pure function (log, position, tool, args) -> Result<result, Divergence>
+with strict-sequential matching and hard structured Divergence on
+exhausted/tool/args mismatch. Log carries full args and tagged ok/err results,
+so failures replay faithfully. Divergence-reporting ergonomics remain
+provisional pending real runs.
