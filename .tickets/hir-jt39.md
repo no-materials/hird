@@ -52,7 +52,7 @@ structured types.
 
 1. [x] [hir-4g3y](hir-4g3y.md) — Tool declarations and invocation records
 2. [x] [hir-jgs1](hir-jgs1.md) — Audit log integration and tool effect docs
-3. [ ] [hir-uvui](hir-uvui.md) — Signature-directed handler checking for tool effects
+3. [x] [hir-uvui](hir-uvui.md) — Signature-directed handler checking for tool effects
 
 ## Open design questions resolved in this phase
 
@@ -108,3 +108,7 @@ the conformance/v1 golden files, the reference serializer/decoder/replay
 live in hird-check::wire, the audit sink is capability-based with positive
 and negative fixtures, and docs/tool-effects.md is written. Remaining:
 hir-uvui (signature-directed handler checking), the phase's last task.
+
+**2026-07-06T14:07:34Z**
+
+hir-uvui (signature-directed handler checking) closed; landed in commit 6da2ac0. ADR-017 records the decision: handle arms over Tool<Marker> check the handler against the tool's operation signature by instantiate-and-unify from a marker-keyed side-table, with a fresh open row (pure mocks accepted) and the monomorphic-handler-for-generic-tool gap accepted for v0.1. New diagnostics C0033 (not a declared tool) and C0034 (signature mismatch) join the retained structural checks. All three phase-6 tasks are now closed; the epic's acceptance criteria are met.

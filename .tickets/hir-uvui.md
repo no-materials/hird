@@ -1,6 +1,6 @@
 ---
 id: hir-uvui
-status: open
+status: closed
 deps: [hir-4g3y]
 links: []
 created: 2026-07-01T13:47:08Z
@@ -55,3 +55,7 @@ Implementation decisions (agreed after review of ADR-013/015 and the current che
   declared trailing row (e.g. Exn ParseError). Handler effects join the block's
   row as today.
 - Non-tool effects (bare labels) keep the existing structural path untouched.
+
+**2026-07-06T14:07:16Z**
+
+Implemented in commit 6da2ac0. Handle arms over Tool<Marker> are checked against the tool's operation signature per the locked decisions: side-table lookup keyed by marker name, instantiate-and-unify (monomorphic handler for a generic tool accepted), fresh open row (pure mocks accepted), C0033 for non-tool markers, C0034 for signature mismatch after the structural C0031 pre-check. ADR-017 records the decision. Snapshot tests cover the matching, mismatched, generic-monomorphic, non-tool-marker, and non-function cases. fmt/clippy/test clean across the workspace.
