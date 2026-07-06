@@ -1,6 +1,6 @@
 ---
 source: crates/hird-check/tests/inference.rs
-expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\\n\\\n           handle { Log -> lh } in handle { Tool<Repo> -> th } in f(0)\")"
+expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         tool Repo : { x: Int } -> Int\\n\\\n         fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\\n\\\n           handle { Log -> lh } in handle { Tool<Repo> -> th } in f(0)\")"
 ---
-MkRepo : Repo
-nested : (Int → Int ! {Log, Tool<Repo>}) → (Int → Int) → (Int → Int) → Int
+nested : (Int → Int ! {Log, Tool<Repo>}) → (Int → Int) → ({ x: Int } → Int) → Int
+repo : { x: Int } → Int ! {Tool<Repo>}

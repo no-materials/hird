@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn bad(f: Int -> Int ! {Tool<Repo>}, h: Int -> Int) -> Int =\\n\\\n           handle { Tool<Repo> -> h } in f(0)\")"
+---
+MkRepo : Repo
+bad : (Int → Int ! {Tool<Repo>}) → (Int → Int) → Int
+error[C0033] 103..114: `Repo` is not a declared tool

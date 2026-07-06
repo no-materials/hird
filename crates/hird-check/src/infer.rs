@@ -22,13 +22,15 @@ use hird_ast::{
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{EffectRow, Label, Type, handle_row};
+use hird_types::{EffectRow, Label, Name, Type, handle_row, unify};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
 use crate::elaborate::Scope;
 use crate::registry::CtorInfo;
-use crate::{ModuleName, NodeKey, expr_span, name_token_span, node_span, token_span};
+use crate::{
+    ModuleName, NodeKey, expr_span, name_token_span, node_span, token_span, type_expr_span,
+};
 
 impl Checker {
     /// Infers the type of `expr`, recording it in the node table.
@@ -195,12 +197,13 @@ impl Checker {
     /// `handle { Effect → handler, … } in body` — DI-style effect handlers.
     ///
     /// The block's value type is the body's type. Each arm must name a declared
-    /// effect at the correct arity and bind it to a function; validating the
-    /// handler's argument and result types against the effect's operation
-    /// signature waits for tool declarations, so the check is structural —
-    /// unknown effect, wrong arity, and a non-function handler are the reported
-    /// shapes. The block's effect row is the body's effects minus the handled
-    /// effects plus the handlers' own effects.
+    /// effect at the correct arity and bind it to a function; a `Tool<Marker>`
+    /// arm's handler is further checked against the tool's operation signature
+    /// ([`Checker::check_tool_handler`]), and a non-tool marker is an error.
+    /// Non-tool effects keep the structural check — unknown effect, wrong
+    /// arity, and a non-function handler are the reported shapes. The block's
+    /// effect row is the body's effects minus the handled effects plus the
+    /// handlers' own effects.
     fn infer_handle(&mut self, handle: &HandleBlock) -> Checked<Type> {
         let Some(body) = handle.body() else {
             return Err(Aborted);
@@ -221,11 +224,31 @@ impl Checker {
         let mut handled = EffectRow::empty();
         let mut handler_effects = EffectRow::empty();
         for arm in handle.arms() {
+            // A `Tool<Marker>` head makes this a tool arm: the handled tool,
+            // whose operation signature the handler is checked against below.
+            let mut tool: Option<Name> = None;
             if let Some(effect_expr) = arm.effect() {
                 let mut scope = Scope::new();
                 if let Ok(effect) = self.elaborate_handle_effect(&effect_expr, &mut scope) {
                     self.handled_effects
                         .push((NodeKey::of_node(arm.syntax()), effect.clone()));
+                    if effect.head().as_str() == "Tool"
+                        && let [marker] = effect.args()
+                    {
+                        match self.subst.resolve(marker) {
+                            Type::TyCon(name, _) if self.tool_signatures.contains_key(&name) => {
+                                tool = Some(name);
+                            }
+                            other => {
+                                let span = type_expr_span(&effect_expr, self.source_id);
+                                let _ = self.error(
+                                    CheckCode::C0033,
+                                    span,
+                                    format!("`{other}` is not a declared tool"),
+                                );
+                            }
+                        }
+                    }
                     handled.insert(effect);
                 }
             }
@@ -239,6 +262,9 @@ impl Checker {
                         // caught by the final resolve of `handler_effects`.
                         for effect in row.effects() {
                             handler_effects.insert(effect.clone());
+                        }
+                        if let Some(tool) = tool {
+                            self.check_tool_handler(&tool, &handler_ty, span);
                         }
                     }
                     other => {
@@ -264,6 +290,36 @@ impl Checker {
             .push((NodeKey::of_node(handle.syntax()), net.clone()));
         self.add_effects(&net, handle_span);
         Ok(body_ty)
+    }
+
+    /// Checks a tool arm's handler against the handled tool's operation
+    /// signature: the signature is instantiated with fresh type variables and
+    /// unified with the handler's type, so a monomorphic handler for a generic
+    /// tool is accepted. The expected row is a fresh open row variable — a
+    /// mock may be pure and need not carry the tool's declared trailing row.
+    /// A mismatch is reported as C0034, not a raw unification error.
+    fn check_tool_handler(&mut self, tool: &Name, handler_ty: &Type, span: Span) {
+        let Some(scheme) = self.tool_signatures.get(tool).cloned() else {
+            return;
+        };
+        let Type::TyFn(params, ret, _) = self.subst.instantiate(&scheme) else {
+            return;
+        };
+        // Rendered before unifying: a failed unification may leave partial
+        // bindings that would distort the displayed types.
+        let expected_disp = Type::func(params.clone(), (*ret).clone()).normalized();
+        let handler_disp = self.subst.resolve(handler_ty).normalized();
+        let expected = Type::TyFn(params, ret, EffectRow::of_var(self.subst.fresh_row()));
+        if unify(&mut self.subst, &expected, handler_ty, span).is_err() {
+            let _ = self.error(
+                CheckCode::C0034,
+                span,
+                format!(
+                    "handler for tool `{tool}` must have type `{expected_disp}`, \
+                     but this has type `{handler_disp}`"
+                ),
+            );
+        }
     }
 
     /// `if c then a else b` — `Bool` condition, unified branches.

@@ -800,8 +800,8 @@ fn handle_adds_handler_effects() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
          effect Tool<t>\n\
-         type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)"
     ));
 }
@@ -813,8 +813,8 @@ fn handle_multiple_arms() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
          effect Tool<t>\n\
-         type Repo = MkRepo\n\
-         fn multi(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn multi(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
            handle { Log -> lh, Tool<Repo> -> th } in f(0)"
     ));
 }
@@ -826,8 +826,8 @@ fn handle_nested_blocks() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
          effect Tool<t>\n\
-         type Repo = MkRepo\n\
-         fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
            handle { Log -> lh } in handle { Tool<Repo> -> th } in f(0)"
     ));
 }
@@ -850,8 +850,8 @@ fn handle_effect_arity_mismatch_rejected() {
     ));
 }
 
-/// A handler that is not a function is rejected: v0.1 checks the handler's
-/// shape, not its signature against the effect's operation type.
+/// A handler that is not a function is rejected: a bare-label effect has no
+/// operation signature, so the handler check is structural.
 #[test]
 fn handle_non_function_handler_rejected() {
     insta::assert_snapshot!(check_str(

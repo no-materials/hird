@@ -98,6 +98,11 @@ pub enum CheckCode {
     /// A tool signature contains a type that is not wire-representable: a
     /// function type or an opaque capability.
     C0032,
+    /// A `handle` arm handles `Tool<X>` where `X` is not a declared tool.
+    C0033,
+    /// A `handle` arm's handler does not match the handled tool's operation
+    /// signature.
+    C0034,
 }
 
 /// A secondary source location attached to a diagnostic.

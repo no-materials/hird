@@ -1,6 +1,6 @@
 ---
 source: crates/hird-check/tests/inference.rs
-expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         type Repo = MkRepo\\n\\\n         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\\n\\\n           handle { Tool<Repo> -> logh } in f(0)\")"
+expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         tool Repo : { x: Int } -> Int\\n\\\n         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\\n\\\n           handle { Tool<Repo> -> logh } in f(0)\")"
 ---
-MkRepo : Repo
-audited : (Int → Int ! {Tool<Repo>}) → (Int → Int ! {Log}) → Int ! {Log}
+audited : (Int → Int ! {Tool<Repo>}) → ({ x: Int } → Int ! {Log}) → Int ! {Log}
+repo : { x: Int } → Int ! {Tool<Repo>}

@@ -72,6 +72,10 @@ pub(crate) struct Checker {
     /// Each tool declaration's derived invocation record, keyed by generated
     /// name, recorded raw and resolved in [`Checker::finish_with_interface`].
     invocation_records: Vec<(Name, Type)>,
+    /// Each declared tool's generalised function scheme, keyed by marker name.
+    /// Consulted by `handle`-arm checking; a side-table rather than a value-env
+    /// lookup of the generated function, which user code could shadow.
+    pub(crate) tool_signatures: BTreeMap<Name, Type>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -122,6 +126,7 @@ impl Checker {
             effect_rows: Vec::new(),
             handled_effects: Vec::new(),
             invocation_records: Vec::new(),
+            tool_signatures: BTreeMap::new(),
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),
@@ -558,6 +563,7 @@ impl Checker {
         let fn_ty = Type::func_eff(Vec::from([input_ty.clone()]), output_ty.clone(), row);
         let scheme = self.subst.generalize(&fn_ty);
         let fn_name = tool_fn_name(name);
+        self.tool_signatures.insert(Name::new(name), scheme.clone());
         self.env.insert_root(&fn_name, scheme.clone());
         self.types
             .push((NodeKey::of_node(decl.syntax()), scheme.clone()));

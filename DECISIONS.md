@@ -853,6 +853,64 @@ pure data and the future runtime is only one of its producers.
 
 ---
 
+## ADR-017: Signature-directed handler checking for tool effects
+
+**Date**: 2026-07-06
+**Status**: Accepted (closes the handler-signature gap ADR-013 §1 deferred,
+using the operation signatures ADR-015 introduced)
+
+### Context
+
+ADR-013 made v0.1 handle-arm checking structural because effects were bare
+labels with no operation signature to check a handler against, and noted the
+gap would close when tool declarations introduced those signatures. ADR-015
+landed tool declarations, so a `Tool<Marker>` arm now has a signature —
+`{args} → result`, optionally generic, optionally with a trailing row — and
+the deferral's premise is gone for tool effects. Two sub-questions had to be
+settled: how to check a handler against a *generic* tool without polymorphic
+subsumption machinery, and whether the handler must reproduce the tool's
+declared trailing row.
+
+### Decision
+
+A handle arm over `Tool<Marker>` is checked against the tool's operation
+signature; non-tool effects keep ADR-013's structural checking unchanged.
+
+- **Lookup is a checker side-table keyed by marker name**, populated at tool
+  declaration beside the derived invocation records — not a value-environment
+  lookup of the generated function, which user code could shadow.
+- **Generic tools check by instantiate-and-unify**: the tool's generalised
+  signature is instantiated with fresh type variables and unified with the
+  handler's type. This accepts a *monomorphic* handler for a generic tool
+  (an `LLMCall` handler fixed at `Schema<Int>`) — an accepted v0.1 gap;
+  requiring a handler at least as polymorphic as the tool needs
+  skolemisation/polymorphic subsumption the checker does not have.
+- **Rows are not part of the match**: the handler unifies against
+  `(args) → result` with a fresh open effect row, so a mock may be pure and
+  need not carry the tool's declared trailing row (e.g. `Exn<ParseError>`);
+  handler effects join the block's row as before.
+- **`Tool<X>` where `X` is not a declared tool is an error** ("not a declared
+  tool"), not a silent fall-through to the structural check.
+- **The structural checks are retained and precede the signature check**:
+  unknown effect, wrong effect arity, and a non-function handler (C0031)
+  report as before; a signature mismatch has its own code (C0034), so a
+  shape error never surfaces as a confusing unification error.
+
+### Consequences
+
+- The mock-doesn't-match-the-tool bug class ADR-013 accepted is now a compile
+  error; the v0.1 demo's DI-style mocks are checked against the real tool
+  signatures.
+- A generic tool can be handled monomorphically without complaint — two arms
+  fixing the same tool at different instantiations are each checked
+  independently against fresh instantiations. Documented, revisited only if
+  polymorphic subsumption ever lands.
+- Handling a user-declared `Tool`-headed effect whose argument is not a tool
+  marker is no longer expressible; `Tool` is effectively reserved for the
+  tool-declaration mechanism in handle arms.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here

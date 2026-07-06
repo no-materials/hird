@@ -478,14 +478,14 @@ fn multiple_and_parametric_effects() {
 
 #[test]
 fn handle_block_round_trips() {
-    // Handling the body's `Tool<Repo>` with a logging handler trades it for
+    // Handling the body's `Db<Repo>` with a logging handler trades it for
     // `Log`; both the arm and the resulting row must come back unchanged.
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
+         effect Db<t>\n\
          type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
-           handle { Tool<Repo> -> logh } in f(0)",
+         fn audited(f: Int -> Int ! {Db<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Db<Repo> -> logh } in f(0)",
     );
 }
 
@@ -493,10 +493,10 @@ fn handle_block_round_trips() {
 fn handle_multi_arm_round_trips() {
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
+         effect Db<t>\n\
          type Repo = MkRepo\n\
-         fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
-           handle { Log -> lh, Tool<Repo> -> th } in f(0)",
+         fn run(f: Int -> Int ! {Log, Db<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
+           handle { Log -> lh, Db<Repo> -> th } in f(0)",
     );
 }
 
@@ -544,14 +544,14 @@ fn snapshot_polymorphic_and_extern() {
 
 #[test]
 fn snapshot_handle_block() {
-    // The handled `Tool<Repo>` leaves the row, the handler's `Log` joins it, and
+    // The handled `Db<Repo>` leaves the row, the handler's `Log` joins it, and
     // the printer re-emits the `handle { … } in …` surface form.
     let module = lower_src(
         "effect Log\n\
-         effect Tool<t>\n\
+         effect Db<t>\n\
          type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
-           handle { Tool<Repo> -> logh } in f(0)",
+         fn audited(f: Int -> Int ! {Db<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Db<Repo> -> logh } in f(0)",
         "Handle",
     );
     insta::assert_snapshot!(pretty_print(&module));

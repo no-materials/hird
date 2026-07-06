@@ -97,10 +97,13 @@ handle {
 ```
 
 The handler must be a function from the tool's input record to its output
-type. The block's row is the body's effects minus the handled effects plus
-the handlers' own effects — so replacing a tool with a pure mock *removes*
-`Tool<…>` from the row, and replacing it with a logging implementation
-*trades* it for the logger's effects. Standard patterns:
+type; the checker enforces this against the tool's declared signature, and
+a mismatched handler is a compile error. The handler's own effect row is
+not constrained — a mock may be pure even when the tool declares a
+trailing row. The block's row is the body's effects minus the handled
+effects plus the handlers' own effects — so replacing a tool with a pure
+mock *removes* `Tool<…>` from the row, and replacing it with a logging
+implementation *trades* it for the logger's effects. Standard patterns:
 
 - **Mocking**: handle `Tool<X>` with a pure function; tests run without
   the external service and the enclosing code becomes pure.

@@ -389,8 +389,8 @@ fn handle_block_lowers_to_handle_node() {
     let module = lower(
         "effect Log\n\
          effect Tool<t>\n\
-         type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
         "Handle",
     );
@@ -414,8 +414,8 @@ fn handle_block_json_snapshot() {
     let module = lower(
         "effect Log\n\
          effect Tool<t>\n\
-         type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
         "Handle",
     );

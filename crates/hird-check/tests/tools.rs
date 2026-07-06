@@ -150,6 +150,66 @@ fn handle_substitutes_tool_effect() {
     ));
 }
 
+// ── signature-directed handler checking ─────────────────────────
+
+/// A handler whose type does not match the handled tool's operation signature
+/// is rejected.
+#[test]
+fn handle_mismatched_tool_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type RepoState = RepoState(String)\n\
+         tool ReadRepo : { path: Path } -> RepoState\n\
+         fn wrong(x: Int) -> Int = x\n\
+         fn dry_run(p: Path) -> RepoState = handle { Tool<ReadRepo> -> wrong } in read_repo({ path: p })"
+    ));
+}
+
+/// A monomorphic handler for a generic tool is accepted: the tool's signature
+/// is instantiated with fresh variables and unified, so a handler fixed at
+/// `Schema<Int>` handles `Tool<LLMCall>`. The pure mock also drops the tool's
+/// declared trailing row — rows are not part of the signature match.
+#[test]
+fn generic_tool_monomorphic_handler_accepted() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         effect Exn<t>\n\
+         type Prompt = Prompt(String)\n\
+         type Schema<t> = Schema(String)\n\
+         type ParseError = ParseError(String)\n\
+         tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\n\
+         fn mock(args: { prompt: Prompt, schema: Schema<Int> }) -> Int = 42\n\
+         fn ask(p: Prompt, s: Schema<Int>) -> Int ! {Exn<ParseError>} =\n\
+           handle { Tool<LLMCall> -> mock } in llm_call({ prompt: p, schema: s })"
+    ));
+}
+
+/// Handling `Tool<X>` where `X` is a type but not a declared tool is an
+/// error, not a fall-through to the structural check.
+#[test]
+fn handle_non_tool_marker_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn bad(f: Int -> Int ! {Tool<Repo>}, h: Int -> Int) -> Int =\n\
+           handle { Tool<Repo> -> h } in f(0)"
+    ));
+}
+
+/// A non-function handler on a tool arm reports the structural error alone,
+/// never a signature mismatch on top of it.
+#[test]
+fn handle_non_function_tool_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type RepoState = RepoState(String)\n\
+         tool ReadRepo : { path: Path } -> RepoState\n\
+         fn bad(p: Path) -> RepoState = handle { Tool<ReadRepo> -> 42 } in read_repo({ path: p })"
+    ));
+}
+
 // ── standard library ────────────────────────────────────────────
 
 /// The standard tools (`llm_call`, `http_get`, `http_post`, `read_file`,

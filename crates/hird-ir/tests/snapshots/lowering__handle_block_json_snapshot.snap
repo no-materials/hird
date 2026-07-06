@@ -6,17 +6,6 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
   "name": "Handle",
   "declarations": [
     {
-      "kind": "Type",
-      "name": "Repo",
-      "params": [],
-      "constructors": [
-        {
-          "name": "MkRepo",
-          "fields": []
-        }
-      ]
-    },
-    {
       "kind": "Fn",
       "name": "audited",
       "params": [
@@ -26,7 +15,7 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
         },
         {
           "name": "logh",
-          "type": "Int → Int ! {Log}"
+          "type": "{ x: Int } → Int ! {Log}"
         }
       ],
       "return_type": "Int",
@@ -39,7 +28,7 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
             "handler": {
               "kind": "Var",
               "name": "logh",
-              "type": "Int → Int ! {Log}"
+              "type": "{ x: Int } → Int ! {Log}"
             }
           }
         ],

@@ -4,10 +4,10 @@ expression: pretty_print(&module)
 ---
 module Handle
 
-effect Log
+effect Db<t0>
 
-effect Tool<t0>
+effect Log
 
 type Repo = MkRepo
 
-fn audited(f: Int → Int ! {Tool<Repo>}, logh: Int → Int ! {Log}) → Int ! {Log} = handle { Tool<Repo> → logh } in f(0)
+fn audited(f: Int → Int ! {Db<Repo>}, logh: Int → Int ! {Log}) → Int ! {Log} = handle { Db<Repo> → logh } in f(0)
