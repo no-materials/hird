@@ -32,7 +32,8 @@ use core::fmt::{Display, Write as _};
 use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
-    IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrTypeDef, LiteralValue,
+    IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrToolDef, IrTypeDef,
+    LiteralValue,
 };
 
 /// Renders `module` as canonical Hirð source.
@@ -262,8 +263,8 @@ fn literal_text(value: &LiteralValue) -> &str {
 
 /// Every effect the printer will emit, mapped from head name to type-argument
 /// count, collected from the declaration-level types it renders (function
-/// signatures, extern types, and constructor fields). Held name-sorted so the
-/// synthesised declarations print deterministically.
+/// signatures, extern types, constructor fields, and tool signatures). Held
+/// name-sorted so the synthesised declarations print deterministically.
 fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
     let mut effects = BTreeMap::new();
     for decl in &module.declarations {
@@ -283,6 +284,14 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
                         collect_type_effects(field, &mut effects);
                     }
                 }
+            }
+            IrDecl::Tool(t) => {
+                // The tool's implicit effect (elided from its printed form),
+                // plus anything its signature references.
+                effects.insert(String::from("Tool"), 1);
+                collect_type_effects(&t.input, &mut effects);
+                collect_type_effects(&t.output, &mut effects);
+                collect_row_effects(&t.effect_row, &mut effects);
             }
         }
     }
@@ -442,6 +451,7 @@ impl Printer {
                 IrDecl::Fn(f) => self.fn_def(f),
                 IrDecl::Type(t) => self.type_def(t),
                 IrDecl::Extern(e) => self.extern_ref(e),
+                IrDecl::Tool(t) => self.tool_def(t),
             }
             self.push("\n");
         }
@@ -527,6 +537,32 @@ impl Printer {
                 }
                 self.push(")");
             }
+        }
+    }
+
+    /// `tool Name<params> : args → result ! {row}`. Types render under the
+    /// declared parameter names with no canonicalisation, as for `type`
+    /// declarations; the implicit `Tool<Name>` effect is not part of the
+    /// surface form, and an empty trailing row is elided.
+    fn tool_def(&mut self, t: &IrToolDef) {
+        self.push("tool ");
+        self.push(&t.name);
+        if let [first, rest @ ..] = t.params.as_slice() {
+            self.push("<");
+            self.push(first);
+            for param in rest {
+                self.push(", ");
+                self.push(param);
+            }
+            self.push(">");
+        }
+        self.push(" : ");
+        self.push_display(&t.input);
+        self.push(" \u{2192} ");
+        self.push_display(&t.output);
+        if !t.effect_row.is_empty() {
+            self.push(" ! ");
+            self.push_display(&t.effect_row);
         }
     }
 

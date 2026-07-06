@@ -29,8 +29,8 @@ has already applied the final substitution, so lowering does no unification —
 it walks the CST and reads resolved types back by node identity.
 
 Declarations that are resolved away or deferred to later phases — `use`
-imports, `effect`/`tool` declarations, `actor`/`supervisor` declarations — do
-not appear in the IR. Only functions, data types, and externs do.
+imports, `effect` declarations, `actor`/`supervisor` declarations — do not
+appear in the IR. Functions, data types, externs, and tools do.
 
 ### Desugaring decisions
 
@@ -39,7 +39,7 @@ not appear in the IR. Only functions, data types, and externs do.
 | `if c then a else b`          | `match c { True → a, False → b }` over `Bool`          |
 | `a ⊕ b`                       | application of a primitive operator reference `IrVar`  |
 | `(e)`                         | `e` (parentheses carry no semantics)                   |
-| `handle { … } in body`        | `body` (handler arms reference effects; see Phase 5)   |
+| `handle { … } in body`        | an `IrHandle` carrying the arms, body, and block row   |
 
 Operator references use the canonical operator symbol as the variable name
 (`+`, `-`, `*`, `/`, `<`, `<=`, `>`, `>=`, `==`, `!=`, and the Unicode logical
@@ -74,6 +74,11 @@ single argument (`f((a, b))` passes one tuple).
   `type` is the function's (possibly quantified) scheme. `module` names the
   backing foreign module; it is always absent in v0.1, where the surface
   syntax does not yet name one.
+- `IrToolDef { name, params, input, output, effect_row }` — a tool
+  declaration. `params` are the declared type-parameter names; `input` and
+  `output` are the operation's args record and result types, rendered under
+  those names; `effect_row` is the declared trailing row, without the
+  implicit `Tool<name>` effect (which every use site's row carries anyway).
 
 ### Expressions
 
@@ -86,6 +91,11 @@ Every expression node carries its resolved type.
 - `IrApp { func, args, result_type }`.
 - `IrMatch { scrutinee, scrutinee_type, arms, result_type }`, where each
   `IrArm { pattern, body }`.
+- `IrHandle { arms, body, effect_row, result_type }` — a `handle` block, where
+  each `IrHandleArm { effect, handler }` binds a handled effect (`Log`,
+  `Tool<ReadRepo>`) to its handler implementation. `effect_row` is the block's
+  computed row: the body's effects minus the handled effects plus the
+  handlers' own.
 - `IrConstructor { name, type_name, args, result_type }` — a constructor
   applied to zero or more arguments. `type_name` is the data type it
   constructs. Nullary constructors (`None`, `True`) appear here with no
@@ -213,18 +223,23 @@ Formatting:
   `∨`), with parentheses inserted only where operator precedence or
   associativity would otherwise re-parse to a different tree (`(a + b) * c`,
   `(a == b) == c`).
-- A lowered `if` prints as the `match` over `Bool` it became; a lowered handle
-  prints as its body. These desugarings are not reversed — the IR is the
-  canonical form.
+- A lowered `if` prints as the `match` over `Bool` it became. Desugarings are
+  not reversed — the IR is the canonical form. A `handle` block prints back in
+  its surface form (`handle { Log → h } in body`).
 - Function signatures print every parameter type and, where expressible, the
   return type. Record and unit (`()`) types have no annotation syntax, so a
   function returning one omits its (optional) return annotation and lets
   inference recover it. A non-empty effect row prints after the return type
   (`! {Log}`); the empty row is elided (`! {}` is the surface default).
+- Tool declarations print in their surface form
+  (`tool ReadRepo : { path: Path } → RepoState`), with the declared parameter
+  names and without the implicit `Tool<name>` effect; an empty trailing row is
+  elided.
 - Effect declarations are reconstructed from the rows that reference them and
   printed after the module header (`effect Log`, `effect Tool<t0>`). They are
   not IR nodes, so without this the printed source would name effects it never
-  declares and fail to re-check.
+  declares — including the `Tool` effect a tool declaration implies — and fail
+  to re-check.
 - Type-variable letters are renumbered to `a, b, c, …`, and row-variable letters
   to `r, r1, …`, in order of first appearance within each signature, so output
   does not depend on the unification-variable identities inference happened to
@@ -254,6 +269,6 @@ each run, and the printer may turn an inferred signature into a skolemised one
 (annotating the return type moves a function onto the checker's rigid-skolem
 path). Both genuine unification variables and skolem constants — which the lexer
 guarantees are the only lowercase type names — are renumbered by first
-appearance before comparing. Type declarations are compared verbatim: their
-constructor field types are fixed by the declared parameter names, with no
-inference freedom.
+appearance before comparing. Type and tool declarations are compared verbatim:
+their types are fixed by the declared parameter names, with no inference
+freedom.

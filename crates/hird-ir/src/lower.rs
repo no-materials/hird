@@ -32,17 +32,18 @@ use alloc::vec::Vec;
 
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr,
-    LambdaExpr, LetExpr, Literal, MatchExpr, Pattern, RecordLit, SourceFile, TupleLit, TypeDecl,
+    LambdaExpr, LetExpr, Literal, MatchExpr, Pattern, RecordLit, SourceFile, ToolDecl, TupleLit,
+    TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
-use hird_types::Type;
+use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
     IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl, IrExpr,
     IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral,
-    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple,
-    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrToolDef,
+    IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -65,8 +66,9 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
             Decl::Fn(d) => declarations.extend(lowerer.lower_fn(&d).map(IrDecl::Fn)),
             Decl::Type(d) => declarations.extend(lowerer.lower_type(&d).map(IrDecl::Type)),
             Decl::Extern(d) => declarations.extend(lowerer.lower_extern(&d).map(IrDecl::Extern)),
-            // Imports are resolved away; effects, tools, actors, and
-            // supervisors are not yet modelled and carry no IR yet.
+            Decl::Tool(d) => declarations.extend(lowerer.lower_tool(&d).map(IrDecl::Tool)),
+            // Imports are resolved away; effects, actors, and supervisors are
+            // not yet modelled and carry no IR yet.
             _ => {}
         }
     }
@@ -136,6 +138,22 @@ impl Lowerer<'_> {
             name: String::from(name),
             params,
             constructors,
+        })
+    }
+
+    /// Lowers a tool declaration. `None` when it is missing a name or the
+    /// checker did not record its generated function's scheme.
+    fn lower_tool(&self, decl: &ToolDecl) -> Option<IrToolDef> {
+        let name = decl.name()?;
+        let scheme = self.checked.type_at(NodeKey::of_node(decl.syntax()))?;
+        let params: Vec<String> = decl.type_params().map(String::from).collect();
+        let (input, output, effect_row) = tool_signature(scheme, &params, name)?;
+        Some(IrToolDef {
+            name: String::from(name),
+            params,
+            input,
+            output,
+            effect_row,
         })
     }
 
@@ -573,4 +591,56 @@ fn parameter_rename(result: &Type, params: &[String]) -> BTreeMap<u32, Type> {
         }
     }
     map
+}
+
+/// The args type, result type, and trailing row of a tool's generalised
+/// function scheme `∀…. (args) → result ! ({Tool<name>} ∪ trailing)`, with
+/// quantified variables renamed to the declared parameter names (`params`)
+/// and the implicit `Tool<name>` effect removed from the row.
+fn tool_signature(scheme: &Type, params: &[String], name: &str) -> Option<(Type, Type, EffectRow)> {
+    let body = match scheme {
+        Type::TyForall(_, _, body) => body.as_ref(),
+        other => other,
+    };
+    let Type::TyFn(inputs, output, row) = body else {
+        return None;
+    };
+    let input = inputs.first()?;
+    let rename = tool_parameter_rename(scheme, params);
+    let rows = BTreeMap::new();
+    let mut trailing = EffectRow::empty();
+    for effect in row.effects() {
+        if is_tool_marker_effect(effect, name) {
+            continue;
+        }
+        trailing.insert(effect.map_args(|a| a.substitute(&rename, &rows)));
+    }
+    Some((
+        input.substitute(&rename, &rows),
+        output.substitute(&rename, &rows),
+        trailing,
+    ))
+}
+
+/// Builds the variable-to-name map for [`tool_signature`]. A tool signature
+/// elaborates one fresh variable per declared parameter, in declaration
+/// order, so the quantified variables in ascending id order mirror the
+/// declared names.
+fn tool_parameter_rename(scheme: &Type, params: &[String]) -> BTreeMap<u32, Type> {
+    let Type::TyForall(tvars, _, _) = scheme else {
+        return BTreeMap::new();
+    };
+    let mut ids = tvars.clone();
+    ids.sort_unstable();
+    ids.iter()
+        .zip(params)
+        .map(|(id, name)| (*id, Type::con(name.as_str(), Vec::new())))
+        .collect()
+}
+
+/// Whether `effect` is a given tool's implicit effect (`Tool<name>`).
+fn is_tool_marker_effect(effect: &Effect, name: &str) -> bool {
+    effect.head().as_str() == "Tool"
+        && matches!(effect.args(),
+            [Type::TyCon(marker, args)] if marker.as_str() == name && args.is_empty())
 }

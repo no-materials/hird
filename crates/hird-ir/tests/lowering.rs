@@ -421,3 +421,34 @@ fn handle_block_json_snapshot() {
     );
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
+
+// ── tool declarations ────────────────────────────────────────────
+
+#[test]
+fn tool_decl_lowers_to_tool_node() {
+    let module = lower(
+        "effect Tool<t>\n\
+         effect Exn<t>\n\
+         type Prompt = Prompt(String)\n\
+         type Schema<t> = Schema(String)\n\
+         type ParseError = ParseError(String)\n\
+         tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}",
+        "Tools",
+    );
+    let tool = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Tool(t) => Some(t),
+            _ => None,
+        })
+        .expect("tool declaration is present");
+    assert_eq!(tool.name, "LLMCall");
+    assert_eq!(tool.params, ["t"]);
+    // Signature types render under the declared parameter name, and the
+    // trailing row carries only the declared effects — the implicit
+    // `Tool<LLMCall>` stays out.
+    assert_eq!(ty_str(&tool.input), "{ prompt: Prompt, schema: Schema<t> }");
+    assert_eq!(ty_str(&tool.output), "t");
+    assert_eq!(format!("{}", tool.effect_row), "{Exn<ParseError>}");
+}

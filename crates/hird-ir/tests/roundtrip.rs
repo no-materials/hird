@@ -13,8 +13,8 @@
 //! variable identities on each run, and the printer may turn an inferred
 //! signature into a skolemised one, so genuine unification variables and
 //! skolem constants are both renumbered by first appearance before comparing.
-//! Type declarations are compared verbatim — their constructor fields are
-//! fixed by the declared parameter names, with no inference freedom.
+//! Type and tool declarations are compared verbatim — their types are fixed
+//! by the declared parameter names, with no inference freedom.
 
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
@@ -195,7 +195,10 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 body: canon_expr(&f.body, &mut map),
             })
         }
+        // Type and tool declarations render under their declared parameter
+        // names, with no inference freedom: compared verbatim.
         IrDecl::Type(t) => IrDecl::Type(t.clone()),
+        IrDecl::Tool(t) => IrDecl::Tool(t.clone()),
         IrDecl::Extern(e) => {
             let mut map = VarMap::new();
             IrDecl::Extern(IrExternRef {
@@ -478,14 +481,15 @@ fn multiple_and_parametric_effects() {
 
 #[test]
 fn handle_block_round_trips() {
-    // Handling the body's `Db<Repo>` with a logging handler trades it for
-    // `Log`; both the arm and the resulting row must come back unchanged.
+    // Handling the body's `Tool<Repo>` with a logging handler trades it for
+    // `Log`; the arm, the resulting row, and the tool declaration must all
+    // come back unchanged.
     assert_roundtrips(
         "effect Log\n\
-         effect Db<t>\n\
-         type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Db<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
-           handle { Db<Repo> -> logh } in f(0)",
+         effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
     );
 }
 
@@ -493,10 +497,26 @@ fn handle_block_round_trips() {
 fn handle_multi_arm_round_trips() {
     assert_roundtrips(
         "effect Log\n\
-         effect Db<t>\n\
-         type Repo = MkRepo\n\
-         fn run(f: Int -> Int ! {Log, Db<Repo>}, lh: Int -> Int, th: Int -> Int) -> Int =\n\
-           handle { Log -> lh, Db<Repo> -> th } in f(0)",
+         effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
+           handle { Log -> lh, Tool<Repo> -> th } in f(0)",
+    );
+}
+
+#[test]
+fn generic_tool_round_trips() {
+    // The tool declaration itself must survive: its declared parameter, args
+    // record, result, and trailing row are re-emitted and re-lowered intact.
+    assert_roundtrips(
+        "effect Tool<t>\n\
+         effect Exn<t>\n\
+         type Prompt = Prompt(String)\n\
+         type Schema<t> = Schema(String)\n\
+         type ParseError = ParseError(String)\n\
+         tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\n\
+         fn ask(p: Prompt, s: Schema<Int>) -> Int ! {Exn<ParseError>, Tool<LLMCall>} =\n\
+           llm_call({ prompt: p, schema: s })",
     );
 }
 
@@ -544,14 +564,15 @@ fn snapshot_polymorphic_and_extern() {
 
 #[test]
 fn snapshot_handle_block() {
-    // The handled `Db<Repo>` leaves the row, the handler's `Log` joins it, and
-    // the printer re-emits the `handle { … } in …` surface form.
+    // The handled `Tool<Repo>` leaves the row, the handler's `Log` joins it,
+    // and the printer re-emits the `handle { … } in …` surface form plus the
+    // tool declaration backing the arm.
     let module = lower_src(
         "effect Log\n\
-         effect Db<t>\n\
-         type Repo = MkRepo\n\
-         fn audited(f: Int -> Int ! {Db<Repo>}, logh: Int -> Int ! {Log}) -> Int ! {Log} =\n\
-           handle { Db<Repo> -> logh } in f(0)",
+         effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
         "Handle",
     );
     insta::assert_snapshot!(pretty_print(&module));

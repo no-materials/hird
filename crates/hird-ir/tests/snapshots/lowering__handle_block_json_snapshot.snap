@@ -6,6 +6,14 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
   "name": "Handle",
   "declarations": [
     {
+      "kind": "Tool",
+      "name": "Repo",
+      "params": [],
+      "input": "{ x: Int }",
+      "output": "Int",
+      "effect_row": "{}"
+    },
+    {
       "kind": "Fn",
       "name": "audited",
       "params": [

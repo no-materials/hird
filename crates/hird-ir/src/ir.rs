@@ -60,8 +60,8 @@ where
 pub struct IrModule {
     /// The module's name (path-derived; authoritative).
     pub name: String,
-    /// Function, type, and extern declarations, in source order. Imports and
-    /// not-yet-elaborated forms (effects, tools, actors, supervisors) are
+    /// Function, type, extern, and tool declarations, in source order. Imports
+    /// and not-yet-elaborated forms (effects, actors, supervisors) are
     /// resolved away or not yet modelled, and do not appear here.
     pub declarations: Vec<IrDecl>,
 }
@@ -98,6 +98,8 @@ pub enum IrDecl {
     Type(IrTypeDef),
     /// A reference to an external (FFI) function.
     Extern(IrExternRef),
+    /// A tool declaration.
+    Tool(IrToolDef),
 }
 
 /// A function definition.
@@ -148,6 +150,27 @@ pub struct IrConstructorDef {
     /// declared names (e.g. `a`, `List<a>`).
     #[serde(serialize_with = "serialize_types")]
     pub fields: Vec<Type>,
+}
+
+/// A tool declaration: an auditable external operation
+/// (`tool Name<params> : args → result ! {row}`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrToolDef {
+    /// The tool's marker name (`ReadRepo` in `Tool<ReadRepo>`).
+    pub name: String,
+    /// The type-parameter names, in declaration order.
+    pub params: Vec<String>,
+    /// The operation's args record type. Type-parameter variables render with
+    /// their declared names.
+    #[serde(serialize_with = "serialize_type")]
+    pub input: Type,
+    /// The operation's result type.
+    #[serde(serialize_with = "serialize_type")]
+    pub output: Type,
+    /// The declared trailing effect row; the implicit `Tool<name>` effect is
+    /// not included.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
 }
 
 /// A reference to an external (FFI) function.
