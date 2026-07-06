@@ -138,18 +138,23 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) → PlannerState ! {Log},
+  init: fn(config: PlannerConfig) → PlannerState ! {Log} = initial_state(config),
 
-  handle PlanRepo(path) → PlannerState
-    ! {Tool<ReadRepo>, Tool<CreateTicket>, Log} { ... },
+  handle PlanRepo(path), st → PlannerState
+    ! {Tool<ReadRepo>, Tool<CreateTicket>, Log} = plan_repo(path, st),
 
-  handle GetStatus(reply_to) → PlannerState
-    ! {Send<PlannerStatus>} { ... },
+  handle GetStatus(reply_to), st → PlannerState
+    ! {Send<PlannerStatus>} = reply_status(reply_to, st),
 
-  handle Shutdown → PlannerState ! {} { ... },
+  handle Shutdown, st → PlannerState ! {} = st,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Log, Send<PlannerStatus>}
 ```
 
+- Handler and `init` bodies follow the uniform bare-body rule (`= e`);
+  braces never wrap a body.
+- A handler binds the message payload pattern, then the current state as a
+  trailing comma-separated pattern (`_` if unused). The state pattern's type
+  is the declared `state` type; the binder name is the author's choice.
 - State is encapsulated — inaccessible outside handlers.
 - Handlers must be exhaustive over the message type.
 - Per-actor effect summary is declared and checked.
@@ -181,6 +186,13 @@ spawn(Planner, config) → Pid<PlannerMsg> ! {Spawn<PlannerMsg>}
 send(pid, PlanRepo(path)) → () ! {Send<PlannerMsg>}
 request(pid, GetStatus) → PlannerStatus ! {Send<PlannerMsg>, Await<PlannerStatus>}
 ```
+
+- `Pid<t>` and `ReplyTo<t>` are built-in type constructors (like `List<t>`);
+  `ReplyTo<t>` is a distinct type, not an alias of `Pid<t>`.
+- `spawn` is a keyword form: its first argument is an actor name, resolved in
+  the actor namespace. Actor names are not first-class values.
+- `Spawn<t>`, `Send<t>`, `Await<t>` are ordinary declared effect heads (see
+  Effect Declarations) whose semantics the checker knows, like `Tool<t>`.
 
 ---
 

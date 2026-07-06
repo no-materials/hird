@@ -25,19 +25,15 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) -> PlannerState ! {Log},
+  init: fn(config: PlannerConfig) -> PlannerState ! {Log} = initial_state(config),
 
-  handle PlanRepo(path) -> PlannerState ! {Tool<ReadRepo>, Tool<CreateTicket>, Log} {
-    ...
-  },
+  handle PlanRepo(path), st -> PlannerState
+    ! {Tool<ReadRepo>, Tool<CreateTicket>, Log} = plan_repo(path, st),
 
-  handle GetStatus(reply_to) -> PlannerState ! {Send<PlannerStatus>} {
-    ...
-  },
+  handle GetStatus(reply_to), st -> PlannerState
+    ! {Send<PlannerStatus>} = reply_status(reply_to, st),
 
-  handle Shutdown -> PlannerState ! {} {
-    ...
-  },
+  handle Shutdown, st -> PlannerState ! {} = st,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Log, Send<PlannerStatus>}
 ```
 
@@ -59,6 +55,41 @@ actor Planner {
 - External code sees the actor's message type and effect summary, not its state.
 
 This ticket resolves **OD5** (start minimal — sum-type mailboxes, no session types).
+
+## Decisions (pre-implementation)
+
+1. **Handler bodies are bare expressions.** The original braced examples
+   (`handle X(p) -> T ! {…} { ... }`) contradicted ADR-009, which reserves
+   braces for non-expression positions and states the handler grammar follows
+   the bare-body rule. Handlers are `handle Ctor(payload), st -> T ! {…} = e`;
+   the example above and phrasebook.md are corrected accordingly. `init` is an
+   anonymous `fn(params) -> T ! {…} = e` in the same style.
+
+2. **Current state is an explicit trailing pattern.** No implicit `state`
+   binding in handler bodies (explicit-over-implicit). Each handler binds the
+   message payload pattern, then the current state as a final comma-separated
+   pattern, typed by the declared `state` type. The comma is unambiguous:
+   inside a `handle` member the only continuations after the message pattern
+   are `,` or `->`, and the member cannot end before its `= e` body.
+
+3. **`spawn` is a keyword form, not a function.** Its first argument is an
+   actor name resolved in the actor namespace; actor names are not first-class
+   values (consistent with ADR-010's no-first-class-modules stance). The
+   checker types `spawn(Actor, args…)` against the actor's init signature.
+
+4. **Builtin provenance.** `Pid<t>` and `ReplyTo<t>` join the built-in type
+   constructors in the checker registry (the `List`/`Option` precedent).
+   `ReplyTo<t>` is a distinct type, not an alias of `Pid<t>`; its runtime
+   representation (pid vs from-ref) is a codegen decision deferred to
+   hir-1dvq. `Spawn<t>`/`Send<t>`/`Await<t>` follow the `Tool<t>` precedent:
+   ordinary `effect`-declared heads whose semantics the checker knows.
+   Pre-registering them can be revisited if a prelude ever exists.
+
+5. **Scope boundaries with hir-m6ra.** Exhaustiveness (missing handlers) is
+   hir-m6ra; this ticket errors only on duplicate handlers and handlers naming
+   unknown constructors. Since `send` does not exist until hir-m6ra, the
+   effect-summary-mismatch tests here exercise `Tool`/`Log` effects; `Send`
+   validation lands with the primitives.
 
 ## Acceptance Criteria
 
