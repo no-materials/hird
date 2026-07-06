@@ -1,6 +1,6 @@
 ---
 id: hi-gggf
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-06T14:24:42Z
@@ -36,3 +36,9 @@ in the module IR rather than only in checker side-tables
 - JSON serialisation covers the new declaration kind; snapshot tests
   updated/added.
 - `cargo fmt`/`clippy`/`test` pass.
+
+## Notes
+
+**2026-07-06T14:38:22Z**
+
+Implemented in commit 07251f9. Tool declarations lower to IrToolDef (name, params, input, output, trailing row without the implicit Tool<name>), derived from the checker-recorded function scheme with quantified variables renamed to the declared parameter names. The pretty-printer emits the surface tool form and synthesises the implied Tool effect declaration, so tool-handling programs round-trip: the fixtures are back on Tool<Repo> handle arms (no C0033 on recheck, no Db<Repo> workaround), with a generic-tool round-trip added. JSON covers the new kind (snapshot updated); docs/ir.md documents IrToolDef and the previously undocumented IrHandle. fmt/clippy/test clean across the workspace.
