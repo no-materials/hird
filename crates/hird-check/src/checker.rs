@@ -76,6 +76,9 @@ pub(crate) struct Checker {
     /// Consulted by `handle`-arm checking; a side-table rather than a value-env
     /// lookup of the generated function, which user code could shadow.
     pub(crate) tool_signatures: BTreeMap<Name, Type>,
+    /// Declared actors by name — the actor namespace. `spawn` resolves its
+    /// actor argument here; actor names are not values.
+    pub(crate) actors: BTreeMap<String, crate::actors::ActorInfo>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -87,7 +90,7 @@ pub(crate) struct Checker {
     pub(crate) current_prov: Vec<EffectIntro>,
     /// Top-level bindings in registration order, resolved in
     /// [`Checker::finish_with_interface`].
-    bindings: Vec<(String, Type)>,
+    pub(crate) bindings: Vec<(String, Type)>,
     /// Source file id used for spans.
     pub(crate) source_id: u32,
     /// The module being checked; set by the whole-program driver and `None`
@@ -100,6 +103,9 @@ pub(crate) struct Checker {
     value_spans: BTreeMap<String, Span>,
     /// First-seen name-token span of each type-namespace definition.
     type_spans: BTreeMap<String, Span>,
+    /// First-seen name-token span of each actor definition. Actors are their
+    /// own namespace, separate from types and values.
+    actor_spans: BTreeMap<String, Span>,
     /// Imported module qualifiers mapped to their exported value schemes, for
     /// `Mod.member` qualified access.
     pub(crate) modules: BTreeMap<String, BTreeMap<String, Type>>,
@@ -127,6 +133,7 @@ impl Checker {
             handled_effects: Vec::new(),
             invocation_records: Vec::new(),
             tool_signatures: BTreeMap::new(),
+            actors: BTreeMap::new(),
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),
@@ -134,6 +141,7 @@ impl Checker {
             current_module: None,
             value_spans: BTreeMap::new(),
             type_spans: BTreeMap::new(),
+            actor_spans: BTreeMap::new(),
             modules: BTreeMap::new(),
             exported_fns: Vec::new(),
             exported_types: Vec::new(),
@@ -160,6 +168,7 @@ impl Checker {
         let mut extern_decls = Vec::new();
         let mut effect_decls = Vec::new();
         let mut tool_decls = Vec::new();
+        let mut actor_decls = Vec::new();
         for decl in file.declarations() {
             match decl {
                 Decl::Type(d) => type_decls.push(d),
@@ -167,8 +176,9 @@ impl Checker {
                 Decl::Extern(d) => extern_decls.push(d),
                 Decl::Effect(d) => effect_decls.push(d),
                 Decl::Tool(d) => tool_decls.push(d),
-                // Modules and imports are the module system's pass; actors
-                // and supervisors are later phases.
+                Decl::Actor(d) => actor_decls.push(d),
+                // Modules and imports are the module system's pass;
+                // supervisors are a later phase.
                 _ => {}
             }
         }
@@ -199,10 +209,22 @@ impl Checker {
         for decl in &tool_decls {
             self.register_tool_marker(decl);
         }
+        // Actor message types are ADT headers too, registered before any
+        // constructor field elaborates so messages can reference each other
+        // (`Pid<OtherMsg>` in a payload).
+        for decl in &actor_decls {
+            self.register_actor_message_header(decl);
+        }
         for decl in &type_decls {
             // Per-declaration error isolation: a bad constructor field stops
             // this declaration only.
             let _ = self.register_constructors(decl);
+        }
+        // Actor interfaces (message constructors, state, init signature) come
+        // before function checking so any body may `spawn` and construct
+        // messages; actor bodies are checked after the functions they call.
+        for decl in &actor_decls {
+            let _ = self.register_actor(decl);
         }
         for decl in &extern_decls {
             let _ = self.declare_extern(decl);
@@ -211,6 +233,9 @@ impl Checker {
             let _ = self.declare_tool(decl);
         }
         self.check_functions(&fn_decls);
+        for decl in &actor_decls {
+            let _ = self.check_actor(decl);
+        }
         self.finish_with_interface()
     }
 
@@ -296,7 +321,7 @@ impl Checker {
 
     /// Records a value-namespace definition at `span`, reporting a duplicate
     /// (C0017) against the first occurrence.
-    fn note_value_name(&mut self, name: &str, span: Span) {
+    pub(crate) fn note_value_name(&mut self, name: &str, span: Span) {
         note_duplicate(
             &mut self.diags,
             &mut self.value_spans,
@@ -309,7 +334,7 @@ impl Checker {
 
     /// Records a type-namespace definition at `span`, reporting a duplicate
     /// (C0018) against the first occurrence.
-    fn note_type_name(&mut self, name: &str, span: Span) {
+    pub(crate) fn note_type_name(&mut self, name: &str, span: Span) {
         note_duplicate(
             &mut self.diags,
             &mut self.type_spans,
@@ -317,6 +342,19 @@ impl Checker {
             name,
             span,
             || format!("duplicate type `{name}`"),
+        );
+    }
+
+    /// Records an actor-namespace definition at `span`, reporting a duplicate
+    /// (C0035) against the first occurrence.
+    fn note_actor_name(&mut self, name: &str, span: Span) {
+        note_duplicate(
+            &mut self.diags,
+            &mut self.actor_spans,
+            CheckCode::C0035,
+            name,
+            span,
+            || format!("duplicate actor `{name}`"),
         );
     }
 
@@ -358,6 +396,16 @@ impl Checker {
                         self.note_type_name(name, span);
                         self.note_value_name(&tool_fn_name(name), span);
                     }
+                }
+                Decl::Actor(d) => {
+                    // The actor itself is its own namespace; its message type
+                    // and message constructors land in the type and value
+                    // namespaces, where any code can name them.
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_actor_name(name, span);
+                    }
+                    self.detect_actor_message_duplicates(&d);
                 }
                 _ => {}
             }
@@ -849,7 +897,7 @@ impl Checker {
     }
 
     /// Binds a parameter, warning on shadowing and recording its type.
-    fn bind_param(&mut self, param: &Param, ty: Type) {
+    pub(crate) fn bind_param(&mut self, param: &Param, ty: Type) {
         let Some(name) = param.name() else { return };
         self.types
             .push((NodeKey::of_node(param.syntax()), ty.clone()));
@@ -887,14 +935,14 @@ impl Checker {
     // ── effect inference ────────────────────────────────────────
 
     /// Starts a fresh effect accumulator for a function or lambda body.
-    fn begin_effect_scope(&mut self) {
+    pub(crate) fn begin_effect_scope(&mut self) {
         self.current_row = EffectRow::empty();
         self.current_prov.clear();
     }
 
     /// Takes the accumulated body row, leaving an empty accumulator. Provenance
     /// is left in place for the mismatch check that immediately follows.
-    fn take_effect_row(&mut self) -> EffectRow {
+    pub(crate) fn take_effect_row(&mut self) -> EffectRow {
         mem::take(&mut self.current_row)
     }
 
@@ -940,7 +988,12 @@ impl Checker {
     /// the call that introduced the offending effect, falling back to `span`; an
     /// argument-type clash between same-headed effects keeps the generic
     /// rendering.
-    fn check_effect_row(&mut self, declared: &EffectRow, inferred: &EffectRow, span: Span) {
+    pub(crate) fn check_effect_row(
+        &mut self,
+        declared: &EffectRow,
+        inferred: &EffectRow,
+        span: Span,
+    ) {
         let Err(err) = unify_row(&mut self.subst, declared, inferred, span) else {
             return;
         };

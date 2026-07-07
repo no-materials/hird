@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor Worker {\\n\\\n           state: St,\\n\\\n           message: WorkerMsg = | Run,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Run, st -> St ! {} = st,\\n\\\n         }\\n\\\n         actor Boss {\\n\\\n           state: St,\\n\\\n           message: BossMsg = | Register(Pid<WorkerMsg>),\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Register(worker), st -> St ! {} = st,\\n\\\n         }\")"
+---
+Register : Pid<WorkerMsg> → BossMsg
+Run : WorkerMsg
+St : Int → St

@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type St = St(Int)\\n\\\n         tool ReadRepo : { path: Path } -> St\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Plan(Path),\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Plan(p), st -> St ! {} = read_repo({ path: p }),\\n\\\n         }\")"
+---
+Path : String → Path
+Plan : Path → Msg
+St : Int → St
+read_repo : { path: Path } → St ! {Tool<ReadRepo>}
+error[C0030] 208..231: declared {} but body performs {Tool<ReadRepo>}

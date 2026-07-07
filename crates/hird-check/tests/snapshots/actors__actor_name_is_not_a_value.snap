@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Path : String → Path
+Plan : Path → PlannerMsg
+St : Int → St
+Stop : PlannerMsg
+grab : ∀a. a
+read_repo : { path: Path } → St ! {Tool<ReadRepo>}
+error[C0040] 368..375: `Planner` is an actor, not a value; its state is only accessible within its own handlers

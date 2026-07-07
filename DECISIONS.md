@@ -911,6 +911,72 @@ signature; non-tool effects keep ADR-013's structural checking unchanged.
 
 ---
 
+## ADR-018: Sum-type mailboxes; actors as a namespace, not values
+
+**Date**: 2026-07-07
+**Status**: Accepted (resolves OD5)
+
+### Context
+
+Phase 7 makes actors first-class declarations, and OD5 asked how rich the
+actor type system should be in v0.1: plain sum-type mailboxes, session types
+(typed state machines over legal message sequences), protocol typing between
+actors, or behavioral request/response typing. Implementing actor
+declarations also had to settle what an actor's members are to the rest of
+the program: whether the message type, state type, and actor name enter the
+ordinary namespaces, and what "state encapsulation" means mechanically.
+
+### Decision
+
+1. **Sum-type mailboxes only (resolves OD5).** An actor's mailbox is typed by
+   a sum type of message constructors; the compiler checks handler coverage
+   and send/request types against it. Session types, protocol typing, and
+   behavioral types are future work. The declaration syntax leaves room for
+   protocol annotations (the member list is extensible and the trailing
+   effect summary already annotates the whole actor), so adding them later is
+   an additive change that supersedes this decision.
+
+2. **The message type is an ordinary ADT; the actor is its own namespace.**
+   `message: Msg = A | B` registers `Msg` in the type namespace and its
+   constructors in the value namespace — senders must be able to construct
+   messages. The actor's *name* lives in a third, actor namespace: it is not
+   a value (no first-class actors, consistent with ADR-010's
+   no-first-class-modules stance), and `spawn(Actor, args…)` is a keyword
+   form resolving its first argument there. `Pid<t>` and `ReplyTo<t>` are
+   built-in type constructors (the `List`/`Option` precedent); `ReplyTo<t>`
+   is distinct from `Pid<t>`, its runtime representation a codegen decision.
+
+3. **State encapsulation is structural.** The state *type* is an ordinary
+   type; the state *value* is unreachable from outside because no expression
+   form produces it: `spawn` returns `Pid<Msg>`, and the only binders of the
+   state value are the handlers' trailing state patterns and the init body's
+   result. Referencing the actor name as a value (including `Actor.member`)
+   is a dedicated compile error rather than an unbound-name fallback.
+
+4. **The effect summary is checked for equality, per member and in total.**
+   Each handler's and init's body row must equal its declared row (the
+   function-body rule), and the actor's trailing summary must equal the union
+   of the init and handler rows. `spawn` types as
+   `Pid<Msg> ! {Spawn<Msg>}`; init's effects are not the spawner's — they run
+   in the spawned process (ADR-005's per-process locality).
+
+### Consequences
+
+- The planner demo's actor needs are covered without any protocol machinery;
+  the 80% case ships first.
+- Message types compose with everything that works on ADTs today:
+  exhaustive `match`, constructor schemes, IR lowering, pretty-printing.
+- Ordering constraints between messages (e.g. `Init` before `Work`) are not
+  expressible in v0.1; encoding them means encoding legal states in the
+  state type by hand.
+- Actors are module-local in v0.1: the module system does not export actors,
+  so cross-module `spawn` is not yet expressible. Lifted when the module
+  interface learns actor entries.
+- A future session-type layer slots in as new actor members or annotations
+  without disturbing the sum-type mailbox core.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -919,5 +985,4 @@ when resolved:
 | ID | Topic | Resolves in | Ticket |
 |----|-------|-------------|--------|
 | OD1 | Crash vs error boundary | Phase 8 | hir-fbze |
-| OD5 | Actor protocol typing richness | Phase 7 | hir-b2gn |
 | OD8 | Send/reply effect tracking | Phase 7 | hir-actn |

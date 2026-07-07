@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"fn boot() = spawn(Ghost)\")"
+---
+boot : ∀a. a
+error[C0039] 18..23: `Ghost` is not a declared actor

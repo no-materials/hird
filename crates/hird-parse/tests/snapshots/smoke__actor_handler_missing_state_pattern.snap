@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"actor A { handle Msg(x), st -> St ! {Log} = f(x, st) }\")"
+expression: "render_cst(\"actor A { handle Msg(x) -> St = f(x) }\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -19,33 +19,21 @@ SOURCE_FILE
         BIND_PAT
           IDENT "x"
         R_PAREN ")"
-      COMMA ","
-      BIND_PAT
-        WHITESPACE " "
-        IDENT "st"
       RETURN_TYPE
         WHITESPACE " "
         ARROW "->"
         WHITESPACE " "
         IDENT "St"
-      EFFECT_ANN
-        WHITESPACE " "
-        BANG "!"
-        WHITESPACE " "
-        L_BRACE "{"
-        IDENT "Log"
-        R_BRACE "}"
       WHITESPACE " "
       EQ "="
       APP_EXPR
         WHITESPACE " "
         IDENT "f"
-        TUPLE_LIT
+        PAREN_EXPR
           L_PAREN "("
           IDENT "x"
-          COMMA ","
-          WHITESPACE " "
-          IDENT "st"
           R_PAREN ")"
     WHITESPACE " "
     R_BRACE "}"
+---
+P0001 24..26: missing state pattern after the message pattern

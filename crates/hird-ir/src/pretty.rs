@@ -32,8 +32,8 @@ use core::fmt::{Display, Write as _};
 use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
-    IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrToolDef, IrTypeDef,
-    LiteralValue,
+    IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrToolDef,
+    IrTypeDef, LiteralValue,
 };
 
 /// Renders `module` as canonical Hirð source.
@@ -114,6 +114,8 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         | IrExpr::List(_)
         | IrExpr::Record(_) => PREC_ATOM,
         IrExpr::Field(_) => PREC_POSTFIX,
+        // `spawn(…)` is self-delimiting.
+        IrExpr::Spawn(_) => PREC_ATOM,
         IrExpr::Constructor(ctor) => {
             if ctor.args.is_empty() {
                 PREC_ATOM
@@ -293,6 +295,24 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
                 collect_type_effects(&t.output, &mut effects);
                 collect_row_effects(&t.effect_row, &mut effects);
             }
+            IrDecl::Actor(a) => {
+                collect_type_effects(&a.state, &mut effects);
+                for ctor in &a.message.constructors {
+                    for field in &ctor.fields {
+                        collect_type_effects(field, &mut effects);
+                    }
+                }
+                for param in &a.init.params {
+                    collect_type_effects(&param.ty, &mut effects);
+                }
+                collect_row_effects(&a.init.effect_row, &mut effects);
+                collect_expr_effects(&a.init.body, &mut effects);
+                for handler in &a.handlers {
+                    collect_row_effects(&handler.effect_row, &mut effects);
+                    collect_expr_effects(&handler.body, &mut effects);
+                }
+                collect_row_effects(&a.effect_row, &mut effects);
+            }
         }
     }
     effects
@@ -398,6 +418,15 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             }
         }
         IrExpr::Field(field) => collect_expr_effects(&field.receiver, out),
+        IrExpr::Spawn(spawn) => {
+            // The spawn's own effect (`Spawn<Msg>`), which the enclosing
+            // function's row must be able to name.
+            out.insert(String::from("Spawn"), 1);
+            for arg in &spawn.args {
+                collect_expr_effects(arg, out);
+            }
+            collect_type_effects(&spawn.result_type, out);
+        }
         IrExpr::Literal(_) | IrExpr::Var(_) => {}
     }
 }
@@ -452,6 +481,7 @@ impl Printer {
                 IrDecl::Type(t) => self.type_def(t),
                 IrDecl::Extern(e) => self.extern_ref(e),
                 IrDecl::Tool(t) => self.tool_def(t),
+                IrDecl::Actor(a) => self.actor_def(a),
             }
             self.push("\n");
         }
@@ -563,6 +593,73 @@ impl Printer {
         if !t.effect_row.is_empty() {
             self.push(" ! ");
             self.push_display(&t.effect_row);
+        }
+    }
+
+    /// An actor declaration, one member per line. All types in an actor are
+    /// concrete, so no variable canonicalisation is applied; empty effect
+    /// rows are elided and the return type of `init` and of each handler is
+    /// the state type.
+    fn actor_def(&mut self, a: &IrActorDef) {
+        self.push("actor ");
+        self.push(&a.name);
+        self.push(" {\n  state: ");
+        self.push_display(&a.state);
+        self.push(",\n  message: ");
+        self.push(&a.message.name);
+        self.push(" = ");
+        for (i, ctor) in a.message.constructors.iter().enumerate() {
+            if i > 0 {
+                self.push(" | ");
+            }
+            self.push(&ctor.name);
+            if let [first, rest @ ..] = ctor.fields.as_slice() {
+                self.push("(");
+                self.push_display(first);
+                for field in rest {
+                    self.push(", ");
+                    self.push_display(field);
+                }
+                self.push(")");
+            }
+        }
+        self.push(",\n  init: fn(");
+        for (i, param) in a.init.params.iter().enumerate() {
+            if i > 0 {
+                self.push(", ");
+            }
+            self.push(&param.name);
+            self.push(": ");
+            self.push_display(&param.ty);
+        }
+        self.push(") \u{2192} ");
+        self.push_display(&a.state);
+        if !a.init.effect_row.is_empty() {
+            self.push(" ! ");
+            self.push_display(&a.init.effect_row);
+        }
+        self.push(" = ");
+        self.expr(&a.init.body, PREC_LOW);
+        self.push(",\n");
+        for handler in &a.handlers {
+            self.push("  handle ");
+            self.pattern(&handler.message);
+            self.push(", ");
+            self.pattern(&handler.state);
+            self.push(" \u{2192} ");
+            self.push_display(&a.state);
+            if !handler.effect_row.is_empty() {
+                self.push(" ! ");
+                self.push_display(&handler.effect_row);
+            }
+            self.push(" = ");
+            self.expr(&handler.body, PREC_LOW);
+            self.push(",\n");
+        }
+        self.push("}");
+        if !a.effect_row.is_empty() {
+            self.push(" ! ");
+            self.push_display(&a.effect_row);
         }
     }
 
@@ -706,6 +803,15 @@ impl Printer {
                 }
                 self.push(" } in ");
                 self.expr(&h.body, PREC_LOW);
+            }
+            IrExpr::Spawn(spawn) => {
+                self.push("spawn(");
+                self.push(&spawn.actor);
+                for arg in &spawn.args {
+                    self.push(", ");
+                    self.expr(arg, PREC_LOW);
+                }
+                self.push(")");
             }
             IrExpr::App(app) => match as_operator(app) {
                 Some((op, prec, assoc)) => {

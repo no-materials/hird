@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type St = St(Int)\\n\\\n         tool ReadRepo : { path: Path } -> St\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         } ! {Tool<ReadRepo>}\")"
+---
+Path : String → Path
+St : Int → St
+Stop : Msg
+read_repo : { path: Path } → St ! {Tool<ReadRepo>}
+error[C0038] 101..102: actor `A` declares `{Tool<ReadRepo>}` but its init and handlers perform `{}`

@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+---
+St : Int → St
+Stop : Msg
+error[C0036] 133..138: actor `A` already handles `Stop`

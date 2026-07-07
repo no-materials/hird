@@ -18,10 +18,11 @@
 
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
-    IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField,
-    IrFnDef, IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
-    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrTuple, IrTuplePat, IrVar,
-    IrWildcardPat, lower_module, pretty_print,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
+    IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm,
+    IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
+    IrRecord, IrRecordField, IrSpawn, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
+    pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -199,6 +200,37 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
         // names, with no inference freedom: compared verbatim.
         IrDecl::Type(t) => IrDecl::Type(t.clone()),
         IrDecl::Tool(t) => IrDecl::Tool(t.clone()),
+        // An actor's interface types are concrete, but its bodies may bind
+        // let-polymorphic values whose variable identities differ per run.
+        IrDecl::Actor(a) => {
+            let mut map = VarMap::new();
+            IrDecl::Actor(IrActorDef {
+                name: a.name.clone(),
+                state: canon_type(&a.state, &mut map),
+                message: a.message.clone(),
+                init: IrActorInit {
+                    params: a
+                        .init
+                        .params
+                        .iter()
+                        .map(|p| canon_param(p, &mut map))
+                        .collect(),
+                    effect_row: canon_effect_row(&a.init.effect_row, &mut map),
+                    body: canon_expr(&a.init.body, &mut map),
+                },
+                handlers: a
+                    .handlers
+                    .iter()
+                    .map(|h| IrActorHandler {
+                        message: canon_pattern(&h.message, &mut map),
+                        state: canon_pattern(&h.state, &mut map),
+                        effect_row: canon_effect_row(&h.effect_row, &mut map),
+                        body: canon_expr(&h.body, &mut map),
+                    })
+                    .collect(),
+                effect_row: canon_effect_row(&a.effect_row, &mut map),
+            })
+        }
         IrDecl::Extern(e) => {
             let mut map = VarMap::new();
             IrDecl::Extern(IrExternRef {
@@ -300,6 +332,11 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             receiver: Box::new(canon_expr(&field.receiver, map)),
             field: field.field.clone(),
             ty: canon_type(&field.ty, map),
+        }),
+        IrExpr::Spawn(spawn) => IrExpr::Spawn(IrSpawn {
+            actor: spawn.actor.clone(),
+            args: spawn.args.iter().map(|a| canon_expr(a, map)).collect(),
+            result_type: canon_type(&spawn.result_type, map),
         }),
     }
 }
@@ -574,6 +611,60 @@ fn snapshot_handle_block() {
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
         "Handle",
+    );
+    insta::assert_snapshot!(pretty_print(&module));
+}
+
+#[test]
+fn actor_round_trips() {
+    assert_roundtrips(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type St = St(Int)\n\
+         tool ReadRepo : { path: Path } -> St\n\
+         actor Planner {\n\
+           state: St,\n\
+           message: PlannerMsg = | Plan(Path) | Get(ReplyTo<St>) | Stop,\n\
+           init: fn(start: St) -> St ! {} = start,\n\
+           handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
+           handle Get(reply), St(n) -> St ! {} = St(n),\n\
+           handle Stop, st -> St ! {} = st,\n\
+         } ! {Tool<ReadRepo>}",
+    );
+}
+
+#[test]
+fn spawn_round_trips() {
+    assert_roundtrips(
+        "effect Spawn<t>\n\
+         type St = St(Int)\n\
+         actor Counter {\n\
+           state: St,\n\
+           message: Msg = | Inc,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Inc, St(n) -> St ! {} = St(n + 1),\n\
+         }\n\
+         fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)",
+    );
+}
+
+#[test]
+fn snapshot_actor_declaration() {
+    // The printed actor re-declares its message sum type inline, keeps the
+    // trailing effect summary, and elides empty member rows.
+    let module = lower_src(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type St = St(Int)\n\
+         tool ReadRepo : { path: Path } -> St\n\
+         actor Planner {\n\
+           state: St,\n\
+           message: PlannerMsg = | Plan(Path) | Stop,\n\
+           init: fn(start: St) -> St ! {} = start,\n\
+           handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
+           handle Stop, st -> St ! {} = st,\n\
+         } ! {Tool<ReadRepo>}",
+        "Actors",
     );
     insta::assert_snapshot!(pretty_print(&module));
 }

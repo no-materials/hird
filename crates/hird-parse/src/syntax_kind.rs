@@ -223,6 +223,8 @@ pub enum SyntaxKind {
     HANDLE_EXPR,
     /// Single handle arm (`Effect → impl`).
     HANDLE_ARM,
+    /// Spawn expression (`spawn(Actor, args)`).
+    SPAWN_EXPR,
     /// Binary operator expression.
     BIN_EXPR,
     /// Function application (`f x y`).

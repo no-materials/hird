@@ -452,3 +452,71 @@ fn tool_decl_lowers_to_tool_node() {
     assert_eq!(ty_str(&tool.output), "t");
     assert_eq!(format!("{}", tool.effect_row), "{Exn<ParseError>}");
 }
+
+// ── actor declarations ───────────────────────────────────────────
+
+/// The counter actor plus a spawner, shared by the actor lowering tests.
+const COUNTER: &str = "\
+effect Spawn<t>
+type St = St(Int)
+actor Counter {
+  state: St,
+  message: Msg = | Inc | Stop,
+  init: fn(s: St) -> St ! {} = s,
+  handle Inc, St(n) -> St ! {} = St(n + 1),
+  handle Stop, st -> St ! {} = st,
+}
+fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)";
+
+#[test]
+fn actor_lowers_to_actor_node() {
+    let module = lower(COUNTER, "Actors");
+    let actor = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Actor(a) => Some(a),
+            _ => None,
+        })
+        .expect("actor declaration is present");
+    assert_eq!(actor.name, "Counter");
+    assert_eq!(format!("{}", actor.state), "St");
+    // The typed mailbox: the message sum type with its constructors.
+    assert_eq!(actor.message.name, "Msg");
+    assert_eq!(actor.message.constructors.len(), 2);
+    assert_eq!(actor.message.constructors[0].name, "Inc");
+    // Init: one `St` parameter, empty row, the parameter reference as body.
+    assert_eq!(actor.init.params.len(), 1);
+    assert_eq!(format!("{}", actor.init.params[0].ty), "St");
+    assert!(actor.init.effect_row.is_empty());
+    assert!(matches!(&actor.init.body, IrExpr::Var(v) if v.name == "s"));
+    // Handlers carry the message and state patterns and their rows.
+    assert_eq!(actor.handlers.len(), 2);
+    assert!(matches!(&actor.handlers[0].message, IrPattern::Constructor(c) if c.name == "Inc"));
+    assert!(matches!(&actor.handlers[0].state, IrPattern::Constructor(c) if c.name == "St"));
+    assert!(matches!(&actor.handlers[1].state, IrPattern::Bind(b) if b.name == "st"));
+    // No declared summary: the empty row.
+    assert!(actor.effect_row.is_empty());
+}
+
+#[test]
+fn spawn_lowers_to_spawn_node() {
+    let module = lower(COUNTER, "Actors");
+    let boot = fn_named(&module, "boot");
+    let IrExpr::Spawn(spawn) = &boot.body else {
+        panic!("body should be a spawn, got {:?}", boot.body);
+    };
+    assert_eq!(spawn.actor, "Counter");
+    assert_eq!(spawn.args.len(), 1);
+    assert!(matches!(&spawn.args[0], IrExpr::Var(v) if v.name == "s"));
+    // The typed reference: `Pid<Msg>` for the actor's message type.
+    assert_eq!(ty_str(&spawn.result_type), "Pid<Msg>");
+    // The spawner's declared row carries the spawn effect.
+    assert_eq!(format!("{}", boot.effect_row), "{Spawn<Msg>}");
+}
+
+#[test]
+fn actor_json_snapshot() {
+    let module = lower(COUNTER, "Actors");
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Inc, St(n) -> St ! {} = St(n + 1),\\n\\\n         }\")"
+---
+Inc : Msg
+St : Int → St

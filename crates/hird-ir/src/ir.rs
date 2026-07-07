@@ -100,6 +100,8 @@ pub enum IrDecl {
     Extern(IrExternRef),
     /// A tool declaration.
     Tool(IrToolDef),
+    /// An actor declaration.
+    Actor(IrActorDef),
 }
 
 /// A function definition.
@@ -173,6 +175,57 @@ pub struct IrToolDef {
     pub effect_row: EffectRow,
 }
 
+/// An actor declaration: a typed mailbox, encapsulated state, an init
+/// function, and one handler per message constructor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrActorDef {
+    /// The actor's name (its own namespace; not a value).
+    pub name: String,
+    /// The declared state type. The state value is reachable only inside the
+    /// handlers' state patterns.
+    #[serde(serialize_with = "serialize_type")]
+    pub state: Type,
+    /// The typed mailbox: the message sum type, registered as an ordinary ADT
+    /// so senders can construct messages.
+    pub message: IrTypeDef,
+    /// The init function producing the initial state.
+    pub init: IrActorInit,
+    /// The message handlers, in declaration order.
+    pub handlers: Vec<IrActorHandler>,
+    /// The declared per-actor effect summary: the union of the init row and
+    /// every handler row.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+}
+
+/// An actor's init function (`init: fn(params) → State ! {row} = body`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrActorInit {
+    /// The parameters `spawn` arguments are checked against, in order.
+    pub params: Vec<IrParam>,
+    /// The declared effect row; performed in the spawned process, not the
+    /// spawner's.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+    /// The body producing the initial state.
+    pub body: IrExpr,
+}
+
+/// One actor message handler
+/// (`handle Ctor(payload), st → State ! {row} = body`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrActorHandler {
+    /// The message pattern (a constructor of the actor's message type).
+    pub message: IrPattern,
+    /// The current-state pattern.
+    pub state: IrPattern,
+    /// The handler's declared effect row.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+    /// The body producing the next state.
+    pub body: IrExpr,
+}
+
 /// A reference to an external (FFI) function.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrExternRef {
@@ -210,6 +263,8 @@ pub enum IrExpr {
     Match(IrMatch),
     /// `handle { effect → handler, … } in body`
     Handle(IrHandle),
+    /// `spawn(Actor, args…)`
+    Spawn(IrSpawn),
     /// A constructor applied to zero or more arguments.
     Constructor(IrConstructor),
     /// A literal.
@@ -321,6 +376,20 @@ pub struct IrHandleArm {
     pub effect: Effect,
     /// The handler implementation (a function).
     pub handler: IrExpr,
+}
+
+/// A `spawn(Actor, args…)` expression: starts an actor, returning a typed
+/// `Pid<Msg>` reference with a `Spawn<Msg>` effect. The actor is a namespace
+/// reference, not an expression.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSpawn {
+    /// The spawned actor's name.
+    pub actor: String,
+    /// The init arguments, in order.
+    pub args: Vec<IrExpr>,
+    /// The expression's type: `Pid<Msg>` for the actor's message type.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
 }
 
 /// A constructor applied to zero or more arguments. Operators and `if` lower to

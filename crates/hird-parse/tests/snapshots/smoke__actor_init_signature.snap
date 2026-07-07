@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"actor A { init: fn(c: Config) -> St ! {Log} }\")"
+expression: "render_cst(\"actor A { init: fn(c: Config) -> St ! {Log} = create(c) }\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -36,5 +36,14 @@ SOURCE_FILE
           L_BRACE "{"
           IDENT "Log"
           R_BRACE "}"
+      WHITESPACE " "
+      EQ "="
+      APP_EXPR
+        WHITESPACE " "
+        IDENT "create"
+        PAREN_EXPR
+          L_PAREN "("
+          IDENT "c"
+          R_PAREN ")"
     WHITESPACE " "
     R_BRACE "}"

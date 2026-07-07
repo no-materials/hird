@@ -736,3 +736,91 @@ fn match_arm_patterns() {
         .collect();
     assert_eq!(names, ["PlanRepo", "Shutdown", "_"]);
 }
+
+// ── actor body projection ───────────────────────────────────────
+
+#[test]
+fn actor_body_members() {
+    let src = "\
+actor Planner {
+  state: St,
+  message: Msg = | Plan(Path) | Stop,
+  init: fn(s: St) -> St ! {Log} = boot(s),
+  handle Plan(p), st -> St ! {Log} = go(p, st),
+  handle Stop, st -> St = st,
+} ! {Log}";
+    let actor_file = file(src);
+    let actor = actor_file
+        .declarations()
+        .find_map(|d| match d {
+            Decl::Actor(a) => Some(a),
+            _ => None,
+        })
+        .unwrap();
+
+    let names: Vec<String> = actor
+        .fields()
+        .filter_map(|f| f.name().map(str::to_owned))
+        .collect();
+    assert_eq!(names, ["state", "message", "init"]);
+    assert!(actor.effect_ann().is_some());
+
+    let fields: Vec<_> = actor.fields().collect();
+    // `state` is a plain type.
+    assert!(matches!(fields[0].ty(), Some(TypeExpr::Name(n)) if n.text() == "St"));
+    assert!(fields[0].fn_sig().is_none());
+    // `message` names its sum type and lists constructors.
+    assert!(matches!(fields[1].ty(), Some(TypeExpr::Name(n)) if n.text() == "Msg"));
+    let ctors: Vec<String> = fields[1]
+        .constructors()
+        .filter_map(|c| c.name().map(str::to_owned))
+        .collect();
+    assert_eq!(ctors, ["Plan", "Stop"]);
+    assert!(fields[1].body().is_none(), "constructor tail is not a body");
+    // `init` is a signature plus body; its `ty()` is None.
+    let init = &fields[2];
+    assert!(init.ty().is_none());
+    let sig = init.fn_sig().expect("init has a signature");
+    assert_eq!(sig.params().count(), 1);
+    assert!(sig.return_type().is_some());
+    assert!(sig.effect_ann().is_some());
+    assert!(matches!(init.body(), Some(Expr::App(_))));
+
+    // Handlers: message pattern, state pattern, return type, row, body.
+    let handlers: Vec<_> = actor.handlers().collect();
+    assert_eq!(handlers.len(), 2);
+    let plan = &handlers[0];
+    assert!(matches!(
+        plan.message_pattern(),
+        Some(Pattern::Constructor(ref c)) if c.name() == Some("Plan")
+    ));
+    assert!(matches!(
+        plan.state_pattern(),
+        Some(Pattern::Bind(ref b)) if b.name() == Some("st")
+    ));
+    assert!(plan.return_type().is_some());
+    assert!(plan.effect_ann().is_some());
+    assert!(matches!(plan.body(), Some(Expr::App(_))));
+    assert!(handlers[1].effect_ann().is_none());
+}
+
+#[test]
+fn spawn_expr_projection() {
+    let Expr::Spawn(spawn) = body("spawn(Planner, config, 2)") else {
+        panic!("expected a spawn expression");
+    };
+    assert_eq!(spawn.actor_name(), Some("Planner"));
+    let args: Vec<Expr> = spawn.args().collect();
+    assert_eq!(args.len(), 2);
+    assert!(matches!(&args[0], Expr::Name(n) if n.text() == "config"));
+    assert!(matches!(&args[1], Expr::Literal(_)));
+}
+
+#[test]
+fn spawn_expr_no_args() {
+    let Expr::Spawn(spawn) = body("spawn(Worker)") else {
+        panic!("expected a spawn expression");
+    };
+    assert_eq!(spawn.actor_name(), Some("Worker"));
+    assert_eq!(spawn.args().count(), 0);
+}

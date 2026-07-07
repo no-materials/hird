@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Stop, st -> St ! {} = 42,\\n\\\n         }\")"
+---
+St : Int → St
+Stop : Msg
+error[C0001] 123..125: type mismatch: expected `St`, got `Int`

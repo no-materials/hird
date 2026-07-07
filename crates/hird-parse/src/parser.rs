@@ -746,8 +746,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// An actor body member: a `handle` clause, or a `name:` field whose value
-    /// is a function signature (`init`), a type with an ADT tail (`message`), or
-    /// a plain type (`state`). Shape — not field name — selects the form.
+    /// is a function signature with a body (`init`), a type with an ADT tail
+    /// (`message`), or a plain type (`state`). Shape — not field name — selects
+    /// the form.
     fn parse_actor_member(&mut self) {
         if self.at(SyntaxKind::HANDLE_KW) {
             self.parse_actor_handler();
@@ -758,6 +759,14 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::COLON);
         if self.at(SyntaxKind::FN_KW) {
             self.parse_fn_sig();
+            if !self.eat(SyntaxKind::EQ) {
+                self.emit(
+                    DiagnosticCode::P0001,
+                    "missing `=` before init body",
+                    Some("insert `=` between the signature and the body"),
+                );
+            }
+            self.parse_expr();
         } else {
             self.parse_type_expr();
             if self.eat(SyntaxKind::EQ) {
@@ -767,17 +776,34 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `handle Pattern → ReturnType ! {Effects} body`. The body is a bare
-    /// expression; there is no brace-delimited block form.
+    /// `handle Pattern, State → ReturnType ! {Effects} = body`. The message
+    /// pattern is followed by the current-state pattern; the body is a bare
+    /// expression after `=` (no brace-delimited block form).
     fn parse_actor_handler(&mut self) {
         self.start_node(SyntaxKind::ACTOR_HANDLER);
         self.expect(SyntaxKind::HANDLE_KW);
         self.parse_pattern();
+        if self.eat(SyntaxKind::COMMA) {
+            self.parse_pattern();
+        } else {
+            self.emit(
+                DiagnosticCode::P0001,
+                "missing state pattern after the message pattern",
+                Some("a handler binds the message, then the state: `handle Msg(x), st`"),
+            );
+        }
         if self.at(SyntaxKind::ARROW) {
             self.parse_return_type();
         }
         if self.at(SyntaxKind::BANG) {
             self.parse_effect_ann();
+        }
+        if !self.eat(SyntaxKind::EQ) {
+            self.emit(
+                DiagnosticCode::P0001,
+                "missing `=` before handler body",
+                Some("insert `=` between the handler signature and the body"),
+            );
         }
         self.parse_expr();
         self.finish_node();
@@ -1079,8 +1105,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.depth -= 1;
     }
 
-    /// A prefix-position expression: `let`, `λ`, `if`, `match`, or `handle`,
-    /// otherwise an atom.
+    /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
+    /// `spawn`, otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1088,6 +1114,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::IF_KW => self.parse_if_expr(),
             SyntaxKind::MATCH_KW => self.parse_match_expr(),
             SyntaxKind::HANDLE_KW => self.parse_handle_expr(),
+            SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
             _ => self.parse_atom_expr(),
         }
     }
@@ -1205,6 +1232,24 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.parse_pattern();
         self.expect(SyntaxKind::ARROW);
         self.parse_expr();
+        self.finish_node();
+    }
+
+    /// `spawn(Actor, args…)` — a keyword form. The first argument is an actor
+    /// name resolved in the actor namespace, not an expression; the remaining
+    /// arguments are the actor's init arguments.
+    fn parse_spawn_expr(&mut self) {
+        self.start_node(SyntaxKind::SPAWN_EXPR);
+        self.expect(SyntaxKind::SPAWN_KW);
+        self.expect(SyntaxKind::L_PAREN);
+        self.expect(SyntaxKind::IDENT);
+        while self.eat(SyntaxKind::COMMA) {
+            if self.at(SyntaxKind::R_PAREN) {
+                break;
+            }
+            self.parse_expr();
+        }
+        self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
     }
 

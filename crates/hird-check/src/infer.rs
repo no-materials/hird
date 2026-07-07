@@ -18,11 +18,11 @@ use core::mem;
 
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr, LetExpr,
-    MatchExpr, Pattern, RecordLit,
+    MatchExpr, Pattern, RecordLit, SpawnExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{EffectRow, Label, Name, Type, handle_row, unify};
+use hird_types::{Effect, EffectRow, Label, Name, Type, handle_row, unify};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::CheckCode;
@@ -59,6 +59,18 @@ impl Checker {
                     if let Some(aborted) = self.opaque_construct_error(text, span) {
                         return Err(aborted);
                     }
+                    // An actor name is not a value: its state and members are
+                    // encapsulated, reachable only within its handlers.
+                    if self.actors.contains_key(text) {
+                        return Err(self.error(
+                            CheckCode::C0040,
+                            span,
+                            format!(
+                                "`{text}` is an actor, not a value; its state is \
+                                 only accessible within its own handlers"
+                            ),
+                        ));
+                    }
                     return Err(self.error(
                         CheckCode::C0003,
                         span,
@@ -72,6 +84,7 @@ impl Checker {
             Expr::If(ife) => self.infer_if(ife),
             Expr::Match(me) => self.infer_match(me),
             Expr::Handle(handle) => self.infer_handle(handle),
+            Expr::Spawn(spawn) => self.infer_spawn(spawn),
             Expr::BinOp(op) => self.infer_binop(op),
             Expr::App(app) => self.infer_app(app),
             Expr::Field(field) => self.infer_field(field),
@@ -320,6 +333,53 @@ impl Checker {
                 ),
             );
         }
+    }
+
+    /// `spawn(Actor, args…)` — starts an actor, returning a typed reference.
+    ///
+    /// The actor name resolves in the actor namespace; the arguments are
+    /// checked against the actor's init parameters. The expression's type is
+    /// `Pid<Msg>` and its effect is `Spawn<Msg>`, where `Msg` is the actor's
+    /// message type. Init's own effects are not the spawner's: they run in
+    /// the spawned process (per-process effect semantics).
+    fn infer_spawn(&mut self, spawn: &SpawnExpr) -> Checked<Type> {
+        let span = node_span(spawn.syntax(), self.source_id);
+        let Some(name) = spawn.actor_name() else {
+            return Err(Aborted);
+        };
+        let Some(info) = self.actors.get(name) else {
+            let at = spawn
+                .actor_token()
+                .map_or(span, |t| token_span(t, self.source_id));
+            return Err(self.error(
+                CheckCode::C0039,
+                at,
+                format!("`{name}` is not a declared actor"),
+            ));
+        };
+        let params = info.init_params.clone();
+        let message = Type::con(info.message.as_str(), Vec::new());
+        let args: Vec<Expr> = spawn.args().collect();
+        if args.len() != params.len() {
+            return Err(self.error(
+                CheckCode::C0039,
+                span,
+                format!(
+                    "this spawn supplies {} argument(s), but actor `{name}`'s \
+                     init takes {}",
+                    args.len(),
+                    params.len()
+                ),
+            ));
+        }
+        for (param, arg) in params.iter().zip(&args) {
+            let arg_span = expr_span(arg, self.source_id);
+            let arg_ty = self.infer_expr(arg)?;
+            self.unify_at(param, &arg_ty, arg_span)?;
+        }
+        let row = EffectRow::closed([Effect::parametric("Spawn", Vec::from([message.clone()]))]);
+        self.add_effects(&row, span);
+        Ok(Type::con("Pid", Vec::from([message])))
     }
 
     /// `if c then a else b` — `Bool` condition, unified branches.

@@ -79,9 +79,7 @@ constructor  ::= IDENT ( '(' field_list ')' )?
 field_list   ::= type_expr ( ',' type_expr )* ','?
 ```
 
-## Actor Declarations (syntax only)
-
-Semantic validation deferred to Phase 7.
+## Actor Declarations
 
 ```
 actor_decl    ::= visibility? 'actor' IDENT '{' actor_body? '}' effect_ann?
@@ -92,12 +90,16 @@ actor_member  ::= actor_field | actor_handler
 
 actor_field   ::= IDENT ':' actor_value
 
-actor_value   ::= fn_sig | type_expr ( '=' constructors )?
+actor_value   ::= fn_sig '=' expr | type_expr ( '=' constructors )?
 
 fn_sig        ::= 'fn' '(' param_list? ')' return_type? effect_ann?
 
-actor_handler ::= 'handle' pattern return_type? effect_ann? expr
+actor_handler ::= 'handle' pattern ',' pattern return_type? effect_ann? '=' expr
 ```
+
+A handler binds the message pattern, then the current state as a trailing
+comma-separated pattern. Handler and `init` bodies follow the uniform
+bare-body rule (`= e`); braces never wrap a body.
 
 ## Supervisor Declarations (syntax only)
 
@@ -141,6 +143,7 @@ expr         ::= let_expr
                | match_expr
                | if_expr
                | handle_expr
+               | spawn_expr
                | infix_expr
 
 let_expr     ::= 'let' IDENT ( ':' type_expr )? '=' expr 'in' expr
@@ -156,7 +159,12 @@ if_expr      ::= 'if' expr 'then' expr 'else' expr
 handle_expr  ::= 'handle' '{' handle_arm* '}' 'in' expr
 
 handle_arm   ::= app_type '→' expr ','?
+
+spawn_expr   ::= 'spawn' '(' IDENT ( ',' expr )* ')'
 ```
+
+`spawn`'s first argument is an actor name, resolved in the actor namespace;
+actor names are not first-class values.
 
 ## Infix Expressions (precedence climbing)
 

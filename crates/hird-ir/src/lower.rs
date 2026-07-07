@@ -31,19 +31,20 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr,
-    LambdaExpr, LetExpr, Literal, MatchExpr, Pattern, RecordLit, SourceFile, ToolDecl, TupleLit,
-    TypeDecl,
+    ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl,
+    FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr, Pattern,
+    RecordLit, SourceFile, SpawnExpr, ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
 use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
-    IrApp, IrArm, IrBindPat, IrConstructor, IrConstructorDef, IrConstructorPat, IrDecl, IrExpr,
-    IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral,
-    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrToolDef,
-    IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
+    IrConstructorDef, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
+    IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
+    IrPattern, IrRecord, IrRecordField, IrSpawn, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar,
+    IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -67,8 +68,9 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
             Decl::Type(d) => declarations.extend(lowerer.lower_type(&d).map(IrDecl::Type)),
             Decl::Extern(d) => declarations.extend(lowerer.lower_extern(&d).map(IrDecl::Extern)),
             Decl::Tool(d) => declarations.extend(lowerer.lower_tool(&d).map(IrDecl::Tool)),
-            // Imports are resolved away; effects, actors, and supervisors are
-            // not yet modelled and carry no IR yet.
+            Decl::Actor(d) => declarations.extend(lowerer.lower_actor(&d).map(IrDecl::Actor)),
+            // Imports are resolved away; effects and supervisors are not yet
+            // modelled and carry no IR yet.
             _ => {}
         }
     }
@@ -157,6 +159,105 @@ impl Lowerer<'_> {
         })
     }
 
+    /// Lowers an actor declaration. `None` when the declaration is missing a
+    /// member (parser recovery or a reported structure error).
+    fn lower_actor(&self, decl: &ActorDecl) -> Option<IrActorDef> {
+        let name = decl.name()?;
+        let state_field = actor_field(decl, "state")?;
+        let message_field = actor_field(decl, "message")?;
+        let init_field = actor_field(decl, "init")?;
+
+        let state = self
+            .checked
+            .type_at(NodeKey::of_node(state_field.syntax()))?
+            .clone();
+        let message = self.lower_actor_message(&message_field)?;
+        let init = self.lower_actor_init(&init_field)?;
+        let handlers = decl
+            .handlers()
+            .filter_map(|h| self.lower_actor_handler(&h))
+            .collect();
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(decl.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        Some(IrActorDef {
+            name: String::from(name),
+            state,
+            message,
+            init,
+            handlers,
+            effect_row,
+        })
+    }
+
+    /// Lowers an actor's message field to the sum type it declares.
+    fn lower_actor_message(&self, field: &ActorField) -> Option<IrTypeDef> {
+        let hird_ast::TypeExpr::Name(name) = field.ty()? else {
+            return None;
+        };
+        let constructors = field
+            .constructors()
+            .filter_map(|ctor| {
+                let ctor_name = ctor.name()?;
+                let scheme = self.checked.type_at(NodeKey::of_node(ctor.syntax()))?;
+                Some(IrConstructorDef {
+                    name: String::from(ctor_name),
+                    fields: constructor_field_types(scheme, &[]),
+                })
+            })
+            .collect();
+        Some(IrTypeDef {
+            name: String::from(name.text()),
+            params: Vec::new(),
+            constructors,
+        })
+    }
+
+    /// Lowers an actor's init field: parameters from the signature, the
+    /// declared row, and the body.
+    fn lower_actor_init(&self, field: &ActorField) -> Option<IrActorInit> {
+        let sig = field.fn_sig()?;
+        let body = field.body()?;
+        let params = sig
+            .params()
+            .map(|p| IrParam {
+                name: String::from(p.name().unwrap_or("")),
+                ty: self.node_type(p.syntax()),
+            })
+            .collect();
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(sig.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        Some(IrActorInit {
+            params,
+            effect_row,
+            body: self.lower_expr(&body),
+        })
+    }
+
+    /// Lowers one `handle` clause: the message and state patterns, the
+    /// declared row, and the body.
+    fn lower_actor_handler(&self, handler: &ActorHandler) -> Option<IrActorHandler> {
+        let message = handler.message_pattern()?;
+        let state = handler.state_pattern()?;
+        let body = handler.body()?;
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(handler.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        Some(IrActorHandler {
+            message: self.lower_pattern(&message),
+            state: self.lower_pattern(&state),
+            effect_row,
+            body: self.lower_expr(&body),
+        })
+    }
+
     /// Lowers an extern declaration. `None` when it is missing a name or the
     /// checker did not record its scheme.
     fn lower_extern(&self, decl: &ExternDecl) -> Option<IrExternRef> {
@@ -188,6 +289,7 @@ impl Lowerer<'_> {
             Expr::If(ife) => self.lower_if(ife),
             Expr::Match(me) => self.lower_match(me),
             Expr::Handle(handle) => self.lower_handle(handle),
+            Expr::Spawn(spawn) => self.lower_spawn(spawn),
             Expr::BinOp(op) => self.lower_binop(op),
             Expr::App(app) => self.lower_app(app),
             Expr::Field(field) => self.lower_field(field),
@@ -332,6 +434,17 @@ impl Lowerer<'_> {
             body: Box::new(self.lower_expr(&body)),
             effect_row,
             result_type: self.node_type(handle.syntax()),
+        })
+    }
+
+    /// `spawn(Actor, args…)`. The actor name is carried as a string — it is a
+    /// namespace reference, not an expression — and the recorded type is the
+    /// typed `Pid<Msg>` reference.
+    fn lower_spawn(&self, spawn: &SpawnExpr) -> IrExpr {
+        IrExpr::Spawn(IrSpawn {
+            actor: String::from(spawn.actor_name().unwrap_or("")),
+            args: spawn.args().map(|a| self.lower_expr(&a)).collect(),
+            result_type: self.node_type(spawn.syntax()),
         })
     }
 
@@ -492,6 +605,11 @@ impl Lowerer<'_> {
 }
 
 // ── free helpers ─────────────────────────────────────────────────
+
+/// The actor body field named `member`, if present.
+fn actor_field(decl: &ActorDecl, member: &str) -> Option<ActorField> {
+    decl.fields().find(|f| f.name() == Some(member))
+}
 
 /// The argument expressions of an application. A tuple-literal argument is the
 /// argument list (`f(a, b)` is two arguments, `f()` zero); anything else is a

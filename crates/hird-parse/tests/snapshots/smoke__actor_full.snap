@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"\\\nactor Planner {\n  state: PlannerState,\n  message: PlannerMsg =\n    | PlanRepo(Path)\n    | GetStatus(ReplyTo<PlannerStatus>)\n    | Shutdown,\n  init: fn(config: PlannerConfig) -> PlannerState ! {Log},\n  handle PlanRepo(path) -> PlannerState ! {Tool<ReadRepo>, Log} update(path, state),\n  handle Shutdown -> PlannerState ! {} state,\n} ! {Tool<ReadRepo>, Log}\")"
+expression: "render_cst(\"\\\nactor Planner {\n  state: PlannerState,\n  message: PlannerMsg =\n    | PlanRepo(Path)\n    | GetStatus(ReplyTo<PlannerStatus>)\n    | Shutdown,\n  init: fn(config: PlannerConfig) -> PlannerState ! {Log} = initial_state(config),\n  handle PlanRepo(path), st -> PlannerState ! {Tool<ReadRepo>, Log} = update(path, st),\n  handle Shutdown, st -> PlannerState ! {} = st,\n} ! {Tool<ReadRepo>, Log}\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -80,6 +80,15 @@ SOURCE_FILE
           L_BRACE "{"
           IDENT "Log"
           R_BRACE "}"
+      WHITESPACE " "
+      EQ "="
+      APP_EXPR
+        WHITESPACE " "
+        IDENT "initial_state"
+        PAREN_EXPR
+          L_PAREN "("
+          IDENT "config"
+          R_PAREN ")"
     COMMA ","
     ACTOR_HANDLER
       WHITESPACE "\n  "
@@ -91,6 +100,10 @@ SOURCE_FILE
         BIND_PAT
           IDENT "path"
         R_PAREN ")"
+      COMMA ","
+      BIND_PAT
+        WHITESPACE " "
+        IDENT "st"
       RETURN_TYPE
         WHITESPACE " "
         ARROW "->"
@@ -111,6 +124,8 @@ SOURCE_FILE
         WHITESPACE " "
         IDENT "Log"
         R_BRACE "}"
+      WHITESPACE " "
+      EQ "="
       APP_EXPR
         WHITESPACE " "
         IDENT "update"
@@ -119,7 +134,7 @@ SOURCE_FILE
           IDENT "path"
           COMMA ","
           WHITESPACE " "
-          IDENT "state"
+          IDENT "st"
           R_PAREN ")"
     COMMA ","
     ACTOR_HANDLER
@@ -128,6 +143,10 @@ SOURCE_FILE
       CONSTRUCTOR_PAT
         WHITESPACE " "
         IDENT "Shutdown"
+      COMMA ","
+      BIND_PAT
+        WHITESPACE " "
+        IDENT "st"
       RETURN_TYPE
         WHITESPACE " "
         ARROW "->"
@@ -140,7 +159,9 @@ SOURCE_FILE
         L_BRACE "{"
         R_BRACE "}"
       WHITESPACE " "
-      IDENT "state"
+      EQ "="
+      WHITESPACE " "
+      IDENT "st"
     COMMA ","
     WHITESPACE "\n"
     R_BRACE "}"

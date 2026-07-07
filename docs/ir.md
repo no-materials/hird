@@ -79,6 +79,15 @@ single argument (`f((a, b))` passes one tuple).
   `output` are the operation's args record and result types, rendered under
   those names; `effect_row` is the declared trailing row, without the
   implicit `Tool<name>` effect (which every use site's row carries anyway).
+- `IrActorDef { name, state, message, init, handlers, effect_row }` — an
+  actor. `state` is the declared state type; `message` is the mailbox's sum
+  type as an `IrTypeDef` (also registered as an ordinary ADT, so senders can
+  construct messages); `init` is
+  `IrActorInit { params, effect_row, body }`, the function producing the
+  initial state; each `IrActorHandler { message, state, effect_row, body }`
+  binds a message-constructor pattern and the current-state pattern to the
+  body producing the next state; the outer `effect_row` is the declared
+  per-actor effect summary (the union of the init and handler rows).
 
 ### Expressions
 
@@ -96,6 +105,11 @@ Every expression node carries its resolved type.
   `Tool<ReadRepo>`) to its handler implementation. `effect_row` is the block's
   computed row: the body's effects minus the handled effects plus the
   handlers' own.
+- `IrSpawn { actor, args, result_type }` — a `spawn(Actor, args…)`
+  expression. `actor` is the spawned actor's name (a namespace reference, not
+  an expression); `result_type` is the typed reference `Pid<Msg>` for the
+  actor's message type. Its effect, `Spawn<Msg>`, lives in the enclosing
+  row, as any application's effects do.
 - `IrConstructor { name, type_name, args, result_type }` — a constructor
   applied to zero or more arguments. `type_name` is the data type it
   constructs. Nullary constructors (`None`, `True`) appear here with no

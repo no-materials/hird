@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         type Other = Whoops\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Whoops, st -> St ! {} = st,\\n\\\n         }\")"
+---
+St : Int → St
+Stop : Msg
+Whoops : Other
+error[C0037] 120..127: `Whoops` is not a constructor of actor `A`'s message type `Msg`

@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Path : String → Path
+Plan : Path → PlannerMsg
+St : Int → St
+Stop : PlannerMsg
+boot : ∀a. a
+read_repo : { path: Path } → St ! {Tool<ReadRepo>}
+error[C0001] 383..385: type mismatch: expected `St`, got `Int`

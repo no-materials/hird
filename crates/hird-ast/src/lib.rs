@@ -10,8 +10,8 @@
 //! accessors return `&str` without re-supplying the source.
 //!
 //! The projection covers declarations, expressions, type expressions, and
-//! patterns. A handful of nodes (actor and supervisor bodies) remain
-//! unprojected; reach their contents through [`AstNode::syntax`].
+//! patterns. Supervisor bodies remain unprojected; reach their contents
+//! through [`AstNode::syntax`].
 //!
 //! # Entry point
 //!
@@ -446,8 +446,7 @@ impl ExternDecl {
 }
 
 ast_node! {
-    /// An actor declaration. Its body is parsed but not yet typed; reach it via
-    /// [`AstNode::syntax`].
+    /// An actor declaration (`actor Name { members } ! {row}`).
     ActorDecl => ACTOR_DECL
 }
 
@@ -462,6 +461,130 @@ impl ActorDecl {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The named body fields (`state`, `message`, `init`), in source order.
+    pub fn fields(&self) -> impl Iterator<Item = ActorField> + '_ {
+        children(&self.0)
+    }
+
+    /// The `handle` clauses, in source order.
+    pub fn handlers(&self) -> impl Iterator<Item = ActorHandler> + '_ {
+        children(&self.0)
+    }
+
+    /// The trailing effect summary (`! { … }` after the body), if declared.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
+    }
+}
+
+ast_node! {
+    /// A named actor body field (`name: value`). The value is a function
+    /// signature with a body (`init`), a type with an ADT tail (`message`), or
+    /// a plain type (`state`).
+    ActorField => ACTOR_FIELD
+}
+
+impl ActorField {
+    /// The field name (`state`, `message`, or `init`).
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+
+    /// The field's type value (after `:`, before any `=`): the state type, or
+    /// the message type name. `None` when the value is a function signature.
+    #[must_use]
+    pub fn ty(&self) -> Option<TypeExpr> {
+        self.0
+            .children_with_tokens()
+            .skip_while(|e| element_kind(*e) != SyntaxKind::COLON)
+            .skip(1)
+            .take_while(|e| element_kind(*e) != SyntaxKind::EQ)
+            .find_map(TypeExpr::cast_element)
+    }
+
+    /// The function signature of an `init` field.
+    #[must_use]
+    pub fn fn_sig(&self) -> Option<FnSig> {
+        child(&self.0)
+    }
+
+    /// The message constructors (after `=`), in source order. Empty for
+    /// non-`message` fields.
+    pub fn constructors(&self) -> impl Iterator<Item = Constructor> + '_ {
+        children(&self.0)
+    }
+
+    /// The body expression of an `init` field (after `=`).
+    #[must_use]
+    pub fn body(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::EQ)
+    }
+}
+
+ast_node! {
+    /// An actor message handler
+    /// (`handle Pattern, State → Type ! { … } = body`).
+    ActorHandler => ACTOR_HANDLER
+}
+
+impl ActorHandler {
+    /// The message pattern (a constructor of the actor's message type).
+    #[must_use]
+    pub fn message_pattern(&self) -> Option<Pattern> {
+        children(&self.0).next()
+    }
+
+    /// The current-state pattern (the trailing comma-separated pattern).
+    #[must_use]
+    pub fn state_pattern(&self) -> Option<Pattern> {
+        children::<Pattern>(&self.0).nth(1)
+    }
+
+    /// The declared return type (after `→`), if annotated.
+    #[must_use]
+    pub fn return_type(&self) -> Option<TypeExpr> {
+        type_in(&self.0, SyntaxKind::RETURN_TYPE)
+    }
+
+    /// The handler's effect-row annotation (`! { … }`), if present.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
+    }
+
+    /// The body expression (after `=`).
+    #[must_use]
+    pub fn body(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::EQ)
+    }
+}
+
+ast_node! {
+    /// An unnamed function signature (`fn(params) → Ret ! { … }`), the value
+    /// of an actor `init` field.
+    FnSig => FN_SIG
+}
+
+impl FnSig {
+    /// The declared parameters, in order.
+    pub fn params(&self) -> impl Iterator<Item = Param> + '_ {
+        params(&self.0)
+    }
+
+    /// The declared return type (after `→`), if annotated.
+    #[must_use]
+    pub fn return_type(&self) -> Option<TypeExpr> {
+        type_in(&self.0, SyntaxKind::RETURN_TYPE)
+    }
+
+    /// The declared effect-row annotation (`! { … }`), if present.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
     }
 }
 
@@ -673,6 +796,34 @@ impl HandleBlock {
 }
 
 ast_node! {
+    /// A `spawn(Actor, args…)` expression. The actor name is a namespace
+    /// reference, not an expression.
+    SpawnExpr => SPAWN_EXPR
+}
+
+impl SpawnExpr {
+    /// The spawned actor's name token, for span-bearing diagnostics.
+    #[must_use]
+    pub fn actor_token(&self) -> Option<&SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// The spawned actor's name.
+    #[must_use]
+    pub fn actor_name(&self) -> Option<&str> {
+        self.actor_token().map(|t| t.text())
+    }
+
+    /// The init arguments (everything after the actor name), in order.
+    pub fn args(&self) -> impl Iterator<Item = Expr> + '_ {
+        self.0
+            .children_with_tokens()
+            .skip_while(|e| element_kind(*e) != SyntaxKind::COMMA)
+            .filter_map(Expr::cast_element)
+    }
+}
+
+ast_node! {
     /// A binary operator expression (`a + b`).
     BinOpExpr => BIN_EXPR
 }
@@ -853,6 +1004,8 @@ pub enum Expr {
     Match(MatchExpr),
     /// `handle { .. } in ..`
     Handle(HandleBlock),
+    /// `spawn(Actor, ..)`
+    Spawn(SpawnExpr),
     /// `a ⊕ b`
     BinOp(BinOpExpr),
     /// `f x`
@@ -882,6 +1035,7 @@ impl Expr {
             SyntaxKind::IF_EXPR => Self::If(IfExpr(node)),
             SyntaxKind::MATCH_EXPR => Self::Match(MatchExpr(node)),
             SyntaxKind::HANDLE_EXPR => Self::Handle(HandleBlock(node)),
+            SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
             SyntaxKind::BIN_EXPR => Self::BinOp(BinOpExpr(node)),
             SyntaxKind::APP_EXPR => Self::App(AppExpr(node)),
             SyntaxKind::FIELD_EXPR => Self::Field(FieldExpr(node)),
@@ -924,6 +1078,7 @@ impl Expr {
             Self::If(n) => Some(n.syntax()),
             Self::Match(n) => Some(n.syntax()),
             Self::Handle(n) => Some(n.syntax()),
+            Self::Spawn(n) => Some(n.syntax()),
             Self::BinOp(n) => Some(n.syntax()),
             Self::App(n) => Some(n.syntax()),
             Self::Field(n) => Some(n.syntax()),

@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"effect Spawn<t>\\n\\\n         type St = St(Int)\\n\\\n         actor Worker {\\n\\\n           state: St,\\n\\\n           message: WorkerMsg = | Run,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Run, st -> St ! {} = st,\\n\\\n         }\\n\\\n         actor Boss {\\n\\\n           state: St,\\n\\\n           message: BossMsg = | Hire,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Hire, st -> St ! {Spawn<WorkerMsg>} =\\n\\\n             let worker = spawn(Worker, st) in st,\\n\\\n         } ! {Spawn<WorkerMsg>}\")"
+---
+Hire : BossMsg
+Run : WorkerMsg
+St : Int → St

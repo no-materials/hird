@@ -33,6 +33,15 @@
 //! [`wire`] module is the reference implementation of the audit-log wire
 //! format those records serialise to, and of replay over a recorded log.
 //!
+//! An `actor` declaration registers its message sum type as an ordinary ADT
+//! and the actor itself in a separate actor namespace. `spawn(Actor, args…)`
+//! checks its arguments against the actor's init parameters and types as
+//! `Pid<Msg> ! {Spawn<Msg>}`; handler bodies are checked against the state
+//! type and their declared rows, and the actor's trailing effect summary
+//! must equal the union of its init and handler rows. Actor state is
+//! encapsulated: the actor name is not a value, and no expression form
+//! reaches the state from outside the handlers.
+//!
 //! # Quick start
 //!
 //! ```
@@ -52,6 +61,7 @@
 
 extern crate alloc;
 
+mod actors;
 mod checker;
 mod diag;
 mod elaborate;
@@ -169,11 +179,12 @@ pub struct CheckedFile {
     /// Declared ADTs (including the built-in `Bool`) and their constructor
     /// names in declaration order.
     pub adts: BTreeMap<Name, Vec<Name>>,
-    /// Each function declaration's elaborated effect row and each `handle`
-    /// block's computed row, keyed by its CST node. Resolved against the same
-    /// elaboration as the surrounding body, so row variables shared between a
-    /// parameter and the function's own row keep one identity. Absent for
-    /// functions with no declared row.
+    /// Each function declaration's elaborated effect row, each `handle`
+    /// block's computed row, and each actor's rows (init signature, handler
+    /// clauses, declared summary), keyed by CST node. Resolved against the
+    /// same elaboration as the surrounding body, so row variables shared
+    /// between a parameter and the function's own row keep one identity.
+    /// Absent for functions with no declared row.
     pub effect_rows: BTreeMap<NodeKey, EffectRow>,
     /// Each `handle` arm's handled effect, keyed by the arm's CST node. The
     /// effect's type arguments are resolved. Lowering reads these to pair an arm

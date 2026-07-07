@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Path : String → Path
+Plan : Path → PlannerMsg
+St : Int → St
+Stop : PlannerMsg
+boot : St → Pid<PlannerMsg>
+read_repo : { path: Path } → St ! {Tool<ReadRepo>}
+error[C0030] 391..409: declared {} but body performs {Spawn<PlannerMsg>}

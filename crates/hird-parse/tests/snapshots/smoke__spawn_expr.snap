@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go(c: Config) = spawn(Planner, c)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "c"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Config"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    SPAWN_EXPR
+      WHITESPACE " "
+      SPAWN_KW "spawn"
+      L_PAREN "("
+      IDENT "Planner"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "c"
+      R_PAREN ")"

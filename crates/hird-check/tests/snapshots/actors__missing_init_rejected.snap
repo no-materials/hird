@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+---
+St : Int → St
+error[C0035] 24..25: actor `A` is missing its `init` member

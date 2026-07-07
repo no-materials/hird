@@ -103,6 +103,23 @@ pub enum CheckCode {
     /// A `handle` arm's handler does not match the handled tool's operation
     /// signature.
     C0034,
+    /// An actor declaration is structurally invalid: a missing, duplicate, or
+    /// unknown member, a malformed message type, or a duplicate actor name.
+    C0035,
+    /// An actor declares two handlers for the same message constructor.
+    C0036,
+    /// A handler's message pattern does not name a constructor of the actor's
+    /// message type.
+    C0037,
+    /// An actor's declared effect summary does not match the union of its
+    /// init and handler effects.
+    C0038,
+    /// A `spawn` expression names an actor that is not declared, or supplies
+    /// the wrong number of init arguments.
+    C0039,
+    /// An actor is referenced as a value; actor state and members are only
+    /// accessible within the actor's handlers.
+    C0040,
 }
 
 /// A secondary source location attached to a diagnostic.

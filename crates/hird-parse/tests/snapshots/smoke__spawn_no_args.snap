@@ -1,0 +1,19 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = spawn(Worker)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    SPAWN_EXPR
+      WHITESPACE " "
+      SPAWN_KW "spawn"
+      L_PAREN "("
+      IDENT "Worker"
+      R_PAREN ")"

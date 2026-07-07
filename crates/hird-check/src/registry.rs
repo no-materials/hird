@@ -119,14 +119,15 @@ impl Registry {
     }
 
     /// The arity of the type constructor `name`: declared ADTs first, then
-    /// the built-ins (`Int`, `Float`, `String`, `List`, `Option`).
+    /// the built-ins (`Int`, `Float`, `String`, `List`, `Option`, and the
+    /// actor references `Pid`, `ReplyTo`).
     pub(crate) fn type_arity(&self, name: &str) -> Option<usize> {
         if let Some(info) = self.adts.get(&Name::new(name)) {
             return Some(info.arity);
         }
         match name {
             "Int" | "Float" | "String" => Some(0),
-            "List" | "Option" => Some(1),
+            "List" | "Option" | "Pid" | "ReplyTo" => Some(1),
             _ => None,
         }
     }

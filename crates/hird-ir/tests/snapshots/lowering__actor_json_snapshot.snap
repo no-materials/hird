@@ -1,0 +1,156 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Actors",
+  "declarations": [
+    {
+      "kind": "Type",
+      "name": "St",
+      "params": [],
+      "constructors": [
+        {
+          "name": "St",
+          "fields": [
+            "Int"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Actor",
+      "name": "Counter",
+      "state": "St",
+      "message": {
+        "name": "Msg",
+        "params": [],
+        "constructors": [
+          {
+            "name": "Inc",
+            "fields": []
+          },
+          {
+            "name": "Stop",
+            "fields": []
+          }
+        ]
+      },
+      "init": {
+        "params": [
+          {
+            "name": "s",
+            "type": "St"
+          }
+        ],
+        "effect_row": "{}",
+        "body": {
+          "kind": "Var",
+          "name": "s",
+          "type": "St"
+        }
+      },
+      "handlers": [
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Inc",
+            "type_name": "Msg",
+            "fields": [],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Constructor",
+            "name": "St",
+            "type_name": "St",
+            "fields": [
+              {
+                "kind": "Bind",
+                "name": "n",
+                "type": "Int"
+              }
+            ],
+            "type": "St"
+          },
+          "effect_row": "{}",
+          "body": {
+            "kind": "Constructor",
+            "name": "St",
+            "type_name": "St",
+            "args": [
+              {
+                "kind": "App",
+                "func": {
+                  "kind": "Var",
+                  "name": "+",
+                  "type": "Int → Int → Int"
+                },
+                "args": [
+                  {
+                    "kind": "Var",
+                    "name": "n",
+                    "type": "Int"
+                  },
+                  {
+                    "kind": "Literal",
+                    "value": {
+                      "Int": "1"
+                    },
+                    "type": "Int"
+                  }
+                ],
+                "result_type": "Int"
+              }
+            ],
+            "result_type": "St"
+          }
+        },
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Stop",
+            "type_name": "Msg",
+            "fields": [],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Bind",
+            "name": "st",
+            "type": "St"
+          },
+          "effect_row": "{}",
+          "body": {
+            "kind": "Var",
+            "name": "st",
+            "type": "St"
+          }
+        }
+      ],
+      "effect_row": "{}"
+    },
+    {
+      "kind": "Fn",
+      "name": "boot",
+      "params": [
+        {
+          "name": "s",
+          "type": "St"
+        }
+      ],
+      "return_type": "Pid<Msg>",
+      "effect_row": "{Spawn<Msg>}",
+      "body": {
+        "kind": "Spawn",
+        "actor": "Counter",
+        "args": [
+          {
+            "kind": "Var",
+            "name": "s",
+            "type": "St"
+          }
+        ],
+        "result_type": "Pid<Msg>"
+      }
+    }
+  ]
+}

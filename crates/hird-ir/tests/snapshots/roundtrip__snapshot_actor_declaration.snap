@@ -1,0 +1,21 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Actors
+
+effect Tool<t0>
+
+type Path = Path(String)
+
+type St = St(Int)
+
+tool ReadRepo : { path: Path } → St
+
+actor Planner {
+  state: St,
+  message: PlannerMsg = Plan(Path) | Stop,
+  init: fn(start: St) → St = start,
+  handle Plan(p), st → St ! {Tool<ReadRepo>} = read_repo({ path: p }),
+  handle Stop, st → St = st,
+} ! {Tool<ReadRepo>}

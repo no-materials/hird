@@ -276,12 +276,23 @@ fn actor_message_leading_pipe() {
 
 #[test]
 fn actor_init_signature() {
-    insta::assert_snapshot!(render_cst("actor A { init: fn(c: Config) -> St ! {Log} }"));
+    insta::assert_snapshot!(render_cst(
+        "actor A { init: fn(c: Config) -> St ! {Log} = create(c) }"
+    ));
 }
 
 #[test]
 fn actor_handler_clause() {
-    insta::assert_snapshot!(render_cst("actor A { handle Msg(x) -> St ! {Log} f(x) }"));
+    insta::assert_snapshot!(render_cst(
+        "actor A { handle Msg(x), st -> St ! {Log} = f(x, st) }"
+    ));
+}
+
+#[test]
+fn actor_handler_missing_state_pattern() {
+    // The state pattern is required; its absence is reported but the rest of
+    // the handler still parses.
+    insta::assert_snapshot!(render_cst("actor A { handle Msg(x) -> St = f(x) }"));
 }
 
 #[test]
@@ -294,11 +305,23 @@ actor Planner {
     | PlanRepo(Path)
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
-  init: fn(config: PlannerConfig) -> PlannerState ! {Log},
-  handle PlanRepo(path) -> PlannerState ! {Tool<ReadRepo>, Log} update(path, state),
-  handle Shutdown -> PlannerState ! {} state,
+  init: fn(config: PlannerConfig) -> PlannerState ! {Log} = initial_state(config),
+  handle PlanRepo(path), st -> PlannerState ! {Tool<ReadRepo>, Log} = update(path, st),
+  handle Shutdown, st -> PlannerState ! {} = st,
 } ! {Tool<ReadRepo>, Log}"
     ));
+}
+
+// ── spawn expressions ───────────────────────────────────────────
+
+#[test]
+fn spawn_expr() {
+    insta::assert_snapshot!(render_cst("fn go(c: Config) = spawn(Planner, c)"));
+}
+
+#[test]
+fn spawn_no_args() {
+    insta::assert_snapshot!(render_cst("fn go() = spawn(Worker)"));
 }
 
 // ── supervisor declarations ─────────────────────────────────────
