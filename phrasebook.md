@@ -185,12 +185,17 @@ ReplyTo<PlannerStatus>  — typed reply channel
 spawn(Planner, config) → Pid<PlannerMsg> ! {Spawn<PlannerMsg>}
 send(pid, PlanRepo(path)) → () ! {Send<PlannerMsg>}
 request(pid, GetStatus) → PlannerStatus ! {Send<PlannerMsg>, Await<PlannerStatus>}
+reply(reply_to, status) → () ! {Send<PlannerStatus>}
 ```
 
 - `Pid<t>` and `ReplyTo<t>` are built-in type constructors (like `List<t>`);
   `ReplyTo<t>` is a distinct type, not an alias of `Pid<t>`.
 - `spawn` is a keyword form: its first argument is an actor name, resolved in
   the actor namespace. Actor names are not first-class values.
+- `send`, `request`, and `reply` are keyword forms as well. `reply` is the
+  only operation on `ReplyTo<t>` — it is not an overload of `send`.
+- `request` blocks with a fixed 5000ms timeout; a timeout exits the caller
+  (no `Exn` in the row — crash handling belongs to supervision).
 - `Spawn<t>`, `Send<t>`, `Await<t>` are ordinary declared effect heads (see
   Effect Declarations) whose semantics the checker knows, like `Tool<t>`.
 

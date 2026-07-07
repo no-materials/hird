@@ -977,6 +977,69 @@ ordinary namespaces, and what "state encapsulation" means mechanically.
 
 ---
 
+## ADR-019: Messaging primitives — send, request, and a distinct reply
+
+**Date**: 2026-07-07
+**Status**: Accepted (resolves OD8)
+
+### Context
+
+Phase 7's messaging ticket had three open questions. OD8 asked how send and
+reply effects appear in effect rows. The request/reply pattern needed a way
+for a handler to answer on a `ReplyTo<T>`: the phrasebook's `GetStatus`
+handler carries `{Send<PlannerStatus>}`, but `send` is typed over `Pid<Msg>`
+and ADR-018 locked `ReplyTo<t>` as a distinct type, not a `Pid` alias — so
+replying was not expressible. And `request` blocks for a reply, which raised
+timeout semantics.
+
+### Decision
+
+1. **Send and Await are separate simple effects (resolves OD8).**
+   `send(pid, msg)` has effect `{Send<Msg>}`; `request(pid, ctor)` has
+   `{Send<Msg>, Await<T>}`. Effects are not parameterized by the recipient —
+   Pids are runtime values the type system cannot meaningfully track. There
+   is no combined `Request<Msg, T>` effect head: keeping the send and the
+   blocking wait distinct preserves their different concurrency implications.
+   Per ADR-005, all of these are local, per-process effects; transitive
+   closure ("what does the recipient do?") stays a tooling query.
+
+2. **`reply` is a fourth keyword primitive, not an overload of `send`.**
+   `reply(reply_to: ReplyTo<T>, value: T) -> () ! {Send<T>}`. A reply channel
+   is semantically linear (used exactly once, or the requester hangs or gets
+   two answers); a dedicated primitive keeps that upgrade path local — a
+   future session-type layer enforces exactly-once as a rule about one
+   keyword form, instead of first reconstructing which `send`s are replies.
+   It also maps 1:1 onto the runtime, where reply (`gen_server:reply/2`) and
+   send (cast) are different operations, so codegen needs no type-directed
+   dispatch. `reply` carries plain `Send<T>` — no new effect head.
+
+3. **`ReplyTo<T>` is consumable only by `reply`.** It has no other
+   operations. The capability stays narrow, and the future linearity check
+   stays purely local.
+
+4. **`request` has a fixed 5000ms timeout in v0.1; timeout is a crash.**
+   No surface syntax for configuring it. A timed-out `request` exits the
+   caller (OTP `gen_server:call/2` semantics) rather than raising a typed
+   error, so the effect row stays `{Send<Msg>, Await<T>}` with no `Exn` —
+   crash handling is supervision's job (Phase 8, OD1). If configurability is
+   ever needed, the extension point is an optional trailing argument to
+   `request`; adding it is additive.
+
+### Consequences
+
+- Four keyword primitives: `spawn`, `send`, `request`, `reply`. Each name
+  states intent at the call site; none requires first-class actors or
+  first-class channels.
+- The phrasebook's handler effect rows remain valid as written — replying
+  contributes `Send<T>` exactly as the `GetStatus` example already shows.
+- Nothing stops a v0.1 program from dropping a `ReplyTo` or replying twice;
+  the failure surfaces at runtime as a request timeout. Exactly-once is
+  deferred to the session-type layer reserved by ADR-018.
+- Timeouts are not tunable per call site in v0.1; a slow-but-legitimate
+  request longer than 5000ms cannot be expressed yet.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
@@ -985,4 +1048,3 @@ when resolved:
 | ID | Topic | Resolves in | Ticket |
 |----|-------|-------------|--------|
 | OD1 | Crash vs error boundary | Phase 8 | hir-fbze |
-| OD8 | Send/reply effect tracking | Phase 7 | hir-actn |

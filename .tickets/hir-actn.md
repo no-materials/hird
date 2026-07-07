@@ -43,3 +43,9 @@ Resolve how send and reply effects are represented in effect rows.
 - send and request have the specified effect signatures.
 - Transitive closure is a tooling feature, not a type feature.
 
+
+## Notes
+
+**2026-07-07T10:10:58Z**
+
+Resolved as proposed and documented as ADR-019 in DECISIONS.md (with hir-m6ra pre-implementation decisions): Send<Msg>/Await<T> as separate simple effects, no recipient parameterization, no combined Request head; transitive closure stays tooling. ADR-019 also adds a distinct reply primitive (reply(reply_to, value) ! {Send<T>}, sole consumer of ReplyTo) and fixes request's v0.1 timeout at 5000ms with caller-exit semantics. Close together with hir-m6ra once the effect signatures are implemented.
