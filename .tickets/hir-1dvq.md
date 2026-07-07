@@ -1,7 +1,7 @@
 ---
 id: hir-1dvq
 status: open
-deps: [hir-m6ra, hir-zp13, ha-8fyg]
+deps: [hir-m6ra, hir-zp13, ha-8fyg, hc-uz3r]
 links: []
 created: 2026-05-22T21:40:27Z
 type: task
@@ -50,10 +50,11 @@ handle_cast(shutdown, State) ->
     {stop, normal, State}.
 ```
 
-**Mapping**: implement the actor-to-Erlang mapping locked by the Phase 7
-design ADR (ha-8fyg): ReplyTo representation, call/cast dispatch rule,
-request argument restriction, module layout and naming. The sketch above
-is illustrative; the ADR is authoritative.
+**Mapping**: implement the actor-to-Erlang mapping locked by ADR-020
+(ha-8fyg): ReplyTo-as-From, per-constructor call/cast dispatch, bare
+constructors in request, explicit gen_server:reply with {noreply, State},
+hird_-prefixed module naming. The sketch above is illustrative; the ADR
+is authoritative.
 
 **Baseline mapping** (from the epic design context):
 - Actor state is the gen_server state.

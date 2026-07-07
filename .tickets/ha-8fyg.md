@@ -1,6 +1,6 @@
 ---
 id: ha-8fyg
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-07T12:21:45Z

@@ -51,7 +51,8 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
 
 1. [x] [hir-1fif](hir-1fif.md) — Actor declarations, typed Pid, and spawn
 2. [x] [hir-m6ra](hir-m6ra.md) — Send, request, and receive exhaustiveness
-3. [ ] [ha-8fyg](ha-8fyg.md) — Actor-to-Erlang mapping design (ADR)
+3. [x] [ha-8fyg](ha-8fyg.md) — Actor-to-Erlang mapping design (ADR-020)
+4. [ ] [hc-uz3r](hc-uz3r.md) — Enforce ReplyTo wire restrictions from ADR-020
 
 Gen_server emission (hir-1dvq) moved to Phase 9: handler bodies and
 spawn/send/request/reply call sites are arbitrary IR expressions, so

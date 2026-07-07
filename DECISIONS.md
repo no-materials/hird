@@ -1040,6 +1040,99 @@ timeout semantics.
 
 ---
 
+## ADR-020: Actor-to-Erlang mapping — ReplyTo as From, per-constructor dispatch
+
+**Date**: 2026-07-07
+**Status**: Accepted
+
+### Context
+
+Actors compile to gen_server modules (ADR-003), but gen_server emission
+needs the expression emitter and erlc validation, both Phase 9 work — so
+the mapping is locked now and implemented later. ADR-018 deferred
+`ReplyTo<t>`'s runtime representation to codegen. The obstacle is that
+gen_server's two delivery mechanisms carry a reply address in different
+places: `gen_server:call` attaches a `From` term outside the message
+(bound by `handle_call`'s second argument), while `gen_server:cast` has
+no envelope at all. A message type whose constructor carries a
+`ReplyTo<T>` field must decide where that field lives on the wire — and
+whether the same constructor may travel both ways, which happens exactly
+when a handler forwards a received reply channel to another actor via
+`send`.
+
+### Decision
+
+1. **`ReplyTo<T>` is the gen_server `From` term, erased from the wire.**
+   A constructor's `ReplyTo` field does not travel in the payload; the
+   handler's `reply_to` binding is `handle_call`'s `From` argument.
+   `reply` lowers to `gen_server:reply(From, Value)`.
+
+2. **Dispatch is per constructor.** A constructor with a `ReplyTo` field
+   is a call constructor: sent by `request`, lowered to
+   `gen_server:call` (fixed 5000ms timeout per ADR-019), received by a
+   `handle_call` clause. A constructor without one is a cast
+   constructor: sent by `send`, lowered to `gen_server:cast`, received
+   by `handle_cast`. Each constructor has exactly one wire shape: a bare
+   atom when nullary, a tagged tuple otherwise (the ADT mapping), minus
+   any `ReplyTo` field.
+
+3. **`ReplyTo` cannot re-enter a message.** `ReplyTo<t>` may appear only
+   as a direct field of a message constructor, at most once per
+   constructor. A constructor carrying `ReplyTo` is applicable only as
+   the message-builder argument of `request`, and that argument must be
+   a bare constructor, not an arbitrary `ReplyTo<t> → Msg` function.
+   Together these make forwarding a received reply channel inside
+   another message inexpressible, so the two-wire-shapes case never
+   arises. Storing a received `reply_to` in actor state stays legal:
+   replying later from another handler works because `gen_server:reply`
+   is envelope-free.
+
+   *Rejected*: always embedding `From` in the payload (call clauses
+   rewrap their envelope `From` into the message before dispatch). It
+   admits forwarding, but bakes a wire format that is breaking to walk
+   back and generates rewrap shims instead of idiomatic Erlang
+   (ADR-002's readability goal). Forbid-then-relax is additive in the
+   other direction.
+
+4. **Replies are always explicit; `handle_call` never uses the reply
+   tuple.** Every generated `handle_call` clause returns
+   `{noreply, State}` and every `reply` emits `gen_server:reply`
+   directly. Codegen never proves where — or whether — a handler body
+   replies, and state-deferred replies need no special case. A dropped
+   or double reply remains a runtime timeout per ADR-019.
+
+5. **One Erlang module per actor, uniformly prefixed.** Actor `Planner`
+   emits module `hird_planner` (PascalCase → snake_case under a fixed
+   `hird_` prefix). The blanket prefix sidesteps collisions with
+   OTP/stdlib module names and Erlang reserved words instead of
+   detecting them case by case. Constructor atoms are the snake_cased
+   constructor names. Function-level naming inside the module is
+   emitter detail, not locked here.
+
+6. **Out of scope: handler threading across `spawn`.** How a spawner's
+   DI-style handler bindings (ADR-013's parameter threading) reach the
+   spawned process is a Phase 9 decision, made alongside the runtime
+   support library.
+
+### Consequences
+
+- `request(pid, GetStatus)` lowers to `gen_server:call(Pid, get_status)`;
+  the phrasebook's actor block maps onto a gen_server with no surface
+  changes.
+- Proxy and fan-out patterns — a middleman handing its reply channel to
+  a worker that answers the requester directly — are not expressible in
+  v0.1. The middleman must `request` the worker itself and relay the
+  answer, serializing on its own timeout. Lifting this later means
+  admitting an embedded-`From` wire shape for forwarded messages; the
+  change is confined to the checker and the emitter.
+- The direct-field, at-most-once `ReplyTo` restriction keeps the future
+  linearity and session-type checks (reserved by ADR-018/019) local to
+  constructor declarations.
+- Generated actor modules never collide with existing Erlang code, at
+  the cost of a `hird_` prefix on every module name a debugger sees.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
