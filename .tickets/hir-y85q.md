@@ -49,15 +49,15 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
 
 ## Task sequence
 
-1. [ ] [hir-1fif](hir-1fif.md) — Actor declarations, typed Pid, and spawn
+1. [x] [hir-1fif](hir-1fif.md) — Actor declarations, typed Pid, and spawn
 2. [ ] [hir-m6ra](hir-m6ra.md) — Send, request, and receive exhaustiveness
 3. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 
 ## Open design question
 
-- **OD5 (Actor protocol typing richness)**: Start minimal — actors have a typed
-  mailbox accepting a sum type. Typed session-protocol-like state machines are
-  future work. Document this scoping decision.
+- **OD5 (Actor protocol typing richness)**: Resolved by hir-1fif as ADR-018 —
+  sum-type mailboxes only; session/protocol/behavioral typing deferred, with
+  the extension point documented in the ADR.
 
 ## Out of scope
 

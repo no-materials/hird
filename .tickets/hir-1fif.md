@@ -1,6 +1,6 @@
 ---
 id: hir-1fif
-status: open
+status: closed
 deps: [hir-t1cj, hir-a6lz]
 links: [hir-b2gn]
 created: 2026-05-22T21:40:00Z
@@ -106,3 +106,9 @@ This ticket resolves **OD5** (start minimal — sum-type mailboxes, no session t
   effect summary mismatch, ReplyTo usage.
 - At least 10 snapshot tests.
 
+
+## Notes
+
+**2026-07-07T06:58:18Z**
+
+Implemented: actor declarations parse/check/lower end to end; Pid/ReplyTo builtins; spawn keyword form typed Pid<Msg> ! {Spawn<Msg>}; state encapsulation (C0040); effect summary equality (C0038); duplicate/foreign-handler errors (C0036/C0037); 24 checker snapshot tests plus parser, AST, IR lowering and round-trip coverage. OD5 resolved in DECISIONS.md ADR-018 (sum-type mailboxes only).

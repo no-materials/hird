@@ -1,6 +1,6 @@
 ---
 id: hir-b2gn
-status: open
+status: closed
 deps: []
 links: [hir-1fif]
 created: 2026-05-22T21:43:26Z
@@ -38,3 +38,9 @@ typing is implemented.
 - Actor implementation uses sum-type mailboxes.
 - Future-work section in ARCHITECTURE.md mentions session types as an extension point.
 
+
+## Notes
+
+**2026-07-07T06:58:18Z**
+
+Resolved by hir-1fif: sum-type mailboxes only, documented as ADR-018 in DECISIONS.md (session/protocol/behavioral types deferred; extension point noted in the ADR's consequences — no ARCHITECTURE.md exists in this repo, the ADR carries the future-work note).
