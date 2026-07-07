@@ -50,7 +50,7 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
 ## Task sequence
 
 1. [x] [hir-1fif](hir-1fif.md) — Actor declarations, typed Pid, and spawn
-2. [ ] [hir-m6ra](hir-m6ra.md) — Send, request, and receive exhaustiveness
+2. [x] [hir-m6ra](hir-m6ra.md) — Send, request, and receive exhaustiveness
 3. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 
 ## Open design question

@@ -1,6 +1,6 @@
 ---
 id: hir-actn
-status: open
+status: closed
 deps: []
 links: [hir-m6ra]
 created: 2026-05-22T21:43:50Z
@@ -49,3 +49,7 @@ Resolve how send and reply effects are represented in effect rows.
 **2026-07-07T10:10:58Z**
 
 Resolved as proposed and documented as ADR-019 in DECISIONS.md (with hir-m6ra pre-implementation decisions): Send<Msg>/Await<T> as separate simple effects, no recipient parameterization, no combined Request head; transitive closure stays tooling. ADR-019 also adds a distinct reply primitive (reply(reply_to, value) ! {Send<T>}, sole consumer of ReplyTo) and fixes request's v0.1 timeout at 5000ms with caller-exit semantics. Close together with hir-m6ra once the effect signatures are implemented.
+
+**2026-07-07T11:31:19Z**
+
+Resolved as proposed, locked as ADR-019 in DECISIONS.md: Send<Msg> and Await<T> are separate simple effects, not parameterized by the recipient, with no combined Request head; transitive closure stays a tooling query per ADR-005. Implemented with hir-m6ra.

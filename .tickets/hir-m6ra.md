@@ -1,6 +1,6 @@
 ---
 id: hir-m6ra
-status: open
+status: closed
 deps: [hir-1fif]
 links: [hir-actn]
 created: 2026-05-22T21:40:15Z
@@ -97,3 +97,9 @@ Documented as ADR-019 in DECISIONS.md; summary:
   handler set.
 - At least 8 snapshot tests.
 
+
+## Notes
+
+**2026-07-07T11:31:19Z**
+
+Implemented: send/request/reply keyword forms parse, check, and lower end to end. send types () ! {Send<Msg>} against Pid<Msg>; request types T ! {Send<Msg>, Await<T>} through a ReplyTo<T> -> Msg builder (constructor); reply is the sole operation on ReplyTo<T> with plain Send<T>. Missing-handler detection is a set difference over the message type's constructors (C0041), listing unhandled variants in declaration order. IR gains Send/Request/Reply nodes; pretty-printer re-emits the surface forms and the round-trip property covers them. 11 new checker snapshot tests plus parser, AST, lowering, and round-trip coverage. OD8 resolved in DECISIONS.md ADR-019.
