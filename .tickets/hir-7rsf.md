@@ -60,11 +60,13 @@ inspectable).
 ## Task sequence
 
 1. [ ] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
-2. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
-3. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
-4. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
+2. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
+3. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
+4. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
+5. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
-Steps 2 and 3 are independent after step 1. Step 4 requires both.
+Step 2 implements the mapping locked by Phase 7's design ADR (ha-8fyg).
+Steps 2–4 are independent after step 1. Step 5 requires all of them.
 
 ## Out of scope
 

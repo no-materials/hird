@@ -17,8 +17,10 @@ with stock erlc.
 
 **Emission strategy**:
 - One .erl file per Hirð module.
-- One .erl file per actor (gen_server module, from Phase 7 codegen).
-- One .erl file per supervisor (supervisor module, from Phase 8 codegen).
+- One .erl file per actor (gen_server module; emitted by hir-1dvq per the
+  Phase 7 mapping ADR, ha-8fyg).
+- One .erl file per supervisor (supervisor module, per Phase 8 codegen
+  decisions).
 - A hird_runtime.erl support module providing shared runtime utilities.
 
 **IR-to-Erlang mapping**:

@@ -51,7 +51,13 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
 
 1. [x] [hir-1fif](hir-1fif.md) — Actor declarations, typed Pid, and spawn
 2. [x] [hir-m6ra](hir-m6ra.md) — Send, request, and receive exhaustiveness
-3. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
+3. [ ] [ha-8fyg](ha-8fyg.md) — Actor-to-Erlang mapping design (ADR)
+
+Gen_server emission (hir-1dvq) moved to Phase 9: handler bodies and
+spawn/send/request/reply call sites are arbitrary IR expressions, so
+emitting them requires the expression emitter (hir-zp13), and erlc
+validation only exists there. Phase 7 locks the mapping as an ADR;
+Phase 9 implements it.
 
 ## Open design question
 
@@ -82,8 +88,8 @@ Codegen lowers actors to Erlang gen_server-style behavior modules.
 - Per-actor effect summaries: declared effects on actor match actual handler
   effects; mismatches produce errors.
 - IR includes actor nodes with typed mailbox, state, handlers, effect summary.
-- Codegen produces Erlang gen_server behavior modules (syntax validated but
-  runtime testing in Phase 9).
+- Actor-to-Erlang gen_server mapping locked as an ADR in DECISIONS.md
+  (emission implemented in Phase 9 alongside the expression emitter).
 - OD5 scoping decision documented in DECISIONS.md.
 - Snapshot tests: actor declarations, typed spawn/send/request, state
   encapsulation violations, exhaustiveness failures, effect summary mismatches.

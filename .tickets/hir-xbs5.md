@@ -1,7 +1,7 @@
 ---
 id: hir-xbs5
 status: open
-deps: [hir-1dvq]
+deps: []
 links: []
 created: 2026-05-22T21:40:39Z
 type: task

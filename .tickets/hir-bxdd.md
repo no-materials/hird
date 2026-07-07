@@ -1,7 +1,7 @@
 ---
 id: hir-bxdd
 status: open
-deps: [hir-7oph, hir-y9jo]
+deps: [hir-7oph, hir-y9jo, hir-1dvq]
 links: []
 created: 2026-05-22T21:41:57Z
 type: task
