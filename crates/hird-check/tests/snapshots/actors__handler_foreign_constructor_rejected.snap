@@ -5,4 +5,5 @@ expression: "check_str(\"type St = St(Int)\\n\\\n         type Other = Whoops\\n
 St : Int → St
 Stop : Msg
 Whoops : Other
+error[C0041] 44..45: actor `A` does not handle message variant `Stop`
 error[C0037] 120..127: `Whoops` is not a constructor of actor `A`'s message type `Msg`

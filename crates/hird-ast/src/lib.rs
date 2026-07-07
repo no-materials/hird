@@ -824,6 +824,66 @@ impl SpawnExpr {
 }
 
 ast_node! {
+    /// A `send(pid, msg)` expression: fire-and-forget message delivery.
+    SendExpr => SEND_EXPR
+}
+
+impl SendExpr {
+    /// The destination expression (a `Pid<Msg>`).
+    #[must_use]
+    pub fn pid(&self) -> Option<Expr> {
+        exprs(&self.0).next()
+    }
+
+    /// The message expression.
+    #[must_use]
+    pub fn message(&self) -> Option<Expr> {
+        exprs(&self.0).nth(1)
+    }
+}
+
+ast_node! {
+    /// A `request(pid, ctor)` expression: send with an embedded reply channel,
+    /// awaiting the reply.
+    RequestExpr => REQUEST_EXPR
+}
+
+impl RequestExpr {
+    /// The destination expression (a `Pid<Msg>`).
+    #[must_use]
+    pub fn pid(&self) -> Option<Expr> {
+        exprs(&self.0).next()
+    }
+
+    /// The message-building expression (`ReplyTo<T> → Msg`), typically a
+    /// message constructor.
+    #[must_use]
+    pub fn message_fn(&self) -> Option<Expr> {
+        exprs(&self.0).nth(1)
+    }
+}
+
+ast_node! {
+    /// A `reply(reply_to, value)` expression: answers a request on its typed
+    /// reply channel.
+    ReplyExpr => REPLY_EXPR
+}
+
+impl ReplyExpr {
+    /// The reply channel expression (a `ReplyTo<T>`).
+    #[must_use]
+    pub fn reply_to(&self) -> Option<Expr> {
+        exprs(&self.0).next()
+    }
+
+    /// The replied value expression.
+    #[must_use]
+    pub fn value(&self) -> Option<Expr> {
+        exprs(&self.0).nth(1)
+    }
+}
+
+ast_node! {
     /// A binary operator expression (`a + b`).
     BinOpExpr => BIN_EXPR
 }
@@ -1006,6 +1066,12 @@ pub enum Expr {
     Handle(HandleBlock),
     /// `spawn(Actor, ..)`
     Spawn(SpawnExpr),
+    /// `send(pid, msg)`
+    Send(SendExpr),
+    /// `request(pid, ctor)`
+    Request(RequestExpr),
+    /// `reply(reply_to, value)`
+    Reply(ReplyExpr),
     /// `a ⊕ b`
     BinOp(BinOpExpr),
     /// `f x`
@@ -1036,6 +1102,9 @@ impl Expr {
             SyntaxKind::MATCH_EXPR => Self::Match(MatchExpr(node)),
             SyntaxKind::HANDLE_EXPR => Self::Handle(HandleBlock(node)),
             SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
+            SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
+            SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
+            SyntaxKind::REPLY_EXPR => Self::Reply(ReplyExpr(node)),
             SyntaxKind::BIN_EXPR => Self::BinOp(BinOpExpr(node)),
             SyntaxKind::APP_EXPR => Self::App(AppExpr(node)),
             SyntaxKind::FIELD_EXPR => Self::Field(FieldExpr(node)),
@@ -1079,6 +1148,9 @@ impl Expr {
             Self::Match(n) => Some(n.syntax()),
             Self::Handle(n) => Some(n.syntax()),
             Self::Spawn(n) => Some(n.syntax()),
+            Self::Send(n) => Some(n.syntax()),
+            Self::Request(n) => Some(n.syntax()),
+            Self::Reply(n) => Some(n.syntax()),
             Self::BinOp(n) => Some(n.syntax()),
             Self::App(n) => Some(n.syntax()),
             Self::Field(n) => Some(n.syntax()),

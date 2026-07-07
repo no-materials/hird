@@ -37,10 +37,18 @@
 //! and the actor itself in a separate actor namespace. `spawn(Actor, args…)`
 //! checks its arguments against the actor's init parameters and types as
 //! `Pid<Msg> ! {Spawn<Msg>}`; handler bodies are checked against the state
-//! type and their declared rows, and the actor's trailing effect summary
-//! must equal the union of its init and handler rows. Actor state is
-//! encapsulated: the actor name is not a value, and no expression form
-//! reaches the state from outside the handlers.
+//! type and their declared rows, handlers must cover every message
+//! constructor, and the actor's trailing effect summary must equal the union
+//! of its init and handler rows. Actor state is encapsulated: the actor name
+//! is not a value, and no expression form reaches the state from outside the
+//! handlers.
+//!
+//! The messaging primitives are keyword forms with per-process, local
+//! effects: `send(pid, msg)` types as `() ! {Send<Msg>}` against the pid's
+//! message type; `request(pid, ctor)` builds a message around a fresh
+//! `ReplyTo<T>`, types as `T ! {Send<Msg>, Await<T>}`, and blocks with a
+//! fixed timeout whose expiry exits the caller; `reply(reply_to, value)` —
+//! the only operation on `ReplyTo<T>` — types as `() ! {Send<T>}`.
 //!
 //! # Quick start
 //!

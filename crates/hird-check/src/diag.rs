@@ -120,6 +120,9 @@ pub enum CheckCode {
     /// An actor is referenced as a value; actor state and members are only
     /// accessible within the actor's handlers.
     C0040,
+    /// An actor's handlers do not cover every constructor of its message
+    /// type.
+    C0041,
 }
 
 /// A secondary source location attached to a diagnostic.

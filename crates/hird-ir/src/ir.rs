@@ -265,6 +265,12 @@ pub enum IrExpr {
     Handle(IrHandle),
     /// `spawn(Actor, args…)`
     Spawn(IrSpawn),
+    /// `send(pid, msg)`
+    Send(IrSend),
+    /// `request(pid, ctor)`
+    Request(IrRequest),
+    /// `reply(reply_to, value)`
+    Reply(IrReply),
     /// A constructor applied to zero or more arguments.
     Constructor(IrConstructor),
     /// A literal.
@@ -388,6 +394,47 @@ pub struct IrSpawn {
     /// The init arguments, in order.
     pub args: Vec<IrExpr>,
     /// The expression's type: `Pid<Msg>` for the actor's message type.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `send(pid, msg)` expression: fire-and-forget delivery to a typed
+/// `Pid<Msg>` reference, unit-valued with a `Send<Msg>` effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSend {
+    /// The destination pid expression.
+    pub pid: Box<IrExpr>,
+    /// The message expression.
+    pub message: Box<IrExpr>,
+    /// The expression's type: unit.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `request(pid, ctor)` expression: builds a message around a fresh
+/// `ReplyTo<T>`, sends it, and awaits the reply, with `Send<Msg>` and
+/// `Await<T>` effects.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrRequest {
+    /// The destination pid expression.
+    pub pid: Box<IrExpr>,
+    /// The message-building function (`ReplyTo<T> → Msg`), typically a
+    /// message constructor.
+    pub message_fn: Box<IrExpr>,
+    /// The expression's type: the reply type `T`.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `reply(reply_to, value)` expression: answers a request on its typed
+/// reply channel, unit-valued with a `Send<T>` effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrReply {
+    /// The reply channel expression.
+    pub reply_to: Box<IrExpr>,
+    /// The replied value expression.
+    pub value: Box<IrExpr>,
+    /// The expression's type: unit.
     #[serde(serialize_with = "serialize_type")]
     pub result_type: Type,
 }

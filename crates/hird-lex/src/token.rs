@@ -85,6 +85,8 @@ pub enum TokenKind {
     Send,
     /// `request`
     Request,
+    /// `reply`
+    Reply,
     /// `use`
     Use,
     /// `module`
@@ -220,6 +222,7 @@ impl TokenKind {
                 | Self::Spawn
                 | Self::Send
                 | Self::Request
+                | Self::Reply
                 | Self::Use
                 | Self::Module
                 | Self::Pub

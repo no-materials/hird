@@ -324,6 +324,28 @@ fn spawn_no_args() {
     insta::assert_snapshot!(render_cst("fn go() = spawn(Worker)"));
 }
 
+// ── messaging expressions ───────────────────────────────────────
+
+#[test]
+fn send_expr() {
+    insta::assert_snapshot!(render_cst("fn go(p: Pid<Msg>) = send(p, Stop)"));
+}
+
+#[test]
+fn request_expr() {
+    insta::assert_snapshot!(render_cst("fn go(p: Pid<Msg>) = request(p, GetStatus)"));
+}
+
+#[test]
+fn reply_expr() {
+    insta::assert_snapshot!(render_cst("fn go(r: ReplyTo<Int>) = reply(r, 42)"));
+}
+
+#[test]
+fn send_missing_message_recovers() {
+    insta::assert_snapshot!(render_cst("fn go(p: Pid<Msg>) = send(p)"));
+}
+
 // ── supervisor declarations ─────────────────────────────────────
 
 #[test]

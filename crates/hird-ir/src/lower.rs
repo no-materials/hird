@@ -33,7 +33,8 @@ use alloc::vec::Vec;
 use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl,
     FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr, Pattern,
-    RecordLit, SourceFile, SpawnExpr, ToolDecl, TupleLit, TypeDecl,
+    RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr, ToolDecl, TupleLit,
+    TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -43,8 +44,8 @@ use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
     IrConstructorDef, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
     IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrSpawn, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar,
-    IrWildcardPat, LiteralValue,
+    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrToolDef, IrTuple,
+    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -290,6 +291,9 @@ impl Lowerer<'_> {
             Expr::Match(me) => self.lower_match(me),
             Expr::Handle(handle) => self.lower_handle(handle),
             Expr::Spawn(spawn) => self.lower_spawn(spawn),
+            Expr::Send(send) => self.lower_send(send),
+            Expr::Request(request) => self.lower_request(request),
+            Expr::Reply(reply) => self.lower_reply(reply),
             Expr::BinOp(op) => self.lower_binop(op),
             Expr::App(app) => self.lower_app(app),
             Expr::Field(field) => self.lower_field(field),
@@ -445,6 +449,39 @@ impl Lowerer<'_> {
             actor: String::from(spawn.actor_name().unwrap_or("")),
             args: spawn.args().map(|a| self.lower_expr(&a)).collect(),
             result_type: self.node_type(spawn.syntax()),
+        })
+    }
+
+    /// `send(pid, msg)`. The recorded type is unit.
+    fn lower_send(&self, send: &SendExpr) -> IrExpr {
+        let pid = send.pid().expect("send has a pid");
+        let message = send.message().expect("send has a message");
+        IrExpr::Send(IrSend {
+            pid: Box::new(self.lower_expr(&pid)),
+            message: Box::new(self.lower_expr(&message)),
+            result_type: self.node_type(send.syntax()),
+        })
+    }
+
+    /// `request(pid, ctor)`. The recorded type is the reply type.
+    fn lower_request(&self, request: &RequestExpr) -> IrExpr {
+        let pid = request.pid().expect("request has a pid");
+        let message_fn = request.message_fn().expect("request has a message builder");
+        IrExpr::Request(IrRequest {
+            pid: Box::new(self.lower_expr(&pid)),
+            message_fn: Box::new(self.lower_expr(&message_fn)),
+            result_type: self.node_type(request.syntax()),
+        })
+    }
+
+    /// `reply(reply_to, value)`. The recorded type is unit.
+    fn lower_reply(&self, reply: &ReplyExpr) -> IrExpr {
+        let reply_to = reply.reply_to().expect("reply has a reply channel");
+        let value = reply.value().expect("reply has a value");
+        IrExpr::Reply(IrReply {
+            reply_to: Box::new(self.lower_expr(&reply_to)),
+            value: Box::new(self.lower_expr(&value)),
+            result_type: self.node_type(reply.syntax()),
         })
     }
 

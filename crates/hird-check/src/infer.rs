@@ -18,7 +18,7 @@ use core::mem;
 
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr, LetExpr,
-    MatchExpr, Pattern, RecordLit, SpawnExpr,
+    MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr, SendExpr, SpawnExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -85,6 +85,9 @@ impl Checker {
             Expr::Match(me) => self.infer_match(me),
             Expr::Handle(handle) => self.infer_handle(handle),
             Expr::Spawn(spawn) => self.infer_spawn(spawn),
+            Expr::Send(send) => self.infer_send(send),
+            Expr::Request(request) => self.infer_request(request),
+            Expr::Reply(reply) => self.infer_reply(reply),
             Expr::BinOp(op) => self.infer_binop(op),
             Expr::App(app) => self.infer_app(app),
             Expr::Field(field) => self.infer_field(field),
@@ -380,6 +383,102 @@ impl Checker {
         let row = EffectRow::closed([Effect::parametric("Spawn", Vec::from([message.clone()]))]);
         self.add_effects(&row, span);
         Ok(Type::con("Pid", Vec::from([message])))
+    }
+
+    /// `send(pid, msg)` — fire-and-forget delivery to a typed reference.
+    ///
+    /// The destination must be a `Pid<Msg>` and the message a `Msg`; the
+    /// expression is unit with a `Send<Msg>` effect. Effects are per-process
+    /// and local: the sender's row records the send, never what the receiver
+    /// goes on to do.
+    fn infer_send(&mut self, send: &SendExpr) -> Checked<Type> {
+        let span = node_span(send.syntax(), self.source_id);
+        let (Some(pid), Some(message)) = (send.pid(), send.message()) else {
+            return Err(Aborted);
+        };
+        let msg_ty = self.check_pid(&pid)?;
+        let message_span = expr_span(&message, self.source_id);
+        let message_ty = self.infer_expr(&message)?;
+        self.unify_at(&msg_ty, &message_ty, message_span)?;
+        let row = EffectRow::closed([Effect::parametric("Send", Vec::from([msg_ty]))]);
+        self.add_effects(&row, span);
+        Ok(Type::tuple(Vec::new()))
+    }
+
+    /// `request(pid, ctor)` — send with an embedded reply channel, then await.
+    ///
+    /// The second argument builds the message around a fresh reply channel:
+    /// it must be a `ReplyTo<T> → Msg` function (typically a message
+    /// constructor). The expression's type is the reply type `T`, and its
+    /// effects are `Send<Msg>` for the send plus `Await<T>` for the blocking
+    /// wait — two distinct effects, never a combined head. The wait has a
+    /// fixed timeout whose expiry exits the caller, so no `Exn` joins the row.
+    fn infer_request(&mut self, request: &RequestExpr) -> Checked<Type> {
+        let span = node_span(request.syntax(), self.source_id);
+        let (Some(pid), Some(message_fn)) = (request.pid(), request.message_fn()) else {
+            return Err(Aborted);
+        };
+        let msg_ty = self.check_pid(&pid)?;
+        let reply_ty = self.subst.fresh_type();
+        let fn_span = expr_span(&message_fn, self.source_id);
+        let fn_ty = self.infer_expr(&message_fn)?;
+        // A fresh row for the builder: a constructor is pure, but whatever the
+        // builder performs happens here, in the caller, so its row joins the
+        // caller's alongside the messaging effects.
+        let builder_row = EffectRow::of_var(self.subst.fresh_row());
+        let expected = Type::func_eff(
+            Vec::from([Type::con("ReplyTo", Vec::from([reply_ty.clone()]))]),
+            msg_ty.clone(),
+            builder_row.clone(),
+        );
+        self.unify_at(&expected, &fn_ty, fn_span)?;
+        self.add_effects(&builder_row, span);
+        let row = EffectRow::closed([
+            Effect::parametric("Send", Vec::from([msg_ty])),
+            Effect::parametric("Await", Vec::from([reply_ty.clone()])),
+        ]);
+        self.add_effects(&row, span);
+        Ok(reply_ty)
+    }
+
+    /// `reply(reply_to, value)` — answers a request on its typed channel.
+    ///
+    /// The only operation on `ReplyTo<T>`: the value must be a `T`, the
+    /// expression is unit, and the effect is plain `Send<T>` — no dedicated
+    /// effect head.
+    fn infer_reply(&mut self, reply: &ReplyExpr) -> Checked<Type> {
+        let span = node_span(reply.syntax(), self.source_id);
+        let (Some(reply_to), Some(value)) = (reply.reply_to(), reply.value()) else {
+            return Err(Aborted);
+        };
+        let val_ty = self.subst.fresh_type();
+        let reply_to_span = expr_span(&reply_to, self.source_id);
+        let reply_to_ty = self.infer_expr(&reply_to)?;
+        self.unify_at(
+            &Type::con("ReplyTo", Vec::from([val_ty.clone()])),
+            &reply_to_ty,
+            reply_to_span,
+        )?;
+        let value_span = expr_span(&value, self.source_id);
+        let value_ty = self.infer_expr(&value)?;
+        self.unify_at(&val_ty, &value_ty, value_span)?;
+        let row = EffectRow::closed([Effect::parametric("Send", Vec::from([val_ty]))]);
+        self.add_effects(&row, span);
+        Ok(Type::tuple(Vec::new()))
+    }
+
+    /// Infers a messaging destination and pins it to `Pid<Msg>`, returning the
+    /// message type `Msg`.
+    fn check_pid(&mut self, pid: &Expr) -> Checked<Type> {
+        let msg_ty = self.subst.fresh_type();
+        let span = expr_span(pid, self.source_id);
+        let pid_ty = self.infer_expr(pid)?;
+        self.unify_at(
+            &Type::con("Pid", Vec::from([msg_ty.clone()])),
+            &pid_ty,
+            span,
+        )?;
+        Ok(msg_ty)
     }
 
     /// `if c then a else b` — `Bool` condition, unified branches.

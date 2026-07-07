@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Actor declaration checking: typed mailboxes, init signatures, message
-//! handlers, and per-actor effect summaries.
+//! handlers with exhaustive coverage, and per-actor effect summaries.
 //!
 //! An actor declares a `state` type, a `message` sum type (registered as an
 //! ordinary ADT so any code can construct messages), an `init` function
@@ -292,9 +292,10 @@ impl Checker {
     }
 
     /// Checks an actor's bodies: the init body against the state type and
-    /// declared row, each handler against the message and state types, and
-    /// the declared effect summary against the union of member rows. Runs
-    /// after function checking, so bodies see final function schemes.
+    /// declared row, each handler against the message and state types, the
+    /// handlers' coverage of the message constructors, and the declared
+    /// effect summary against the union of member rows. Runs after function
+    /// checking, so bodies see final function schemes.
     pub(crate) fn check_actor(&mut self, decl: &ActorDecl) -> Checked<()> {
         let Some(name) = decl.name() else {
             return Ok(());
@@ -314,8 +315,49 @@ impl Checker {
             let _ = self.check_handler(&handler, name, &info, &mut seen, &mut member_rows);
         }
 
+        self.check_handler_coverage(decl, name, &info, &seen);
         self.check_effect_summary(decl, name, &member_rows);
         Ok(())
+    }
+
+    /// Checks that the handlers cover every constructor of the message type.
+    ///
+    /// Each handler names exactly one known constructor with no duplicates
+    /// (enforced above), so coverage is a set difference over the message
+    /// type's constructor list — not the match-usefulness matrix, which still
+    /// checks the payload patterns inside each handler.
+    fn check_handler_coverage(
+        &mut self,
+        decl: &ActorDecl,
+        actor: &str,
+        info: &ActorInfo,
+        seen: &BTreeMap<String, Span>,
+    ) {
+        let missing: Vec<String> = match self.registry.adt_constructors(info.message.as_str()) {
+            Some(ctors) => ctors
+                .iter()
+                .filter(|c| !seen.contains_key(c.as_str()))
+                .map(|c| String::from(c.as_str()))
+                .collect(),
+            None => return,
+        };
+        if missing.is_empty() {
+            return;
+        }
+        let span = name_token_span(decl.syntax(), self.source_id);
+        let noun = if missing.len() == 1 {
+            "variant"
+        } else {
+            "variants"
+        };
+        self.diags.push(CheckDiagnostic::error(
+            CheckCode::C0041,
+            span,
+            format!(
+                "actor `{actor}` does not handle message {noun} `{}`",
+                missing.join("`, `")
+            ),
+        ));
     }
 
     /// Checks the init body against the state type and the declared init row.

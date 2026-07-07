@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc | Get(ReplyTo<Status>) | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Inc, st -> St ! {} = st,\\n\\\n         }\")"
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+Stop : Msg
+error[C0041] 50..51: actor `A` does not handle message variants `Get`, `Stop`

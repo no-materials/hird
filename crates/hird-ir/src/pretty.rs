@@ -114,8 +114,9 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         | IrExpr::List(_)
         | IrExpr::Record(_) => PREC_ATOM,
         IrExpr::Field(_) => PREC_POSTFIX,
-        // `spawn(…)` is self-delimiting.
-        IrExpr::Spawn(_) => PREC_ATOM,
+        // The keyword call forms (`spawn(…)`, `send(…)`, …) are
+        // self-delimiting.
+        IrExpr::Spawn(_) | IrExpr::Send(_) | IrExpr::Request(_) | IrExpr::Reply(_) => PREC_ATOM,
         IrExpr::Constructor(ctor) => {
             if ctor.args.is_empty() {
                 PREC_ATOM
@@ -426,6 +427,25 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
                 collect_expr_effects(arg, out);
             }
             collect_type_effects(&spawn.result_type, out);
+        }
+        IrExpr::Send(send) => {
+            out.insert(String::from("Send"), 1);
+            collect_expr_effects(&send.pid, out);
+            collect_expr_effects(&send.message, out);
+        }
+        IrExpr::Request(request) => {
+            // A request performs both the send and the blocking wait.
+            out.insert(String::from("Send"), 1);
+            out.insert(String::from("Await"), 1);
+            collect_expr_effects(&request.pid, out);
+            collect_expr_effects(&request.message_fn, out);
+            collect_type_effects(&request.result_type, out);
+        }
+        IrExpr::Reply(reply) => {
+            // A reply is a send on the reply channel; no dedicated head.
+            out.insert(String::from("Send"), 1);
+            collect_expr_effects(&reply.reply_to, out);
+            collect_expr_effects(&reply.value, out);
         }
         IrExpr::Literal(_) | IrExpr::Var(_) => {}
     }
@@ -813,6 +833,11 @@ impl Printer {
                 }
                 self.push(")");
             }
+            IrExpr::Send(send) => self.message_form("send", &send.pid, &send.message),
+            IrExpr::Request(request) => {
+                self.message_form("request", &request.pid, &request.message_fn);
+            }
+            IrExpr::Reply(reply) => self.message_form("reply", &reply.reply_to, &reply.value),
             IrExpr::App(app) => match as_operator(app) {
                 Some((op, prec, assoc)) => {
                     let (left_min, right_min) = match assoc {
@@ -833,6 +858,16 @@ impl Printer {
                 }
             },
         }
+    }
+
+    /// Renders a two-argument messaging keyword form (`kw(first, second)`).
+    fn message_form(&mut self, kw: &str, first: &IrExpr, second: &IrExpr) {
+        self.push(kw);
+        self.push("(");
+        self.expr(first, PREC_LOW);
+        self.push(", ");
+        self.expr(second, PREC_LOW);
+        self.push(")");
     }
 
     /// Renders expressions joined by `, `, each at the lowest precedence (a

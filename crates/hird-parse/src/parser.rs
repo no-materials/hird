@@ -1106,7 +1106,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
-    /// `spawn`, otherwise an atom.
+    /// one of the keyword forms (`spawn`, `send`, `request`, `reply`),
+    /// otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1115,6 +1116,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::MATCH_KW => self.parse_match_expr(),
             SyntaxKind::HANDLE_KW => self.parse_handle_expr(),
             SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
+            SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
+            SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
+            SyntaxKind::REPLY_KW => self.parse_message_expr(SyntaxKind::REPLY_EXPR),
             _ => self.parse_atom_expr(),
         }
     }
@@ -1249,6 +1253,19 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             }
             self.parse_expr();
         }
+        self.expect(SyntaxKind::R_PAREN);
+        self.finish_node();
+    }
+
+    /// `send(pid, msg)`, `request(pid, ctor)`, or `reply(reply_to, value)` —
+    /// keyword forms taking exactly two expression arguments.
+    fn parse_message_expr(&mut self, node: SyntaxKind) {
+        self.start_node(node);
+        self.bump();
+        self.expect(SyntaxKind::L_PAREN);
+        self.parse_expr();
+        self.expect(SyntaxKind::COMMA);
+        self.parse_expr();
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
     }
@@ -1500,6 +1517,7 @@ fn is_keyword(kind: SyntaxKind) -> bool {
             | SyntaxKind::SPAWN_KW
             | SyntaxKind::SEND_KW
             | SyntaxKind::REQUEST_KW
+            | SyntaxKind::REPLY_KW
             | SyntaxKind::USE_KW
             | SyntaxKind::MODULE_KW
             | SyntaxKind::PUB_KW

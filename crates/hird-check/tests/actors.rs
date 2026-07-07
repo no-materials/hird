@@ -76,7 +76,7 @@ fn reply_to_in_message_constructor() {
            state: St,\n\
            message: Msg = | Get(ReplyTo<Status>) | Stop,\n\
            init: fn(s: St) -> St ! {} = s,\n\
-           handle Get(reply), st -> St ! {} = st,\n\
+           handle Get(reply_to), st -> St ! {} = st,\n\
            handle Stop, st -> St ! {} = st,\n\
          }"
     ));
@@ -355,6 +355,142 @@ fn duplicate_actor_rejected() {
            message: Msg2 = | Halt,\n\
            init: fn(s: St) -> St ! {} = s,\n\
            handle Halt, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+// ── messaging ───────────────────────────────────────────────────
+
+/// A counter actor with a request/reply protocol, shared by the messaging
+/// tests: `Get` carries a reply channel its handler answers with `reply`.
+const MESSAGING: &str = "\
+effect Send<t>
+effect Await<t>
+type Status = Status(Int)
+type St = St(Int)
+actor Counter {
+  state: St,
+  message: Msg = | Inc | Get(ReplyTo<Status>),
+  init: fn(s: St) -> St ! {} = s,
+  handle Inc, St(n) -> St ! {} = St(n + 1),
+  handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),
+} ! {Send<Status>}
+";
+
+/// A complete handler set with a `reply` in a handler body type-checks:
+/// `reply` contributes plain `Send<T>` to the handler's row and the summary.
+#[test]
+fn reply_in_handler_checks() {
+    insta::assert_snapshot!(check_str(MESSAGING));
+}
+
+/// `send` types against the pid's message type, is unit-valued, and has a
+/// `Send<Msg>` effect checked against the caller's declared row.
+#[test]
+fn send_typed_against_pid() {
+    let source = format!("{MESSAGING}\nfn poke(p: Pid<Msg>) ! {{Send<Msg>}} = send(p, Inc)");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A message of the wrong type for the pid is rejected.
+#[test]
+fn send_message_type_mismatch_rejected() {
+    let source = format!("{MESSAGING}\nfn poke(p: Pid<Msg>) ! {{Send<Msg>}} = send(p, Status(1))");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A `send` destination must be a `Pid`; a `ReplyTo` is not one — `reply` is
+/// the only operation on a reply channel.
+#[test]
+fn send_to_reply_channel_rejected() {
+    let source = format!(
+        "{MESSAGING}\nfn answer(r: ReplyTo<Status>) ! {{Send<Status>}} = send(r, Status(1))"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A caller whose declared row omits `Send<Msg>` is rejected.
+#[test]
+fn send_effect_must_be_declared() {
+    let source = format!("{MESSAGING}\nfn poke(p: Pid<Msg>) = send(p, Inc)");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// `request` types the reply channel against the constructor and returns the
+/// reply type, with distinct `Send<Msg>` and `Await<T>` effects.
+#[test]
+fn request_returns_reply_type() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn query(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, Get)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// The message builder must take a reply channel: a nullary constructor of
+/// the right message type is still rejected.
+#[test]
+fn request_builder_must_take_reply_channel() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn query(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, Inc)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A caller whose declared row omits the `Await<T>` half of a request is
+/// rejected: the send and the blocking wait are separate effects.
+#[test]
+fn request_await_effect_must_be_declared() {
+    let source =
+        format!("{MESSAGING}\nfn query(p: Pid<Msg>) -> Status ! {{Send<Msg>}} = request(p, Get)");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// `reply` outside a handler works anywhere a `ReplyTo<T>` is in hand.
+#[test]
+fn reply_typed_against_channel() {
+    let source = format!(
+        "{MESSAGING}\nfn answer(r: ReplyTo<Status>) ! {{Send<Status>}} = reply(r, Status(1))"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A replied value must match the channel's type parameter.
+#[test]
+fn reply_value_type_mismatch_rejected() {
+    let source =
+        format!("{MESSAGING}\nfn answer(r: ReplyTo<Status>) ! {{Send<St>}} = reply(r, St(1))");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+// ── receive exhaustiveness ──────────────────────────────────────
+
+/// An actor missing a handler is rejected with the unhandled variant named.
+#[test]
+fn missing_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Inc | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Inc, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// Several unhandled variants are all listed, in declaration order.
+#[test]
+fn missing_handlers_all_listed() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Inc | Get(ReplyTo<Status>) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Inc, st -> St ! {} = st,\n\
          }"
     ));
 }

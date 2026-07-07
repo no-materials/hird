@@ -47,6 +47,8 @@ pub enum SyntaxKind {
     SEND_KW,
     /// `request`
     REQUEST_KW,
+    /// `reply`
+    REPLY_KW,
     /// `use`
     USE_KW,
     /// `module`
@@ -225,6 +227,12 @@ pub enum SyntaxKind {
     HANDLE_ARM,
     /// Spawn expression (`spawn(Actor, args)`).
     SPAWN_EXPR,
+    /// Send expression (`send(pid, msg)`).
+    SEND_EXPR,
+    /// Request expression (`request(pid, ctor)`).
+    REQUEST_EXPR,
+    /// Reply expression (`reply(reply_to, value)`).
+    REPLY_EXPR,
     /// Binary operator expression.
     BIN_EXPR,
     /// Function application (`f x y`).
@@ -286,6 +294,7 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Spawn => Self::SPAWN_KW,
             TokenKind::Send => Self::SEND_KW,
             TokenKind::Request => Self::REQUEST_KW,
+            TokenKind::Reply => Self::REPLY_KW,
             TokenKind::Use => Self::USE_KW,
             TokenKind::Module => Self::MODULE_KW,
             TokenKind::Pub => Self::PUB_KW,
@@ -374,6 +383,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::SPAWN_KW => Some("spawn"),
             Self::SEND_KW => Some("send"),
             Self::REQUEST_KW => Some("request"),
+            Self::REPLY_KW => Some("reply"),
             Self::USE_KW => Some("use"),
             Self::MODULE_KW => Some("module"),
             Self::PUB_KW => Some("pub"),

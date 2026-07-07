@@ -21,8 +21,8 @@ use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
     IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm,
     IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
-    IrRecord, IrRecordField, IrSpawn, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
-    pretty_print,
+    IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrTuple, IrTuplePat, IrVar,
+    IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -338,6 +338,21 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             args: spawn.args.iter().map(|a| canon_expr(a, map)).collect(),
             result_type: canon_type(&spawn.result_type, map),
         }),
+        IrExpr::Send(send) => IrExpr::Send(IrSend {
+            pid: Box::new(canon_expr(&send.pid, map)),
+            message: Box::new(canon_expr(&send.message, map)),
+            result_type: canon_type(&send.result_type, map),
+        }),
+        IrExpr::Request(request) => IrExpr::Request(IrRequest {
+            pid: Box::new(canon_expr(&request.pid, map)),
+            message_fn: Box::new(canon_expr(&request.message_fn, map)),
+            result_type: canon_type(&request.result_type, map),
+        }),
+        IrExpr::Reply(reply) => IrExpr::Reply(IrReply {
+            reply_to: Box::new(canon_expr(&reply.reply_to, map)),
+            value: Box::new(canon_expr(&reply.value, map)),
+            result_type: canon_type(&reply.result_type, map),
+        }),
     }
 }
 
@@ -627,7 +642,7 @@ fn actor_round_trips() {
            message: PlannerMsg = | Plan(Path) | Get(ReplyTo<St>) | Stop,\n\
            init: fn(start: St) -> St ! {} = start,\n\
            handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
-           handle Get(reply), St(n) -> St ! {} = St(n),\n\
+           handle Get(reply_to), St(n) -> St ! {} = St(n),\n\
            handle Stop, st -> St ! {} = st,\n\
          } ! {Tool<ReadRepo>}",
     );
@@ -645,6 +660,25 @@ fn spawn_round_trips() {
            handle Inc, St(n) -> St ! {} = St(n + 1),\n\
          }\n\
          fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)",
+    );
+}
+
+#[test]
+fn messaging_round_trips() {
+    assert_roundtrips(
+        "effect Send<t>\n\
+         effect Await<t>\n\
+         type Status = Status(Int)\n\
+         type St = St(Int)\n\
+         actor Counter {\n\
+           state: St,\n\
+           message: Msg = | Inc | Get(ReplyTo<Status>),\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Inc, St(n) -> St ! {} = St(n + 1),\n\
+           handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),\n\
+         } ! {Send<Status>}\n\
+         fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)\n\
+         fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)",
     );
 }
 

@@ -520,3 +520,84 @@ fn actor_json_snapshot() {
     let module = lower(COUNTER, "Actors");
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
+
+// ── messaging primitives ─────────────────────────────────────────
+
+/// A request/reply counter plus senders, shared by the messaging tests.
+const MESSAGING: &str = "\
+effect Send<t>
+effect Await<t>
+type Status = Status(Int)
+type St = St(Int)
+actor Counter {
+  state: St,
+  message: Msg = | Inc | Get(ReplyTo<Status>),
+  init: fn(s: St) -> St ! {} = s,
+  handle Inc, St(n) -> St ! {} = St(n + 1),
+  handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),
+} ! {Send<Status>}
+fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)
+fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)";
+
+#[test]
+fn send_lowers_to_send_node() {
+    let module = lower(MESSAGING, "Messaging");
+    let poke = fn_named(&module, "poke");
+    let IrExpr::Send(send) = &poke.body else {
+        panic!("body should be a send, got {:?}", poke.body);
+    };
+    assert!(matches!(send.pid.as_ref(), IrExpr::Var(v) if v.name == "p"));
+    assert!(matches!(send.message.as_ref(), IrExpr::Constructor(c) if c.name == "Inc"));
+    // Fire-and-forget: unit-valued.
+    assert_eq!(ty_str(&send.result_type), "()");
+    assert_eq!(format!("{}", poke.effect_row), "{Send<Msg>}");
+}
+
+#[test]
+fn request_lowers_to_request_node() {
+    let module = lower(MESSAGING, "Messaging");
+    let query = fn_named(&module, "query");
+    let IrExpr::Request(request) = &query.body else {
+        panic!("body should be a request, got {:?}", query.body);
+    };
+    assert!(matches!(request.pid.as_ref(), IrExpr::Var(v) if v.name == "p"));
+    assert!(matches!(request.message_fn.as_ref(), IrExpr::Constructor(c) if c.name == "Get"));
+    // The expression's type is the reply type, not the message type.
+    assert_eq!(ty_str(&request.result_type), "Status");
+    assert_eq!(
+        format!("{}", query.effect_row),
+        "{Await<Status>, Send<Msg>}"
+    );
+}
+
+#[test]
+fn reply_lowers_to_reply_node() {
+    let module = lower(MESSAGING, "Messaging");
+    let actor = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Actor(a) => Some(a),
+            _ => None,
+        })
+        .expect("actor declaration is present");
+    let IrExpr::Let(le) = &actor.handlers[1].body else {
+        panic!("handler body should be a let, got {:?}", actor.handlers[1]);
+    };
+    let IrExpr::Reply(reply) = le.value.as_ref() else {
+        panic!("bound value should be a reply, got {:?}", le.value);
+    };
+    assert!(matches!(reply.reply_to.as_ref(), IrExpr::Var(v) if v.name == "r"));
+    assert!(matches!(reply.value.as_ref(), IrExpr::Constructor(c) if c.name == "Status"));
+    assert_eq!(ty_str(&reply.result_type), "()");
+    assert_eq!(
+        format!("{}", actor.handlers[1].effect_row),
+        "{Send<Status>}"
+    );
+}
+
+#[test]
+fn messaging_json_snapshot() {
+    let module = lower(MESSAGING, "Messaging");
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}

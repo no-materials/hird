@@ -824,3 +824,30 @@ fn spawn_expr_no_args() {
     assert_eq!(spawn.actor_name(), Some("Worker"));
     assert_eq!(spawn.args().count(), 0);
 }
+
+#[test]
+fn send_expr_projection() {
+    let Expr::Send(send) = body("send(p, Stop)") else {
+        panic!("expected a send expression");
+    };
+    assert!(matches!(send.pid(), Some(Expr::Name(n)) if n.text() == "p"));
+    assert!(matches!(send.message(), Some(Expr::Name(n)) if n.text() == "Stop"));
+}
+
+#[test]
+fn request_expr_projection() {
+    let Expr::Request(request) = body("request(p, GetStatus)") else {
+        panic!("expected a request expression");
+    };
+    assert!(matches!(request.pid(), Some(Expr::Name(n)) if n.text() == "p"));
+    assert!(matches!(request.message_fn(), Some(Expr::Name(n)) if n.text() == "GetStatus"));
+}
+
+#[test]
+fn reply_expr_projection() {
+    let Expr::Reply(reply) = body("reply(r, Status(n))") else {
+        panic!("expected a reply expression");
+    };
+    assert!(matches!(reply.reply_to(), Some(Expr::Name(n)) if n.text() == "r"));
+    assert!(matches!(reply.value(), Some(Expr::App(_))));
+}

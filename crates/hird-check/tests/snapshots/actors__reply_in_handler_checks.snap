@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(MESSAGING)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status

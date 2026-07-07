@@ -1,0 +1,33 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go(p: Pid<Msg>) = send(p, Stop)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "p"
+        COLON ":"
+        APP_TYPE
+          WHITESPACE " "
+          IDENT "Pid"
+          TYPE_ARGS
+            LT "<"
+            IDENT "Msg"
+            GT ">"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    SEND_EXPR
+      WHITESPACE " "
+      SEND_KW "send"
+      L_PAREN "("
+      IDENT "p"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "Stop"
+      R_PAREN ")"

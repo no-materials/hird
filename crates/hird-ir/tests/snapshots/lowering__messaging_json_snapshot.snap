@@ -1,0 +1,252 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Messaging",
+  "declarations": [
+    {
+      "kind": "Type",
+      "name": "Status",
+      "params": [],
+      "constructors": [
+        {
+          "name": "Status",
+          "fields": [
+            "Int"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Type",
+      "name": "St",
+      "params": [],
+      "constructors": [
+        {
+          "name": "St",
+          "fields": [
+            "Int"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Actor",
+      "name": "Counter",
+      "state": "St",
+      "message": {
+        "name": "Msg",
+        "params": [],
+        "constructors": [
+          {
+            "name": "Inc",
+            "fields": []
+          },
+          {
+            "name": "Get",
+            "fields": [
+              "ReplyTo<Status>"
+            ]
+          }
+        ]
+      },
+      "init": {
+        "params": [
+          {
+            "name": "s",
+            "type": "St"
+          }
+        ],
+        "effect_row": "{}",
+        "body": {
+          "kind": "Var",
+          "name": "s",
+          "type": "St"
+        }
+      },
+      "handlers": [
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Inc",
+            "type_name": "Msg",
+            "fields": [],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Constructor",
+            "name": "St",
+            "type_name": "St",
+            "fields": [
+              {
+                "kind": "Bind",
+                "name": "n",
+                "type": "Int"
+              }
+            ],
+            "type": "St"
+          },
+          "effect_row": "{}",
+          "body": {
+            "kind": "Constructor",
+            "name": "St",
+            "type_name": "St",
+            "args": [
+              {
+                "kind": "App",
+                "func": {
+                  "kind": "Var",
+                  "name": "+",
+                  "type": "Int → Int → Int"
+                },
+                "args": [
+                  {
+                    "kind": "Var",
+                    "name": "n",
+                    "type": "Int"
+                  },
+                  {
+                    "kind": "Literal",
+                    "value": {
+                      "Int": "1"
+                    },
+                    "type": "Int"
+                  }
+                ],
+                "result_type": "Int"
+              }
+            ],
+            "result_type": "St"
+          }
+        },
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Get",
+            "type_name": "Msg",
+            "fields": [
+              {
+                "kind": "Bind",
+                "name": "r",
+                "type": "ReplyTo<Status>"
+              }
+            ],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Constructor",
+            "name": "St",
+            "type_name": "St",
+            "fields": [
+              {
+                "kind": "Bind",
+                "name": "n",
+                "type": "Int"
+              }
+            ],
+            "type": "St"
+          },
+          "effect_row": "{Send<Status>}",
+          "body": {
+            "kind": "Let",
+            "name": "sent",
+            "type": "()",
+            "value": {
+              "kind": "Reply",
+              "reply_to": {
+                "kind": "Var",
+                "name": "r",
+                "type": "ReplyTo<Status>"
+              },
+              "value": {
+                "kind": "Constructor",
+                "name": "Status",
+                "type_name": "Status",
+                "args": [
+                  {
+                    "kind": "Var",
+                    "name": "n",
+                    "type": "Int"
+                  }
+                ],
+                "result_type": "Status"
+              },
+              "result_type": "()"
+            },
+            "body": {
+              "kind": "Constructor",
+              "name": "St",
+              "type_name": "St",
+              "args": [
+                {
+                  "kind": "Var",
+                  "name": "n",
+                  "type": "Int"
+                }
+              ],
+              "result_type": "St"
+            }
+          }
+        }
+      ],
+      "effect_row": "{Send<Status>}"
+    },
+    {
+      "kind": "Fn",
+      "name": "poke",
+      "params": [
+        {
+          "name": "p",
+          "type": "Pid<Msg>"
+        }
+      ],
+      "return_type": "()",
+      "effect_row": "{Send<Msg>}",
+      "body": {
+        "kind": "Send",
+        "pid": {
+          "kind": "Var",
+          "name": "p",
+          "type": "Pid<Msg>"
+        },
+        "message": {
+          "kind": "Constructor",
+          "name": "Inc",
+          "type_name": "Msg",
+          "args": [],
+          "result_type": "Msg"
+        },
+        "result_type": "()"
+      }
+    },
+    {
+      "kind": "Fn",
+      "name": "query",
+      "params": [
+        {
+          "name": "p",
+          "type": "Pid<Msg>"
+        }
+      ],
+      "return_type": "Status",
+      "effect_row": "{Await<Status>, Send<Msg>}",
+      "body": {
+        "kind": "Request",
+        "pid": {
+          "kind": "Var",
+          "name": "p",
+          "type": "Pid<Msg>"
+        },
+        "message_fn": {
+          "kind": "Constructor",
+          "name": "Get",
+          "type_name": "Get",
+          "args": [],
+          "result_type": "ReplyTo<Status> → Msg"
+        },
+        "result_type": "Status"
+      }
+    }
+  ]
+}

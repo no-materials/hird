@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+poke : Pid<Msg> → () ! {Send<Msg>}
+error[C0030] 360..373: declared {} but body performs {Send<Msg>}
