@@ -1087,6 +1087,16 @@ when a handler forwards a received reply channel to another actor via
    replying later from another handler works because `gen_server:reply`
    is envelope-free.
 
+   *Amended 2026-07-07*: a `ReplyTo` field must also be the
+   constructor's **only** field. With the builder restricted to a bare
+   constructor reference, a constructor carrying payload alongside
+   `ReplyTo` could never be applied anywhere — bare, it does not unify
+   with `ReplyTo<t> → Msg`, and ordinary application is forbidden — so
+   it is rejected at declaration instead of dying as a unification
+   failure at the `request` site. Payload-carrying requests are
+   inexpressible in v0.1; admitting them later (partial application,
+   or a record payload) is additive.
+
    *Rejected*: always embedding `From` in the payload (call clauses
    rewrap their envelope `From` into the message before dispatch). It
    admits forwarding, but bakes a wire format that is breaking to walk
@@ -1125,6 +1135,9 @@ when a handler forwards a received reply channel to another actor via
   answer, serializing on its own timeout. Lifting this later means
   admitting an embedded-`From` wire shape for forwarded messages; the
   change is confined to the checker and the emitter.
+- With `ReplyTo` as a call constructor's only field, every
+  `gen_server:call` payload is a bare constructor atom in v0.1; tagged
+  tuples occur only on the cast path.
 - The direct-field, at-most-once `ReplyTo` restriction keeps the future
   linearity and session-type checks (reserved by ADR-018/019) local to
   constructor declarations.
