@@ -1146,11 +1146,84 @@ when a handler forwards a received reply channel to another actor via
 
 ---
 
+## ADR-021: Crash-vs-error boundary — domain errors are effect values, crashes diverge (OD1)
+
+**Date**: 2026-07-09
+**Status**: Accepted
+
+### Context
+
+OTP's "let it crash" and effect rows' "errors are values" pull in opposite
+directions, and Hirð uses both. A function that can fail needs one
+compiler-enforced answer to *which* kind of failure it is: a recoverable
+outcome the caller handles, or a process death the supervisor (ADR-003)
+handles. The boundary must be visible in types, and the two must not blur.
+
+A crash primitive raises a second question. `crash!("msg")` never returns, yet
+it appears where a value of some ordinary type is expected — a `match` arm
+beside arms that yield `Config`, the body of a function returning `Int`. The
+checker must give it *some* type at each site, and that type differs site to
+site.
+
+### Decision
+
+1. **Domain errors are effect-row values.** A recoverable failure is an
+   `Exn<E>` entry in the function's effect row (`Exn<ParseError>`,
+   `Exn<HttpError>`), handled by pattern matching or an effect handler. It does
+   not kill the process. The row is the exhaustive, checked list of a function's
+   domain errors.
+
+2. **Crashes are divergent exits, outside the effect row.** `crash!(msg)` (alias
+   `panic!`) terminates the process; it propagates as an Erlang exit and is
+   caught only by a supervisor, never by ordinary Hirð code. Resource failures
+   (OOM, a dropped connection, a `request` timeout) crash the same way. The
+   possibility of crashing is **not** represented in the effect row.
+
+3. **`crash!` is typed with a fresh result variable, not a bottom type.** Its
+   scheme is `∀a. (String) → a`: each use instantiates `a` to a fresh
+   unification variable that unifies with whatever type the context demands.
+   This reuses the existing Hindley–Milner instantiation and unification with no
+   new `Type` variant and no changes to `unify`, `subst`, or generalisation —
+   the same mechanism that types `identity : ∀a. a → a`. Because `crash!` never
+   returns, no runtime value can contradict the claimed type, so the encoding is
+   sound. `crash!` carries the empty effect row.
+
+### Alternatives considered
+
+- **Crash as an effect (`Crash` in the row).** Rejected: it would appear on
+  nearly every function that does I/O or calls a crashing helper, carrying no
+  discriminating information — the opposite of the row's purpose.
+- **A dedicated bottom type `⊥` / `Never`.** Rejected for v0.1. It is more
+  precise — the checker would *know* an expression diverges, enabling
+  dead-code-after-`crash!` diagnostics and exhaustiveness refinements — but it
+  adds a `Type` variant that unifies with everything, touching unification and
+  generalisation, and none of the analyses it enables are in v0.1 scope.
+  Adopting it later is additive: the fresh-variable encoding accepts exactly the
+  same programs, so the migration changes no source's type-checking outcome.
+- **Crash as a result type (`Result<T, Crash>`).** Rejected: crashes are not
+  values; forcing them into the value space defeats "let it crash" and makes
+  callers handle what they cannot meaningfully recover from.
+
+### Consequences
+
+- A function whose row is `Exn`-free produces no domain error; barring bugs,
+  OOM, and explicit `crash!`, it runs to completion. The row is a real
+  guarantee.
+- `crash!` composes anywhere — any match arm, any function body — regardless of
+  the expected type, with no annotation.
+- Erlang emission is trivial and staged: `crash!(msg)` lowers to an
+  `IrExpr::Crash` node emitted as an Erlang exit (`erlang:error/1`) by the
+  source emitter. The typing choice does not affect codegen; a future switch to
+  `⊥` would emit identically.
+- The checker cannot warn that a function catching all `Exn` errors might still
+  crash — divergence is not tracked. That diagnostic is deferred with the
+  bottom-type option.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
 when resolved:
 
-| ID | Topic | Resolves in | Ticket |
-|----|-------|-------------|--------|
-| OD1 | Crash vs error boundary | Phase 8 | hir-fbze |
+_None currently open. OD1 (crash-vs-error boundary) resolved in ADR-021._
