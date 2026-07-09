@@ -1,6 +1,6 @@
 ---
 id: hc-uz3r
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-07T13:40:49Z
@@ -76,3 +76,19 @@ clarifications locked here.
 - Snapshot tests for each new diagnostic and for the still-legal cases.
 - cargo clippy and cargo test pass.
 
+
+## Notes
+
+**2026-07-09T06:52:11Z**
+
+Implemented all four ReplyTo wire restrictions in hird-check.
+
+C0042 (request builder): request's message builder must be a bare message constructor. Resolved directly in infer_request (registry lookup + instantiate + node-table record), rather than through infer_expr, so its one legal use escapes the C0043 ban; a lambda or non-constructor is rejected, while whether the constructor actually carries a channel stays a unification concern (request(p, Inc) is still a C0001).
+
+C0043 (call-constructor misuse): a constructor carrying a ReplyTo field is rejected in any value or application position via the expression-inference Name path (application flows through it as the callee). Constructor patterns are untouched, so handlers still match call constructors.
+
+C0044 (nested/repeated): a mailbox message constructor may not nest ReplyTo — through containers, records, tuples, or named type references (resolved cycle-safe; a channel handed to a generic as a type argument is caught in argument position) — nor declare more than one.
+
+C0045 (payload alongside channel): a ReplyTo field must be the constructor's only field.
+
+Checks 3/4 run at the actor declaration over the mailbox's own constructors only (Registry helpers ctor_carries_reply_to / ctor_field_types / contains_reply_to), so ReplyTo in state types and in non-mailbox sums stays legal. 11 new snapshot tests cover each diagnostic, the instantiation-aware nesting case, and the still-legal cases; existing request/reply snapshots unchanged. cargo fmt, clippy -D warnings, and the full workspace test suite pass. ADR-020 decision-1 amendment was already committed when the pre-implementation decisions were locked.
