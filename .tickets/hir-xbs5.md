@@ -2,7 +2,7 @@
 id: hir-xbs5
 status: closed
 deps: []
-links: []
+links: [hir-z9rn]
 created: 2026-05-22T21:40:39Z
 type: task
 priority: 1

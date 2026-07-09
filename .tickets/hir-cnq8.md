@@ -64,7 +64,10 @@ level has that visible in its type or its calling context.
 ## Task sequence
 
 1. [x] [hir-xbs5](hir-xbs5.md) — Supervisor declarations and type validation
-2. [ ] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and supervisor codegen
+2. [ ] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and the crash! primitive
+
+Supervisor and crash! Erlang emission moved to Phase 9 (hir-z9rn, hir-zp13);
+Phase 8 stops at typed IR.
 
 ## Open design question resolved in this phase
 
@@ -88,7 +91,7 @@ level has that visible in its type or its calling context.
   (process exits).
 - `crash!` or equivalent panic primitive exists with clear semantics: crosses
   from error space to crash space, reaches supervisor.
-- Supervisor codegen produces Erlang supervisor behavior modules.
+- Supervisor codegen (Erlang behaviour module) is Phase 9 work (hir-z9rn).
 - `docs/error-model.md` written: explains error-vs-crash boundary, when to use
   each, how they interact with effect rows and supervision, with code examples.
 - OD1 decision documented in DECISIONS.md.

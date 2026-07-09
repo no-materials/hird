@@ -2,18 +2,23 @@
 id: hir-0bhk
 status: open
 deps: [hir-xbs5]
-links: [hir-fbze]
+links: [hir-fbze, hir-z9rn]
 created: 2026-05-22T21:40:54Z
 type: task
 priority: 1
 assignee: nomaterials
 parent: hir-cnq8
-tags: [phase-8, supervision, errors, codegen]
+tags: [phase-8, supervision, errors]
 ---
-# Error-vs-crash boundary and supervisor codegen
+# Error-vs-crash boundary and the crash! primitive
 
-Implement the error-vs-crash boundary and lower supervisors to Erlang OTP
-supervisor behavior modules.
+Implement the error-vs-crash boundary and the `crash!`/`panic!` primitive as a
+frontend feature (lexer → parser → AST → checker → IR). This is Phase 8's
+type-system and IR work; Erlang emission is Phase 9.
+
+**Codegen moved to Phase 9**: `crash!` emission folds into hir-zp13 (a new
+`IrExpr::Crash` node lowers to an Erlang exit, e.g. `erlang:error/1`); the
+supervisor behaviour module is hir-z9rn. This ticket stops at typed IR.
 
 **Error-vs-crash boundary** (resolves OD1):
 
@@ -36,45 +41,21 @@ The language enforces:
 - The compiler can warn if a function catches ALL Exn errors but still might crash
   due to calling a function that uses crash!.
 
-**Supervisor codegen**:
-```erlang
--module(planner_sup).
--behaviour(supervisor).
--export([start_link/0, init/1]).
-
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-init([]) ->
-    SupFlags = #{
-        strategy => one_for_one,
-        intensity => 5,
-        period => 60
-    },
-    ChildSpecs = [
-        #{
-            id => planner,
-            start => {planner, start_link, [default_config()]},
-            restart => permanent,
-            type => worker
-        }
-    ],
-    {ok, {SupFlags, ChildSpecs}}.
-```
-
 **Documentation**: docs/error-model.md explaining the boundary, when to use each,
 and how they interact with effect rows and supervision.
 
 ## Acceptance Criteria
 
-- crash!/panic! primitive exists; it is a divergent expression (never returns).
-- Domain errors (Exn effects) do not kill the process.
-- Crashes propagate as Erlang exits to supervisor.
-- Supervisor codegen produces valid Erlang supervisor behavior modules.
-- Generated supervisor modules have correct SupFlags and ChildSpecs.
+- crash!/panic! primitive exists; it is a divergent expression (never returns),
+  typed with a fresh result type variable (`∀a. (String) → a`) per ADR-021, so
+  it fits any result context.
+- crash! lowers to an `IrExpr::Crash` node carrying its message; Erlang emission
+  is deferred to hir-zp13.
+- Domain errors (Exn effects) stay values in the effect row and do not kill the
+  process (type-level distinction).
 - docs/error-model.md written with examples and clear guidance.
 - OD1 documented in DECISIONS.md.
-- Snapshot tests: crash! codegen, supervisor codegen, error-vs-crash distinction
-  in types, supervisor with multiple children.
-- At least 6 snapshot tests.
+- Snapshot tests (type/IR level): crash! parsing, crash! typing, crash! IR
+  lowering, error-vs-crash distinction in types.
+- At least 4 snapshot tests.
 

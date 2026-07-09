@@ -66,3 +66,9 @@ with stock erlc.
   pattern matching, ADTs, modules with exports.
 - At least 10 snapshot tests of generated Erlang.
 
+
+## Notes
+
+**2026-07-09T12:59:51Z**
+
+Also emits the crash! primitive: the IrExpr::Crash node (introduced by hir-0bhk) lowers to an Erlang exit (e.g. erlang:error/1). Add a crash! emission snapshot here. Supervisor behaviour-module emission is a separate ticket, hir-z9rn.
