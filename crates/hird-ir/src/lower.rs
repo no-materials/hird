@@ -31,9 +31,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ast::{
-    ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl,
-    FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr, Pattern,
-    RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr,
+    ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, CrashExpr, Decl, Expr,
+    ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr,
+    Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr,
     SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
@@ -42,10 +42,10 @@ use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
-    IrConstructorDef, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
-    IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef,
-    IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
+    IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule,
+    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn,
+    IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -349,6 +349,7 @@ impl Lowerer<'_> {
             Expr::Send(send) => self.lower_send(send),
             Expr::Request(request) => self.lower_request(request),
             Expr::Reply(reply) => self.lower_reply(reply),
+            Expr::Crash(crash) => self.lower_crash(crash),
             Expr::BinOp(op) => self.lower_binop(op),
             Expr::App(app) => self.lower_app(app),
             Expr::Field(field) => self.lower_field(field),
@@ -537,6 +538,17 @@ impl Lowerer<'_> {
             reply_to: Box::new(self.lower_expr(&reply_to)),
             value: Box::new(self.lower_expr(&value)),
             result_type: self.node_type(reply.syntax()),
+        })
+    }
+
+    /// `crash!(message)` / `panic!(message)`. The recorded type is the fresh
+    /// variable the checker unified with this use site's context; `panic!`
+    /// lowers identically (the surface alias is not preserved).
+    fn lower_crash(&self, crash: &CrashExpr) -> IrExpr {
+        let message = crash.message().expect("crash has a message");
+        IrExpr::Crash(IrCrash {
+            message: Box::new(self.lower_expr(&message)),
+            result_type: self.node_type(crash.syntax()),
         })
     }
 

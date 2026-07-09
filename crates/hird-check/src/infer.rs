@@ -17,8 +17,8 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr, LetExpr,
-    MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr, SendExpr, SpawnExpr,
+    AppExpr, AstNode, BinOpExpr, CrashExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr,
+    LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr, SendExpr, SpawnExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -102,6 +102,7 @@ impl Checker {
             Expr::Send(send) => self.infer_send(send),
             Expr::Request(request) => self.infer_request(request),
             Expr::Reply(reply) => self.infer_reply(reply),
+            Expr::Crash(crash) => self.infer_crash(crash),
             Expr::BinOp(op) => self.infer_binop(op),
             Expr::App(app) => self.infer_app(app),
             Expr::Field(field) => self.infer_field(field),
@@ -515,6 +516,24 @@ impl Checker {
         let row = EffectRow::closed([Effect::parametric("Send", Vec::from([val_ty]))]);
         self.add_effects(&row, span);
         Ok(Type::tuple(Vec::new()))
+    }
+
+    /// `crash!(msg)` / `panic!(msg)` — the divergent primitive.
+    ///
+    /// The message is a `String`. Because a crash never returns, the expression
+    /// is typed with a fresh unification variable that unifies with whatever the
+    /// context demands, the way `identity : ∀a. a → a` instantiates: it fits any
+    /// result position with no annotation. Crashing is not an effect, so the row
+    /// is untouched — a crash reaches the supervisor rather than the caller, and
+    /// the effect row stays the exhaustive list of *domain* errors.
+    fn infer_crash(&mut self, crash: &CrashExpr) -> Checked<Type> {
+        let Some(message) = crash.message() else {
+            return Err(Aborted);
+        };
+        let message_span = expr_span(&message, self.source_id);
+        let message_ty = self.infer_expr(&message)?;
+        self.unify_at(&Type::string(), &message_ty, message_span)?;
+        Ok(self.subst.fresh_type())
     }
 
     /// Infers a messaging destination and pins it to `Pid<Msg>`, returning the

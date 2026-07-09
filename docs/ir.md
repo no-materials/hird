@@ -110,6 +110,11 @@ Every expression node carries its resolved type.
   an expression); `result_type` is the typed reference `Pid<Msg>` for the
   actor's message type. Its effect, `Spawn<Msg>`, lives in the enclosing
   row, as any application's effects do.
+- `IrCrash { message, result_type }` — a `crash!(message)` (or `panic!`)
+  expression: divergent process termination. `message` is the `String` crash
+  message; `result_type` is the type demanded at the use site (a crash never
+  returns, so it adopts any context type). It contributes no effect to the
+  enclosing row, and the source emitter renders it as an Erlang exit.
 - `IrConstructor { name, type_name, args, result_type }` — a constructor
   applied to zero or more arguments. `type_name` is the data type it
   constructs. Nullary constructors (`None`, `True`) appear here with no

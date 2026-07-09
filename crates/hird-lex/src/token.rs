@@ -87,6 +87,10 @@ pub enum TokenKind {
     Request,
     /// `reply`
     Reply,
+    /// `crash`
+    Crash,
+    /// `panic`
+    Panic,
     /// `use`
     Use,
     /// `module`
@@ -223,6 +227,8 @@ impl TokenKind {
                 | Self::Send
                 | Self::Request
                 | Self::Reply
+                | Self::Crash
+                | Self::Panic
                 | Self::Use
                 | Self::Module
                 | Self::Pub

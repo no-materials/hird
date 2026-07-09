@@ -1106,8 +1106,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
-    /// one of the keyword forms (`spawn`, `send`, `request`, `reply`),
-    /// otherwise an atom.
+    /// one of the keyword forms (`spawn`, `send`, `request`, `reply`,
+    /// `crash!`/`panic!`), otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1119,6 +1119,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
             SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
             SyntaxKind::REPLY_KW => self.parse_message_expr(SyntaxKind::REPLY_EXPR),
+            SyntaxKind::CRASH_KW | SyntaxKind::PANIC_KW => self.parse_crash_expr(),
             _ => self.parse_atom_expr(),
         }
     }
@@ -1265,6 +1266,19 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::L_PAREN);
         self.parse_expr();
         self.expect(SyntaxKind::COMMA);
+        self.parse_expr();
+        self.expect(SyntaxKind::R_PAREN);
+        self.finish_node();
+    }
+
+    /// `crash!(message)` or `panic!(message)` — the divergent primitive. The
+    /// `!` is a required syntactic marker; the single argument is the crash
+    /// message. Both spellings produce a `CRASH_EXPR`; `panic!` is an alias.
+    fn parse_crash_expr(&mut self) {
+        self.start_node(SyntaxKind::CRASH_EXPR);
+        self.bump();
+        self.expect(SyntaxKind::BANG);
+        self.expect(SyntaxKind::L_PAREN);
         self.parse_expr();
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
@@ -1518,6 +1532,8 @@ fn is_keyword(kind: SyntaxKind) -> bool {
             | SyntaxKind::SEND_KW
             | SyntaxKind::REQUEST_KW
             | SyntaxKind::REPLY_KW
+            | SyntaxKind::CRASH_KW
+            | SyntaxKind::PANIC_KW
             | SyntaxKind::USE_KW
             | SyntaxKind::MODULE_KW
             | SyntaxKind::PUB_KW

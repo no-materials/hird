@@ -49,6 +49,10 @@ pub enum SyntaxKind {
     REQUEST_KW,
     /// `reply`
     REPLY_KW,
+    /// `crash`
+    CRASH_KW,
+    /// `panic`
+    PANIC_KW,
     /// `use`
     USE_KW,
     /// `module`
@@ -233,6 +237,8 @@ pub enum SyntaxKind {
     REQUEST_EXPR,
     /// Reply expression (`reply(reply_to, value)`).
     REPLY_EXPR,
+    /// Crash expression (`crash!(message)` or `panic!(message)`).
+    CRASH_EXPR,
     /// Binary operator expression.
     BIN_EXPR,
     /// Function application (`f x y`).
@@ -295,6 +301,8 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Send => Self::SEND_KW,
             TokenKind::Request => Self::REQUEST_KW,
             TokenKind::Reply => Self::REPLY_KW,
+            TokenKind::Crash => Self::CRASH_KW,
+            TokenKind::Panic => Self::PANIC_KW,
             TokenKind::Use => Self::USE_KW,
             TokenKind::Module => Self::MODULE_KW,
             TokenKind::Pub => Self::PUB_KW,

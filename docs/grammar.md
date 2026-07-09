@@ -144,6 +144,7 @@ expr         ::= let_expr
                | if_expr
                | handle_expr
                | spawn_expr
+               | crash_expr
                | infix_expr
 
 let_expr     ::= 'let' IDENT ( ':' type_expr )? '=' expr 'in' expr
@@ -161,10 +162,16 @@ handle_expr  ::= 'handle' '{' handle_arm* '}' 'in' expr
 handle_arm   ::= app_type '→' expr ','?
 
 spawn_expr   ::= 'spawn' '(' IDENT ( ',' expr )* ')'
+
+crash_expr   ::= ( 'crash' | 'panic' ) '!' '(' expr ')'
 ```
 
 `spawn`'s first argument is an actor name, resolved in the actor namespace;
 actor names are not first-class values.
+
+`crash!` (and its alias `panic!`) is the divergent primitive: it takes a
+single `String` message, never returns, and propagates as a process exit to
+the supervisor. The `!` is a required part of the form.
 
 ## Infix Expressions (precedence climbing)
 

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn boom() -> Int = crash!(42)\")"
+---
+boom : () → Int
+error[C0001] 26..28: type mismatch: expected `String`, got `Int`

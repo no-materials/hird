@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Exn<t>\\n\\\n         type ParseError = ParseError(String)\\n\\\n         fn recover(f: Int -> Int ! {Exn<ParseError>}) -> Int ! {Exn<ParseError>} = f(0)\\n\\\n         fn abort() -> Int = crash!(\\\"unrecoverable\\\")\")"
+---
+ParseError : String → ParseError
+abort : () → Int
+recover : (Int → Int ! {Exn<ParseError>}) → Int ! {Exn<ParseError>}

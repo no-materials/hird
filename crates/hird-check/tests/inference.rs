@@ -859,3 +859,53 @@ fn handle_non_function_handler_rejected() {
          fn bad() -> Int = handle { Log -> 42 } in 0"
     ));
 }
+
+// ── crash and the error-vs-crash boundary ───────────────────────
+
+#[test]
+fn crash_fits_a_concrete_result() {
+    // `crash!` never returns, so its fresh result variable unifies with the
+    // demanded `Int`; the function type is exactly `() → Int`.
+    insta::assert_snapshot!(check_str(r#"fn boom() -> Int = crash!("nope")"#));
+}
+
+#[test]
+fn crash_result_generalizes() {
+    // With no annotation, the fresh result stays free and generalizes: the
+    // divergent primitive inhabits any result type (`∀a. () → a`).
+    insta::assert_snapshot!(check_str(r#"fn boom() = crash!("nope")"#));
+}
+
+#[test]
+fn panic_is_an_alias_for_crash() {
+    insta::assert_snapshot!(check_str(r#"fn boom() -> String = panic!("nope")"#));
+}
+
+#[test]
+fn crash_message_must_be_a_string() {
+    // The single argument is a `String`; a non-string message is a type error.
+    insta::assert_snapshot!(check_str(r"fn boom() -> Int = crash!(42)"));
+}
+
+#[test]
+fn crash_fills_a_match_arm() {
+    // One arm yields a value, the other diverges; both are accepted at the
+    // arm's `Int` type, so the match still type-checks.
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn unwrap(o: Option<Int>) -> Int = match o { Some(x) -> x, None -> crash!(\"empty\"), }"
+    ));
+}
+
+#[test]
+fn crash_carries_no_effect_but_domain_errors_do() {
+    // The type-level error-vs-crash distinction: a recoverable failure is an
+    // `Exn` entry in the row (`recover`), while a crash is invisible to the row
+    // (`abort` is pure-rowed despite never returning).
+    insta::assert_snapshot!(check_str(
+        "effect Exn<t>\n\
+         type ParseError = ParseError(String)\n\
+         fn recover(f: Int -> Int ! {Exn<ParseError>}) -> Int ! {Exn<ParseError>} = f(0)\n\
+         fn abort() -> Int = crash!(\"unrecoverable\")"
+    ));
+}

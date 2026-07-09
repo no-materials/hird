@@ -664,3 +664,41 @@ fn supervisor_json_snapshot() {
     let module = lower(SUPERVISED, "Sup");
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
+
+// ── crash primitive ──────────────────────────────────────────────
+
+#[test]
+fn crash_lowers_to_crash_node() {
+    let module = lower(r#"fn boom() -> Int = crash!("nope")"#, "Crash");
+    let boom = only_fn(&module);
+    let IrExpr::Crash(crash) = &boom.body else {
+        panic!("body should be a crash, got {:?}", boom.body);
+    };
+    // The message is the string literal, kept verbatim (quotes and all).
+    let IrExpr::Literal(lit) = crash.message.as_ref() else {
+        panic!("message should be a literal, got {:?}", crash.message);
+    };
+    assert_eq!(lit.value, LiteralValue::Str(Box::from("\"nope\"")));
+    // The recorded type is the demanded context type, not a bottom type.
+    assert_eq!(ty_str(&crash.result_type), "Int");
+    // Crashing is not an effect: the function's row stays empty.
+    assert!(boom.effect_row.is_empty());
+}
+
+#[test]
+fn panic_lowers_to_the_same_crash_node() {
+    // `panic!` is a surface alias; it lowers to the identical `IrExpr::Crash`.
+    let module = lower(r#"fn boom() -> Int = panic!("nope")"#, "Crash");
+    let boom = only_fn(&module);
+    assert!(
+        matches!(&boom.body, IrExpr::Crash(_)),
+        "panic! should lower to a crash node, got {:?}",
+        boom.body
+    );
+}
+
+#[test]
+fn crash_json_snapshot() {
+    let module = lower(r#"fn boom() -> Int = crash!("nope")"#, "Crash");
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}

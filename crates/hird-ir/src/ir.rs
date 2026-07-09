@@ -308,6 +308,8 @@ pub enum IrExpr {
     Request(IrRequest),
     /// `reply(reply_to, value)`
     Reply(IrReply),
+    /// `crash!(message)` / `panic!(message)`
+    Crash(IrCrash),
     /// A constructor applied to zero or more arguments.
     Constructor(IrConstructor),
     /// A literal.
@@ -472,6 +474,23 @@ pub struct IrReply {
     /// The replied value expression.
     pub value: Box<IrExpr>,
     /// The expression's type: unit.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `crash!(message)` (or `panic!(message)`) expression: divergent process
+/// termination.
+///
+/// It never returns, so it fits any result context; `result_type` is the type
+/// demanded at this use site (a fresh variable the checker unified with the
+/// surrounding context). Crashing is not an effect — the node carries no row —
+/// so it propagates as an Erlang exit the source emitter renders (`erlang:error/1`),
+/// caught only by a supervisor. `panic!` is a surface alias and lowers here too.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrCrash {
+    /// The crash message expression (a `String`).
+    pub message: Box<IrExpr>,
+    /// The expression's type at this use site.
     #[serde(serialize_with = "serialize_type")]
     pub result_type: Type,
 }

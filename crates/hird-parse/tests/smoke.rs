@@ -346,6 +346,24 @@ fn send_missing_message_recovers() {
     insta::assert_snapshot!(render_cst("fn go(p: Pid<Msg>) = send(p)"));
 }
 
+// ── crash expressions ───────────────────────────────────────────
+
+#[test]
+fn crash_expr() {
+    insta::assert_snapshot!(render_cst(r#"fn go() = crash!("boom")"#));
+}
+
+#[test]
+fn panic_expr() {
+    insta::assert_snapshot!(render_cst(r#"fn go() = panic!("boom")"#));
+}
+
+#[test]
+fn crash_missing_bang_recovers() {
+    // The `!` is required; without it the parser flags the missing marker.
+    insta::assert_snapshot!(render_cst(r#"fn go() = crash("boom")"#));
+}
+
 // ── supervisor declarations ─────────────────────────────────────
 
 #[test]

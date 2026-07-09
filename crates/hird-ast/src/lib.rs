@@ -911,6 +911,29 @@ impl ReplyExpr {
 }
 
 ast_node! {
+    /// A `crash!(message)` (or `panic!(message)`) expression: the divergent
+    /// primitive that terminates the process. It never returns, so it fits any
+    /// result context.
+    CrashExpr => CRASH_EXPR
+}
+
+impl CrashExpr {
+    /// The crash message expression (a `String`).
+    #[must_use]
+    pub fn message(&self) -> Option<Expr> {
+        first_expr(&self.0)
+    }
+
+    /// Whether the primitive was spelled `panic!` rather than `crash!`. Both
+    /// are aliases with identical semantics; the spelling is preserved only for
+    /// diagnostics and faithful rendering.
+    #[must_use]
+    pub fn is_panic(&self) -> bool {
+        token(&self.0, SyntaxKind::PANIC_KW).is_some()
+    }
+}
+
+ast_node! {
     /// A binary operator expression (`a + b`).
     BinOpExpr => BIN_EXPR
 }
@@ -1099,6 +1122,8 @@ pub enum Expr {
     Request(RequestExpr),
     /// `reply(reply_to, value)`
     Reply(ReplyExpr),
+    /// `crash!(msg)` / `panic!(msg)`
+    Crash(CrashExpr),
     /// `a ⊕ b`
     BinOp(BinOpExpr),
     /// `f x`
@@ -1132,6 +1157,7 @@ impl Expr {
             SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
             SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
             SyntaxKind::REPLY_EXPR => Self::Reply(ReplyExpr(node)),
+            SyntaxKind::CRASH_EXPR => Self::Crash(CrashExpr(node)),
             SyntaxKind::BIN_EXPR => Self::BinOp(BinOpExpr(node)),
             SyntaxKind::APP_EXPR => Self::App(AppExpr(node)),
             SyntaxKind::FIELD_EXPR => Self::Field(FieldExpr(node)),
@@ -1178,6 +1204,7 @@ impl Expr {
             Self::Send(n) => Some(n.syntax()),
             Self::Request(n) => Some(n.syntax()),
             Self::Reply(n) => Some(n.syntax()),
+            Self::Crash(n) => Some(n.syntax()),
             Self::BinOp(n) => Some(n.syntax()),
             Self::App(n) => Some(n.syntax()),
             Self::Field(n) => Some(n.syntax()),

@@ -19,10 +19,10 @@
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
-    IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm,
-    IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
-    IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef, IrTuple,
-    IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
+    IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
+    IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
+    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef,
+    IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -374,6 +374,10 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             reply_to: Box::new(canon_expr(&reply.reply_to, map)),
             value: Box::new(canon_expr(&reply.value, map)),
             result_type: canon_type(&reply.result_type, map),
+        }),
+        IrExpr::Crash(crash) => IrExpr::Crash(IrCrash {
+            message: Box::new(canon_expr(&crash.message, map)),
+            result_type: canon_type(&crash.result_type, map),
         }),
     }
 }
@@ -834,6 +838,30 @@ fn snapshot_effects_synthesise_declarations() {
         "Eff",
     );
     insta::assert_snapshot!(pretty_print(&module));
+}
+
+// ── crash primitive ──────────────────────────────────────────────
+//
+// `crash!` lowers to an `IrExpr::Crash` and re-emits as `crash!(…)`. `panic!`
+// is a surface alias with no IR of its own, so it prints as `crash!` — the IR,
+// not the source, is what the round-trip fixes.
+
+#[test]
+fn crash_round_trips() {
+    assert_roundtrips(r#"fn boom() -> Int = crash!("nope")"#);
+}
+
+#[test]
+fn panic_round_trips() {
+    assert_roundtrips(r#"fn boom() -> String = panic!("nope")"#);
+}
+
+#[test]
+fn crash_in_match_arm_round_trips() {
+    assert_roundtrips(
+        "type Option<a> = Some(a) | None\n\
+         fn unwrap(o: Option<Int>) -> Int = match o { Some(x) -> x, None -> crash!(\"empty\"), }",
+    );
 }
 
 // ── generated round-trip programs ────────────────────────────────

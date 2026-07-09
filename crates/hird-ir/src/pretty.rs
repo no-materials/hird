@@ -114,9 +114,10 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         | IrExpr::List(_)
         | IrExpr::Record(_) => PREC_ATOM,
         IrExpr::Field(_) => PREC_POSTFIX,
-        // The keyword call forms (`spawn(…)`, `send(…)`, …) are
+        // The keyword call forms (`spawn(…)`, `send(…)`, `crash!(…)`, …) are
         // self-delimiting.
         IrExpr::Spawn(_) | IrExpr::Send(_) | IrExpr::Request(_) | IrExpr::Reply(_) => PREC_ATOM,
+        IrExpr::Crash(_) => PREC_ATOM,
         IrExpr::Constructor(ctor) => {
             if ctor.args.is_empty() {
                 PREC_ATOM
@@ -454,6 +455,12 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             out.insert(String::from("Send"), 1);
             collect_expr_effects(&reply.reply_to, out);
             collect_expr_effects(&reply.value, out);
+        }
+        IrExpr::Crash(crash) => {
+            // Crashing is not an effect; the node contributes no head. The
+            // message and the context type may still reference effects.
+            collect_expr_effects(&crash.message, out);
+            collect_type_effects(&crash.result_type, out);
         }
         IrExpr::Literal(_) | IrExpr::Var(_) => {}
     }
@@ -872,6 +879,11 @@ impl Printer {
                 self.message_form("request", &request.pid, &request.message_fn);
             }
             IrExpr::Reply(reply) => self.message_form("reply", &reply.reply_to, &reply.value),
+            IrExpr::Crash(crash) => {
+                self.push("crash!(");
+                self.expr(&crash.message, PREC_LOW);
+                self.push(")");
+            }
             IrExpr::App(app) => match as_operator(app) {
                 Some((op, prec, assoc)) => {
                     let (left_min, right_min) = match assoc {

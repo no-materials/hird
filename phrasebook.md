@@ -247,8 +247,10 @@ fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 
 - **Domain errors**: `Exn<ParseError>`, `Exn<HttpError>` — values in effect rows.
   Handled with pattern matching or effect handlers. Do not kill the process.
-- **Crashes**: `crash!("msg")` — divergent, reaches supervisor. For truly
-  unrecoverable situations. Cannot be caught in normal code.
+- **Crashes**: `crash!("msg")` (alias `panic!`) — divergent, reaches
+  supervisor. For truly unrecoverable situations. Cannot be caught in normal
+  code. Typed `∀a. (String) → a`, so it fits any result position; not an
+  effect, so it never appears in the row.
 
 ---
 

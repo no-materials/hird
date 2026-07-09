@@ -1,0 +1,21 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(r#\"fn go() = crash(\"boom\")\"#)"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    CRASH_EXPR
+      WHITESPACE " "
+      CRASH_KW "crash"
+      L_PAREN "("
+      STRING "\"boom\""
+      R_PAREN ")"
+---
+P0001 15..16: expected `!`

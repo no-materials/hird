@@ -394,6 +394,21 @@ fn tuple_list_paren() {
     assert!(matches!(p.inner(), Some(Expr::Name(_))));
 }
 
+#[test]
+fn crash_expr_parts() {
+    let Expr::Crash(c) = body(r#"crash!("boom")"#) else {
+        panic!("expected crash");
+    };
+    assert!(matches!(c.message(), Some(Expr::Literal(l)) if l.text() == "\"boom\""));
+    assert!(!c.is_panic());
+
+    // `panic!` projects the same node, distinguished only by its spelling.
+    let Expr::Crash(p) = body(r#"panic!("boom")"#) else {
+        panic!("expected crash");
+    };
+    assert!(p.is_panic());
+}
+
 // ── partial-AST recovery ────────────────────────────────────────
 
 /// Parse `src` into a `SourceFile` without requiring a clean parse. Used by the

@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn boom() = crash!(\"nope\")\"#)"
+---
+boom : ∀a. () → a

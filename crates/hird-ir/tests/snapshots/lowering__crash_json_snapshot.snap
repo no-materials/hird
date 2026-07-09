@@ -1,0 +1,27 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Crash",
+  "declarations": [
+    {
+      "kind": "Fn",
+      "name": "boom",
+      "params": [],
+      "return_type": "Int",
+      "effect_row": "{}",
+      "body": {
+        "kind": "Crash",
+        "message": {
+          "kind": "Literal",
+          "value": {
+            "Str": "\"nope\""
+          },
+          "type": "String"
+        },
+        "result_type": "Int"
+      }
+    }
+  ]
+}
