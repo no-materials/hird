@@ -1,6 +1,6 @@
 ---
 id: hir-cnq8
-status: open
+status: closed
 deps: [hir-y85q]
 links: []
 created: 2026-05-22T21:34:27Z
@@ -64,7 +64,7 @@ level has that visible in its type or its calling context.
 ## Task sequence
 
 1. [x] [hir-xbs5](hir-xbs5.md) — Supervisor declarations and type validation
-2. [ ] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and the crash! primitive
+2. [x] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and the crash! primitive
 
 Supervisor and crash! Erlang emission moved to Phase 9 (hir-z9rn, hir-zp13);
 Phase 8 stops at typed IR.
@@ -99,3 +99,23 @@ Phase 8 stops at typed IR.
   crash! semantics, error-vs-crash type-level distinction.
 - `cargo clippy` and `cargo test` pass.
 
+
+## Notes
+
+**2026-07-09T14:24:49Z**
+
+Phase 8 complete. Both children are closed: hir-xbs5 (supervisor declarations,
+typed child-spec validation, IR lowering, derived effect rows) and hir-0bhk
+(the error-vs-crash boundary and the crash!/panic! primitive through
+lexer → parser → AST → checker → IR).
+
+The type-level distinction the epic set out to establish is in place:
+supervisors type-check their child specs; domain errors are Exn values carried
+in the effect row and handled by the caller; crashes are divergent exits that
+leave the row empty and reach the supervisor. crash!/panic! is typed
+∀a.(String)→a so it fits any result context. OD1 is locked as ADR-021 and
+docs/error-model.md documents the boundary.
+
+Per the epic's scope, Erlang emission stopped at typed IR: supervisor codegen
+(hir-z9rn) and crash! emission (hir-zp13) are Phase 9 work and remain open,
+unblocked by this closure. cargo fmt/clippy/test all green.

@@ -1,6 +1,6 @@
 ---
 id: hir-0bhk
-status: open
+status: closed
 deps: [hir-xbs5]
 links: [hir-fbze, hir-z9rn]
 created: 2026-05-22T21:40:54Z
@@ -59,3 +59,31 @@ and how they interact with effect rows and supervision.
   lowering, error-vs-crash distinction in types.
 - At least 4 snapshot tests.
 
+
+## Notes
+
+**2026-07-09T14:24:25Z**
+
+Implemented the error-vs-crash boundary and the crash!/panic! primitive across
+the frontend (lexer → parser → AST → checker → IR); Erlang emission stays
+deferred (hir-zp13).
+
+crash and panic are keywords; the parser reads crash ! ( expr ) into a single
+CRASH_EXPR node (reusing the existing Bang token, which also yields a clean
+"expected !" diagnostic when the bang is omitted). panic! is a pure surface
+alias captured by CrashExpr::is_panic() and erased at lowering. The checker's
+infer_crash unifies the single argument with String and returns a fresh
+unification variable — the ∀a.(String)→a encoding — so crash! inhabits any
+result context with no annotation and no new Type variant. It adds no effects:
+the row stays the exhaustive list of domain (Exn) errors, and crashing is
+outside it. Lowering emits IrExpr::Crash { message, result_type } (result_type
+= the demanded context type); the pretty-printer re-emits crash!(…) and the
+round-trip covers it. OD1 was already locked as ADR-021; docs/error-model.md
+now explains the boundary, when to use each, and the supervision interaction,
+and the phrasebook/grammar/IR docs note the primitive.
+
+Tests: 3 parser snapshots (crash, panic, missing-bang recovery), 6 checker
+snapshots (fresh-var generalisation ∀a. () → a, concrete-context fit, panic
+alias, String-arg mismatch C0001, match-arm fit, and the error-vs-crash row
+distinction), IR lowering (structural + JSON snapshot + panic→crash aliasing),
+and 3 round-trip cases. cargo fmt/clippy/test all green.
