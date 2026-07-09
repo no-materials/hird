@@ -63,7 +63,7 @@ level has that visible in its type or its calling context.
 
 ## Task sequence
 
-1. [ ] [hir-xbs5](hir-xbs5.md) — Supervisor declarations and type validation
+1. [x] [hir-xbs5](hir-xbs5.md) — Supervisor declarations and type validation
 2. [ ] [hir-0bhk](hir-0bhk.md) — Error-vs-crash boundary and supervisor codegen
 
 ## Open design question resolved in this phase

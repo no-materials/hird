@@ -1,6 +1,6 @@
 ---
 id: hir-xbs5
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-05-22T21:40:39Z
@@ -105,3 +105,9 @@ Additional snapshot targets from the above: ≠1-parameter init under
 supervision, effectful `start_args`, unknown/duplicate field, and the
 unsupported-strategy warning.
 
+
+## Notes
+
+**2026-07-09T12:24:00Z**
+
+Implemented: supervisor declarations type-check and lower to IR (parsing already existed). The checker validates the closed body-field set (strategy/intensity/period/children — each required, each once; unknown/duplicate/missing and non-positive-integer intensity/period are C0046), and each child spec (closed field set; unique lowercase id; actor resolved in the actor namespace, C0047 when undeclared; restart of permanent/temporary/transient). start_args is inferred and unified against the child actor's sole init parameter (C0001 on mismatch), must be pure (C0049), and requires exactly one init parameter (C0048). The derived effect row is the union of the children's per-actor summaries — ActorInfo now stores the declared summary, elaborated once at registration — recorded on the supervisor node and never declared (no trailing ! {…}). Only one_for_one is supported; one_for_all/rest_for_one parse and check but warn (C0050, the checker's first Severity::Warning, naming no PM artifact). Supervisors occupy their own namespace (duplicate → C0046); a supervisor cannot be a child because children resolve only actors. IR gains IrSupervisorDef/IrChildSpec, lowered from the AST with the derived row read back from the check result; the pretty-printer re-emits the surface form and the round-trip property covers it. Tests: 16 checker snapshots, AST field projection, IR lowering (structural + JSON snapshot), and two round-trip cases. cargo fmt/clippy/test all green. Supervisor codegen and the error-vs-crash boundary remain for hir-0bhk.
