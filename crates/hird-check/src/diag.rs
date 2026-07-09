@@ -134,6 +134,22 @@ pub enum CheckCode {
     /// A message constructor carries a `ReplyTo` field alongside other fields;
     /// a reply channel must be the constructor's only field.
     C0045,
+    /// A supervisor declaration is structurally invalid: a missing, duplicate,
+    /// or unknown field; a malformed strategy, intensity, or period; a
+    /// duplicate supervisor name; a malformed or duplicate child spec; or a
+    /// duplicate child id.
+    C0046,
+    /// A supervisor child references an actor that is not declared.
+    C0047,
+    /// A supervised actor's init does not take exactly one parameter, so it
+    /// cannot be a supervised child.
+    C0048,
+    /// A supervisor child's `start_args` performs effects; start arguments are
+    /// evaluated during supervisor init and must be pure.
+    C0049,
+    /// A restart strategy is parsed and type-checked but not implemented in
+    /// v0.1 (only `one_for_one` is); a warning, not an error.
+    C0050,
 }
 
 /// A secondary source location attached to a diagnostic.

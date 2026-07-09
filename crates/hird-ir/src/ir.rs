@@ -60,9 +60,9 @@ where
 pub struct IrModule {
     /// The module's name (path-derived; authoritative).
     pub name: String,
-    /// Function, type, extern, and tool declarations, in source order. Imports
-    /// and not-yet-elaborated forms (effects, actors, supervisors) are
-    /// resolved away or not yet modelled, and do not appear here.
+    /// Function, type, extern, tool, actor, and supervisor declarations, in
+    /// source order. Imports are resolved away, and effect declarations are
+    /// synthesised on printing rather than stored, so neither appears here.
     pub declarations: Vec<IrDecl>,
 }
 
@@ -102,6 +102,8 @@ pub enum IrDecl {
     Tool(IrToolDef),
     /// An actor declaration.
     Actor(IrActorDef),
+    /// A supervisor declaration.
+    Supervisor(IrSupervisorDef),
 }
 
 /// A function definition.
@@ -224,6 +226,41 @@ pub struct IrActorHandler {
     pub effect_row: EffectRow,
     /// The body producing the next state.
     pub body: IrExpr,
+}
+
+/// A supervisor declaration: a restart strategy, a restart budget, and a list
+/// of typed child specs. The effect row is derived, not declared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSupervisorDef {
+    /// The supervisor's name (its own namespace; not a value).
+    pub name: String,
+    /// The restart strategy: `one_for_one` (the only one lowered in v0.1),
+    /// `one_for_all`, or `rest_for_one`.
+    pub strategy: String,
+    /// The maximum number of restarts tolerated within `period` seconds.
+    pub intensity: u32,
+    /// The restart-intensity window, in seconds.
+    pub period: u32,
+    /// The child specs, in declaration order.
+    pub children: Vec<IrChildSpec>,
+    /// The derived per-supervisor effect row: the union of the children's
+    /// per-actor effect summaries. Computed, never declared.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+}
+
+/// One supervised child: an actor started and monitored by the supervisor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrChildSpec {
+    /// The child's identifier, unique within the supervisor.
+    pub id: String,
+    /// The supervised actor's name (resolved in the actor namespace).
+    pub actor: String,
+    /// The start argument, evaluated during supervisor init. Pure, and typed
+    /// against the actor's sole init parameter.
+    pub start_args: IrExpr,
+    /// The restart disposition: `permanent`, `temporary`, or `transient`.
+    pub restart: String,
 }
 
 /// A reference to an external (FFI) function.

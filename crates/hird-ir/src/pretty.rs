@@ -32,8 +32,8 @@ use core::fmt::{Display, Write as _};
 use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
-    IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrToolDef,
-    IrTypeDef, LiteralValue,
+    IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrSupervisorDef,
+    IrToolDef, IrTypeDef, LiteralValue,
 };
 
 /// Renders `module` as canonical Hirð source.
@@ -314,6 +314,14 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
                 }
                 collect_row_effects(&a.effect_row, &mut effects);
             }
+            IrDecl::Supervisor(s) => {
+                // The derived row references only effects the child actors
+                // already contribute, but a child's `start_args` may name more.
+                for child in &s.children {
+                    collect_expr_effects(&child.start_args, &mut effects);
+                }
+                collect_row_effects(&s.effect_row, &mut effects);
+            }
         }
     }
     effects
@@ -502,6 +510,7 @@ impl Printer {
                 IrDecl::Extern(e) => self.extern_ref(e),
                 IrDecl::Tool(t) => self.tool_def(t),
                 IrDecl::Actor(a) => self.actor_def(a),
+                IrDecl::Supervisor(s) => self.supervisor_def(s),
             }
             self.push("\n");
         }
@@ -681,6 +690,31 @@ impl Printer {
             self.push(" ! ");
             self.push_display(&a.effect_row);
         }
+    }
+
+    /// A supervisor declaration, one field per line. The effect row is derived
+    /// from the children, never declared, so it is not printed; re-checking the
+    /// output re-derives it.
+    fn supervisor_def(&mut self, s: &IrSupervisorDef) {
+        self.push("supervisor ");
+        self.push(&s.name);
+        self.push(" {\n  strategy: ");
+        self.push(&s.strategy);
+        let _ = write!(self.out, ",\n  intensity: {}", s.intensity);
+        let _ = write!(self.out, ",\n  period: {}", s.period);
+        self.push(",\n  children: [");
+        for child in &s.children {
+            self.push("\n    { id: ");
+            self.push(&child.id);
+            self.push(", actor: ");
+            self.push(&child.actor);
+            self.push(", start_args: ");
+            self.expr(&child.start_args, PREC_LOW);
+            self.push(", restart: ");
+            self.push(&child.restart);
+            self.push(" },");
+        }
+        self.push("\n  ]\n}");
     }
 
     /// `extern fn name(params) → ret`. Parameter names are synthesised (the IR

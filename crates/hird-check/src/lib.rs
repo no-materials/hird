@@ -78,6 +78,7 @@ mod exhaustive;
 mod infer;
 mod program;
 mod registry;
+mod supervisors;
 pub mod wire;
 
 use alloc::boxed::Box;

@@ -33,19 +33,19 @@ use alloc::vec::Vec;
 use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, Decl, Expr, ExternDecl,
     FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr, Pattern,
-    RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr, ToolDecl, TupleLit,
-    TypeDecl,
+    RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr,
+    SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
 use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
-    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorDef, IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
     IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrToolDef, IrTuple,
-    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef,
+    IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -70,8 +70,11 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
             Decl::Extern(d) => declarations.extend(lowerer.lower_extern(&d).map(IrDecl::Extern)),
             Decl::Tool(d) => declarations.extend(lowerer.lower_tool(&d).map(IrDecl::Tool)),
             Decl::Actor(d) => declarations.extend(lowerer.lower_actor(&d).map(IrDecl::Actor)),
-            // Imports are resolved away; effects and supervisors are not yet
-            // modelled and carry no IR yet.
+            Decl::Supervisor(d) => {
+                declarations.extend(lowerer.lower_supervisor(&d).map(IrDecl::Supervisor));
+            }
+            // Imports are resolved away, and effect declarations are
+            // synthesised on printing rather than lowered.
             _ => {}
         }
     }
@@ -256,6 +259,58 @@ impl Lowerer<'_> {
             state: self.lower_pattern(&state),
             effect_row,
             body: self.lower_expr(&body),
+        })
+    }
+
+    /// Lowers a supervisor declaration. `None` when a required field is missing
+    /// or malformed (a reported structure error). Field validity is the
+    /// checker's job; lowering trusts a checked declaration and reads its
+    /// derived effect row back from the check result.
+    fn lower_supervisor(&self, decl: &SupervisorDecl) -> Option<IrSupervisorDef> {
+        let name = decl.name()?;
+        let strategy = supervisor_ident(decl, "strategy")?;
+        let intensity = supervisor_int(decl, "intensity")?;
+        let period = supervisor_int(decl, "period")?;
+        let children = self.lower_children(decl)?;
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(decl.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        Some(IrSupervisorDef {
+            name: String::from(name),
+            strategy,
+            intensity,
+            period,
+            children,
+            effect_row,
+        })
+    }
+
+    /// Lowers a supervisor's `children` list, skipping malformed specs.
+    fn lower_children(&self, decl: &SupervisorDecl) -> Option<Vec<IrChildSpec>> {
+        let Expr::List(list) = supervisor_field(decl, "children")?.value()? else {
+            return None;
+        };
+        let children = list
+            .elements()
+            .filter_map(|elem| match elem {
+                Expr::Record(spec) => self.lower_child(&spec),
+                _ => None,
+            })
+            .collect();
+        Some(children)
+    }
+
+    /// Lowers one child spec: the identifier fields verbatim and the
+    /// `start_args` expression through the ordinary expression lowering.
+    fn lower_child(&self, spec: &RecordLit) -> Option<IrChildSpec> {
+        let start_args = record_field(spec, "start_args")?.value()?;
+        Some(IrChildSpec {
+            id: record_ident(spec, "id")?,
+            actor: record_ident(spec, "actor")?,
+            start_args: self.lower_expr(&start_args),
+            restart: record_ident(spec, "restart")?,
         })
     }
 
@@ -646,6 +701,40 @@ impl Lowerer<'_> {
 /// The actor body field named `member`, if present.
 fn actor_field(decl: &ActorDecl, member: &str) -> Option<ActorField> {
     decl.fields().find(|f| f.name() == Some(member))
+}
+
+/// The supervisor body field named `field`, if present.
+fn supervisor_field(decl: &SupervisorDecl, field: &str) -> Option<SupervisorField> {
+    decl.fields().find(|f| f.name() == Some(field))
+}
+
+/// The identifier value of a supervisor field (`strategy: one_for_one`).
+fn supervisor_ident(decl: &SupervisorDecl, field: &str) -> Option<String> {
+    match supervisor_field(decl, field)?.value()? {
+        Expr::Name(name) => Some(String::from(name.text())),
+        _ => None,
+    }
+}
+
+/// The integer value of a supervisor field (`intensity: 5`, `period: 60`).
+fn supervisor_int(decl: &SupervisorDecl, field: &str) -> Option<u32> {
+    match supervisor_field(decl, field)?.value()? {
+        Expr::Literal(lit) if lit.kind() == SyntaxKind::INT => lit.text().parse().ok(),
+        _ => None,
+    }
+}
+
+/// The record field named `field`, if present.
+fn record_field(spec: &RecordLit, field: &str) -> Option<RecordField> {
+    spec.fields().find(|f| f.name() == Some(field))
+}
+
+/// The identifier value of a child-spec field (`id`, `actor`, `restart`).
+fn record_ident(spec: &RecordLit, field: &str) -> Option<String> {
+    match record_field(spec, field)?.value()? {
+        Expr::Name(name) => Some(String::from(name.text())),
+        _ => None,
+    }
 }
 
 /// The argument expressions of an application. A tuple-literal argument is the

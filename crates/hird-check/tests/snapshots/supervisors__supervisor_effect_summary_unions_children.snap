@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"supervisor RootSup {\n  strategy: one_for_one,\n  intensity: 3,\n  period: 10,\n  children: [\n    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n    { id: worker, actor: Worker, start_args: worker_config(), restart: transient },\n  ]\n}\"))"
+---
+supervisor RootSup ! {Tool<CreateTicket>, Tool<ReadRepo>}

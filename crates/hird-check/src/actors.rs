@@ -43,6 +43,11 @@ pub(crate) struct ActorInfo {
     pub(crate) init_params: Vec<Type>,
     /// The init function's declared effect row.
     pub(crate) init_row: EffectRow,
+    /// The declared per-actor effect summary (the trailing `! { … }`, or the
+    /// empty row when absent), which a supervisor's derived row unions over its
+    /// children. `None` when the annotation failed to elaborate (already
+    /// reported); the summary check is then skipped.
+    pub(crate) summary: Option<EffectRow>,
 }
 
 impl Checker {
@@ -118,6 +123,13 @@ impl Checker {
         let message = self.register_message(&message_field, name)?;
         let state = self.register_state(&state_field, name)?;
         let (init_params, init_row) = self.register_init(&init_field, name, &state)?;
+        // Elaborated once, at registration, so a malformed summary is reported
+        // here rather than twice; the body-check summary comparison and any
+        // supervisor's derived row read the stored row.
+        let summary = match decl.effect_ann() {
+            None => Some(EffectRow::empty()),
+            Some(ann) => self.elaborate_row_closed(&ann, &mut Scope::new()).ok(),
+        };
 
         // First declaration wins, consistent with duplicate reporting: a
         // duplicate actor (already reported) must not re-key the original's
@@ -127,6 +139,7 @@ impl Checker {
             state,
             init_params,
             init_row,
+            summary,
         });
         Ok(())
     }
@@ -318,7 +331,11 @@ impl Checker {
         }
 
         self.check_handler_coverage(decl, name, &info, &seen);
-        self.check_effect_summary(decl, name, &member_rows);
+        // A summary that failed to elaborate was already reported; comparing
+        // against a half-built row would only cascade.
+        if let Some(declared) = &info.summary {
+            self.check_effect_summary(decl, name, declared, &member_rows);
+        }
         Ok(())
     }
 
@@ -565,25 +582,21 @@ impl Checker {
 
     /// Checks the actor's declared effect summary (the trailing `! { … }`, or
     /// the empty row when absent) against the union of the init row and every
-    /// handler row.
-    fn check_effect_summary(&mut self, decl: &ActorDecl, actor: &str, member_rows: &EffectRow) {
-        let mut scope = Scope::new();
-        let declared = match decl.effect_ann() {
-            Some(ann) => match self.elaborate_row_closed(&ann, &mut scope) {
-                Ok(row) => row,
-                // The elaboration error is already reported; comparing against
-                // a half-built row would only cascade.
-                Err(Aborted) => return,
-            },
-            None => EffectRow::empty(),
-        };
+    /// handler row. `declared` is the summary elaborated at registration.
+    fn check_effect_summary(
+        &mut self,
+        decl: &ActorDecl,
+        actor: &str,
+        declared: &EffectRow,
+        member_rows: &EffectRow,
+    ) {
         self.effect_rows
             .push((NodeKey::of_node(decl.syntax()), declared.clone()));
         let span = name_token_span(decl.syntax(), self.source_id);
-        if let Err(err) = unify_row(&mut self.subst, &declared, member_rows, span) {
+        if let Err(err) = unify_row(&mut self.subst, declared, member_rows, span) {
             match err {
                 TypeError::EffectMismatch { .. } => {
-                    let declared = self.subst.resolve_row(&declared);
+                    let declared = self.subst.resolve_row(declared);
                     let performed = self.subst.resolve_row(member_rows);
                     self.diags.push(CheckDiagnostic::error(
                         CheckCode::C0038,

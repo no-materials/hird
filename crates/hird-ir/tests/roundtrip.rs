@@ -18,11 +18,11 @@
 
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
-    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrConstructor,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorPat, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm,
     IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
-    IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrTuple, IrTuplePat, IrVar,
-    IrWildcardPat, lower_module, pretty_print,
+    IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef, IrTuple,
+    IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -237,6 +237,28 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 name: e.name.clone(),
                 ty: canon_type(&e.ty, &mut map),
                 module: e.module.clone(),
+            })
+        }
+        // A supervisor's only inference freedom is its children's `start_args`
+        // and the derived effect row; the rest is fixed text.
+        IrDecl::Supervisor(s) => {
+            let mut map = VarMap::new();
+            IrDecl::Supervisor(IrSupervisorDef {
+                name: s.name.clone(),
+                strategy: s.strategy.clone(),
+                intensity: s.intensity,
+                period: s.period,
+                children: s
+                    .children
+                    .iter()
+                    .map(|c| IrChildSpec {
+                        id: c.id.clone(),
+                        actor: c.actor.clone(),
+                        start_args: canon_expr(&c.start_args, &mut map),
+                        restart: c.restart.clone(),
+                    })
+                    .collect(),
+                effect_row: canon_effect_row(&s.effect_row, &mut map),
             })
         }
     }
@@ -680,6 +702,102 @@ fn messaging_round_trips() {
          fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)\n\
          fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)",
     );
+}
+
+#[test]
+fn supervisor_round_trips() {
+    // The supervisor prints without an effect annotation (its row is derived),
+    // so re-checking re-derives the same row; the child's identifiers and pure
+    // `start_args` must come back unchanged.
+    assert_roundtrips(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type St = St(Int)\n\
+         tool ReadRepo : { path: Path } -> St\n\
+         fn planner_config() -> St = St(0)\n\
+         actor Planner {\n\
+           state: St,\n\
+           message: Msg = | Plan(Path) | Stop,\n\
+           init: fn(c: St) -> St ! {} = c,\n\
+           handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
+           handle Stop, st -> St ! {} = st,\n\
+         } ! {Tool<ReadRepo>}\n\
+         supervisor PlannerSup {\n\
+           strategy: one_for_one,\n\
+           intensity: 5,\n\
+           period: 60,\n\
+           children: [\n\
+             { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n\
+           ]\n\
+         }",
+    );
+}
+
+#[test]
+fn multi_child_supervisor_round_trips() {
+    // Two children with distinct actors and restart dispositions; the derived
+    // row is the union of both per-actor summaries.
+    assert_roundtrips(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type Title = Title(String)\n\
+         type St = St(Int)\n\
+         tool ReadRepo : { path: Path } -> St\n\
+         tool CreateTicket : { title: Title } -> St\n\
+         fn planner_config() -> St = St(0)\n\
+         fn worker_config() -> St = St(1)\n\
+         actor Planner {\n\
+           state: St,\n\
+           message: PMsg = | Plan(Path),\n\
+           init: fn(c: St) -> St ! {} = c,\n\
+           handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
+         } ! {Tool<ReadRepo>}\n\
+         actor Worker {\n\
+           state: St,\n\
+           message: WMsg = | Work(Title),\n\
+           init: fn(c: St) -> St ! {} = c,\n\
+           handle Work(t), st -> St ! {Tool<CreateTicket>} = create_ticket({ title: t }),\n\
+         } ! {Tool<CreateTicket>}\n\
+         supervisor RootSup {\n\
+           strategy: one_for_one,\n\
+           intensity: 3,\n\
+           period: 10,\n\
+           children: [\n\
+             { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n\
+             { id: worker, actor: Worker, start_args: worker_config(), restart: transient },\n\
+           ]\n\
+         }",
+    );
+}
+
+#[test]
+fn snapshot_supervisor_declaration() {
+    // The printed supervisor keeps its strategy, restart budget, and typed
+    // children, and omits the derived effect row.
+    let module = lower_src(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type St = St(Int)\n\
+         tool ReadRepo : { path: Path } -> St\n\
+         fn planner_config() -> St = St(0)\n\
+         actor Planner {\n\
+           state: St,\n\
+           message: Msg = | Plan(Path) | Stop,\n\
+           init: fn(c: St) -> St ! {} = c,\n\
+           handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),\n\
+           handle Stop, st -> St ! {} = st,\n\
+         } ! {Tool<ReadRepo>}\n\
+         supervisor PlannerSup {\n\
+           strategy: one_for_one,\n\
+           intensity: 5,\n\
+           period: 60,\n\
+           children: [\n\
+             { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n\
+           ]\n\
+         }",
+        "Sup",
+    );
+    insta::assert_snapshot!(pretty_print(&module));
 }
 
 #[test]

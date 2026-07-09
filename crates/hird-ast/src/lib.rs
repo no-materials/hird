@@ -589,8 +589,8 @@ impl FnSig {
 }
 
 ast_node! {
-    /// A supervisor declaration. Its body is parsed but not yet typed; reach it
-    /// via [`AstNode::syntax`].
+    /// A supervisor declaration (`supervisor Name { fields }`). The body is a
+    /// closed set of `strategy`, `intensity`, `period`, and `children` fields.
     SupervisorDecl => SUPERVISOR_DECL
 }
 
@@ -605,6 +605,33 @@ impl SupervisorDecl {
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         name(&self.0)
+    }
+
+    /// The body fields (`strategy`, `intensity`, `period`, `children`), in
+    /// source order.
+    pub fn fields(&self) -> impl Iterator<Item = SupervisorField> + '_ {
+        children(&self.0)
+    }
+}
+
+ast_node! {
+    /// A supervisor body field (`name: value`). The value is an expression:
+    /// a strategy or restart identifier, an integer literal, or the `children`
+    /// list of child-spec records.
+    SupervisorField => SUPERVISOR_FIELD
+}
+
+impl SupervisorField {
+    /// The field name (`strategy`, `intensity`, `period`, or `children`).
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+
+    /// The field value (after `:`).
+    #[must_use]
+    pub fn value(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::COLON)
     }
 }
 

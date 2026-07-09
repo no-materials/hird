@@ -194,7 +194,10 @@ fn actor_supervisor_names() {
     assert_eq!(actor.name(), Some("Planner"));
     assert!(!actor.is_pub());
 
-    let sup_file = file("supervisor PlannerSup { strategy: one_for_one }");
+    let sup_file = file(
+        "supervisor PlannerSup { strategy: one_for_one, intensity: 5, period: 60, \
+         children: [ { id: planner, actor: Planner, start_args: cfg, restart: permanent } ] }",
+    );
     let sup = sup_file
         .declarations()
         .find_map(|d| match d {
@@ -203,6 +206,36 @@ fn actor_supervisor_names() {
         })
         .unwrap();
     assert_eq!(sup.name(), Some("PlannerSup"));
+
+    // The body projects as named fields, each carrying its value expression.
+    let field_names: Vec<String> = sup
+        .fields()
+        .filter_map(|f| f.name().map(String::from))
+        .collect();
+    assert_eq!(field_names, ["strategy", "intensity", "period", "children"]);
+
+    let strategy = sup.fields().find(|f| f.name() == Some("strategy")).unwrap();
+    assert!(matches!(strategy.value(), Some(Expr::Name(n)) if n.text() == "one_for_one"));
+    let intensity = sup
+        .fields()
+        .find(|f| f.name() == Some("intensity"))
+        .unwrap();
+    assert!(matches!(intensity.value(), Some(Expr::Literal(l)) if l.text() == "5"));
+
+    // `children` is a list of child-spec records; `actor` is a keyword-spelled
+    // record-field name.
+    let children = sup.fields().find(|f| f.name() == Some("children")).unwrap();
+    let Some(Expr::List(list)) = children.value() else {
+        panic!("children is a list literal");
+    };
+    let Some(Expr::Record(spec)) = list.elements().next() else {
+        panic!("the child spec is a record literal");
+    };
+    let spec_fields: Vec<String> = spec
+        .fields()
+        .filter_map(|f| f.name().map(String::from))
+        .collect();
+    assert_eq!(spec_fields, ["id", "actor", "start_args", "restart"]);
 }
 
 // ── expressions ─────────────────────────────────────────────────

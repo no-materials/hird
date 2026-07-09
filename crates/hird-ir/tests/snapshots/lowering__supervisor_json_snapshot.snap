@@ -1,0 +1,194 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Sup",
+  "declarations": [
+    {
+      "kind": "Type",
+      "name": "Path",
+      "params": [],
+      "constructors": [
+        {
+          "name": "Path",
+          "fields": [
+            "String"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Type",
+      "name": "St",
+      "params": [],
+      "constructors": [
+        {
+          "name": "St",
+          "fields": [
+            "Int"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Tool",
+      "name": "ReadRepo",
+      "params": [],
+      "input": "{ path: Path }",
+      "output": "St",
+      "effect_row": "{}"
+    },
+    {
+      "kind": "Fn",
+      "name": "planner_config",
+      "params": [],
+      "return_type": "St",
+      "effect_row": "{}",
+      "body": {
+        "kind": "Constructor",
+        "name": "St",
+        "type_name": "St",
+        "args": [
+          {
+            "kind": "Literal",
+            "value": {
+              "Int": "0"
+            },
+            "type": "Int"
+          }
+        ],
+        "result_type": "St"
+      }
+    },
+    {
+      "kind": "Actor",
+      "name": "Planner",
+      "state": "St",
+      "message": {
+        "name": "Msg",
+        "params": [],
+        "constructors": [
+          {
+            "name": "Plan",
+            "fields": [
+              "Path"
+            ]
+          },
+          {
+            "name": "Stop",
+            "fields": []
+          }
+        ]
+      },
+      "init": {
+        "params": [
+          {
+            "name": "c",
+            "type": "St"
+          }
+        ],
+        "effect_row": "{}",
+        "body": {
+          "kind": "Var",
+          "name": "c",
+          "type": "St"
+        }
+      },
+      "handlers": [
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Plan",
+            "type_name": "Msg",
+            "fields": [
+              {
+                "kind": "Bind",
+                "name": "p",
+                "type": "Path"
+              }
+            ],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Bind",
+            "name": "st",
+            "type": "St"
+          },
+          "effect_row": "{Tool<ReadRepo>}",
+          "body": {
+            "kind": "App",
+            "func": {
+              "kind": "Var",
+              "name": "read_repo",
+              "type": "{ path: Path } → St ! {Tool<ReadRepo>}"
+            },
+            "args": [
+              {
+                "kind": "Record",
+                "fields": [
+                  {
+                    "label": "path",
+                    "value": {
+                      "kind": "Var",
+                      "name": "p",
+                      "type": "Path"
+                    }
+                  }
+                ],
+                "type": "{ path: Path }"
+              }
+            ],
+            "result_type": "St"
+          }
+        },
+        {
+          "message": {
+            "kind": "Constructor",
+            "name": "Stop",
+            "type_name": "Msg",
+            "fields": [],
+            "type": "Msg"
+          },
+          "state": {
+            "kind": "Bind",
+            "name": "st",
+            "type": "St"
+          },
+          "effect_row": "{}",
+          "body": {
+            "kind": "Var",
+            "name": "st",
+            "type": "St"
+          }
+        }
+      ],
+      "effect_row": "{Tool<ReadRepo>}"
+    },
+    {
+      "kind": "Supervisor",
+      "name": "PlannerSup",
+      "strategy": "one_for_one",
+      "intensity": 5,
+      "period": 60,
+      "children": [
+        {
+          "id": "planner",
+          "actor": "Planner",
+          "start_args": {
+            "kind": "App",
+            "func": {
+              "kind": "Var",
+              "name": "planner_config",
+              "type": "() → St"
+            },
+            "args": [],
+            "result_type": "St"
+          },
+          "restart": "permanent"
+        }
+      ],
+      "effect_row": "{Tool<ReadRepo>}"
+    }
+  ]
+}

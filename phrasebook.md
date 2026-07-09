@@ -174,6 +174,17 @@ supervisor PlannerSup {
 }
 ```
 
+- Body fields are a closed set — `strategy`, `intensity`, `period`, `children`
+  — each required, each written once. `intensity` and `period` are positive
+  integers, with no defaults.
+- Each child names a declared `actor`, a unique lowercase `id`, a pure
+  `start_args` checked against the actor's single init parameter, and a
+  `restart` of `permanent`, `temporary`, or `transient`.
+- The supervisor's effect row is derived (the union of its children's per-actor
+  summaries), never declared — there is no trailing `! { … }`.
+- `strategy` is `one_for_one` in v0.1; `one_for_all` and `rest_for_one` parse
+  but warn as not yet implemented.
+
 ---
 
 ## Typed References

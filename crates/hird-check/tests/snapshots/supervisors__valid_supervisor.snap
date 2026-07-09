@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"supervisor PlannerSup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n  ]\n}\"))"
+---
+supervisor PlannerSup ! {Tool<ReadRepo>}

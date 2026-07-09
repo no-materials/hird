@@ -601,3 +601,66 @@ fn messaging_json_snapshot() {
     let module = lower(MESSAGING, "Messaging");
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
+
+// ── supervisor declarations ──────────────────────────────────────
+
+/// A planner actor supervised by a `one_for_one` supervisor, shared by the
+/// supervisor lowering tests.
+const SUPERVISED: &str = "\
+effect Tool<t>
+type Path = Path(String)
+type St = St(Int)
+tool ReadRepo : { path: Path } -> St
+fn planner_config() -> St = St(0)
+actor Planner {
+  state: St,
+  message: Msg = | Plan(Path) | Stop,
+  init: fn(c: St) -> St ! {} = c,
+  handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),
+  handle Stop, st -> St ! {} = st,
+} ! {Tool<ReadRepo>}
+supervisor PlannerSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },
+  ]
+}";
+
+#[test]
+fn supervisor_lowers_to_supervisor_node() {
+    let module = lower(SUPERVISED, "Sup");
+    let sup = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Supervisor(s) => Some(s),
+            _ => None,
+        })
+        .expect("supervisor declaration is present");
+    assert_eq!(sup.name, "PlannerSup");
+    assert_eq!(sup.strategy, "one_for_one");
+    assert_eq!(sup.intensity, 5);
+    assert_eq!(sup.period, 60);
+    // The derived row is the child actor's per-actor summary.
+    assert_eq!(format!("{}", sup.effect_row), "{Tool<ReadRepo>}");
+    // One child: its identifiers verbatim, its start argument the lowered
+    // config call.
+    assert_eq!(sup.children.len(), 1);
+    let child = &sup.children[0];
+    assert_eq!(child.id, "planner");
+    assert_eq!(child.actor, "Planner");
+    assert_eq!(child.restart, "permanent");
+    let IrExpr::App(app) = &child.start_args else {
+        panic!("start_args should be a call, got {:?}", child.start_args);
+    };
+    assert!(matches!(app.func.as_ref(), IrExpr::Var(v) if v.name == "planner_config"));
+    assert!(app.args.is_empty());
+}
+
+#[test]
+fn supervisor_json_snapshot() {
+    let module = lower(SUPERVISED, "Sup");
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}

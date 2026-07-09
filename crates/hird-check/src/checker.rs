@@ -106,6 +106,10 @@ pub(crate) struct Checker {
     /// First-seen name-token span of each actor definition. Actors are their
     /// own namespace, separate from types and values.
     actor_spans: BTreeMap<String, Span>,
+    /// First-seen name-token span of each supervisor definition. Supervisors
+    /// are their own namespace, referenced by nothing in v0.1 but detected for
+    /// duplicates.
+    supervisor_spans: BTreeMap<String, Span>,
     /// Imported module qualifiers mapped to their exported value schemes, for
     /// `Mod.member` qualified access.
     pub(crate) modules: BTreeMap<String, BTreeMap<String, Type>>,
@@ -142,6 +146,7 @@ impl Checker {
             value_spans: BTreeMap::new(),
             type_spans: BTreeMap::new(),
             actor_spans: BTreeMap::new(),
+            supervisor_spans: BTreeMap::new(),
             modules: BTreeMap::new(),
             exported_fns: Vec::new(),
             exported_types: Vec::new(),
@@ -169,6 +174,7 @@ impl Checker {
         let mut effect_decls = Vec::new();
         let mut tool_decls = Vec::new();
         let mut actor_decls = Vec::new();
+        let mut supervisor_decls = Vec::new();
         for decl in file.declarations() {
             match decl {
                 Decl::Type(d) => type_decls.push(d),
@@ -177,8 +183,8 @@ impl Checker {
                 Decl::Effect(d) => effect_decls.push(d),
                 Decl::Tool(d) => tool_decls.push(d),
                 Decl::Actor(d) => actor_decls.push(d),
-                // Modules and imports are the module system's pass;
-                // supervisors are a later phase.
+                Decl::Supervisor(d) => supervisor_decls.push(d),
+                // Modules and imports are the module system's pass.
                 _ => {}
             }
         }
@@ -235,6 +241,11 @@ impl Checker {
         self.check_functions(&fn_decls);
         for decl in &actor_decls {
             let _ = self.check_actor(decl);
+        }
+        // Supervisors come last: child `start_args` are checked against final
+        // function schemes, and children resolve against registered actors.
+        for decl in &supervisor_decls {
+            self.check_supervisor(decl);
         }
         self.finish_with_interface()
     }
@@ -358,6 +369,19 @@ impl Checker {
         );
     }
 
+    /// Records a supervisor-namespace definition at `span`, reporting a
+    /// duplicate (C0046) against the first occurrence.
+    fn note_supervisor_name(&mut self, name: &str, span: Span) {
+        note_duplicate(
+            &mut self.diags,
+            &mut self.supervisor_spans,
+            CheckCode::C0046,
+            name,
+            span,
+            || format!("duplicate supervisor `{name}`"),
+        );
+    }
+
     /// Walks declarations in source order, recording each name in its namespace
     /// and reporting collisions. Types and values are separate namespaces, so a
     /// type and a value may share a name (`type Email = Email(String)`).
@@ -406,6 +430,12 @@ impl Checker {
                         self.note_actor_name(name, span);
                     }
                     self.detect_actor_message_duplicates(&d);
+                }
+                Decl::Supervisor(d) => {
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_supervisor_name(name, span);
+                    }
                 }
                 _ => {}
             }

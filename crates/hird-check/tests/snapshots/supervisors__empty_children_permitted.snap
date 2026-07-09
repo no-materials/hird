@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"supervisor Idle {\n  strategy: one_for_one,\n  intensity: 1,\n  period: 5,\n  children: []\n}\"))"
+---
+supervisor Idle ! {}

@@ -1,0 +1,32 @@
+---
+source: crates/hird-ir/tests/roundtrip.rs
+expression: pretty_print(&module)
+---
+module Sup
+
+effect Tool<t0>
+
+type Path = Path(String)
+
+type St = St(Int)
+
+tool ReadRepo : { path: Path } → St
+
+fn planner_config() → St = St(0)
+
+actor Planner {
+  state: St,
+  message: Msg = Plan(Path) | Stop,
+  init: fn(c: St) → St = c,
+  handle Plan(p), st → St ! {Tool<ReadRepo>} = read_repo({ path: p }),
+  handle Stop, st → St = st,
+} ! {Tool<ReadRepo>}
+
+supervisor PlannerSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },
+  ]
+}
