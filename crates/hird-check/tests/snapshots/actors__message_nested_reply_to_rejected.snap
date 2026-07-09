@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Ask(Option<ReplyTo<Status>>) | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Ask(r), st -> St ! {} = st,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+---
+Ask : Option<ReplyTo<Status>> → Msg
+St : Int → St
+Status : Int → Status
+Stop : Msg
+error[C0044] 82..85: message constructor `Ask` nests `ReplyTo` within `Option<ReplyTo<Status>>`; a reply channel may appear only as a direct field of a message constructor

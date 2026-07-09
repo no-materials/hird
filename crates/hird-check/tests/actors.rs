@@ -464,6 +464,165 @@ fn reply_value_type_mismatch_rejected() {
     insta::assert_snapshot!(check_str(&source));
 }
 
+// ── ReplyTo wire restrictions ───────────────────────────────────
+
+/// The `request` builder must be a bare message constructor: a lambda that
+/// builds the message is rejected, so codegen can always strip the channel.
+#[test]
+fn request_builder_rejects_lambda() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn query(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, λr → Get(r))"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A bare name that is not a constructor — an ordinary function — is not an
+/// acceptable builder either.
+#[test]
+fn request_builder_rejects_non_constructor() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn mk(n: Int) -> Status = Status(n)\n\
+         fn query(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, mk)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// Applying a constructor that carries a reply channel is a compile error:
+/// with two wire shapes forbidden, a call message cannot ride a `send`.
+#[test]
+fn call_constructor_application_rejected() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn forward(p: Pid<Msg>, r: ReplyTo<Status>) ! {{Send<Msg>}} = send(p, Get(r))"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// Naming a reply-channel constructor as a bare value — anywhere but a
+/// `request` builder — is the same violation.
+#[test]
+fn call_constructor_value_rejected() {
+    let source = format!("{MESSAGING}\nfn grab() = Get");
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A message constructor may not nest a `ReplyTo` inside another type
+/// constructor: the reply channel must be a direct field.
+#[test]
+fn message_nested_reply_to_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Ask(Option<ReplyTo<Status>>) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Ask(r), st -> St ! {} = st,\n\
+           handle Stop, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// Nesting through a named type is caught too: the walk resolves the
+/// reference to find the hidden `ReplyTo`.
+#[test]
+fn message_reply_to_through_named_type_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type Wrapper = Wrap(ReplyTo<Status>)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Ask(Wrapper) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Ask(w), st -> St ! {} = st,\n\
+           handle Stop, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// A `ReplyTo` handed to a generic type as a type argument is nesting too:
+/// the walk sees the channel in the argument position regardless of the
+/// wrapper's definition.
+#[test]
+fn message_reply_to_as_type_argument_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type Box<a> = BoxOf(a)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Ask(Box<ReplyTo<Status>>) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Ask(b), st -> St ! {} = st,\n\
+           handle Stop, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// A constructor declaring more than one reply channel is rejected: a reply
+/// channel may appear at most once.
+#[test]
+fn message_repeated_reply_to_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Two(ReplyTo<Status>, ReplyTo<Status>) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Two(a, b), st -> St ! {} = st,\n\
+           handle Stop, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// A reply-channel constructor carrying payload alongside the channel is
+/// rejected at the declaration: the channel must be its only field.
+#[test]
+fn message_reply_to_with_payload_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Msg = | Query(String, ReplyTo<Status>) | Stop,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Query(name, r), st -> St ! {} = st,\n\
+           handle Stop, st -> St ! {} = st,\n\
+         }"
+    ));
+}
+
+/// A `ReplyTo` in the actor's state type stays legal: deferred replies store
+/// the channel and answer later, so state may nest it freely.
+#[test]
+fn reply_to_in_state_type_accepted() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type Pending = Pending(Option<ReplyTo<Status>>)\n\
+         actor A {\n\
+           state: Pending,\n\
+           message: Msg = | Ask(ReplyTo<Status>) | Stop,\n\
+           init: fn(s: Pending) -> Pending ! {} = s,\n\
+           handle Ask(r), st -> Pending ! {} = st,\n\
+           handle Stop, st -> Pending ! {} = st,\n\
+         }"
+    ));
+}
+
+/// A reply-channel-carrying sum that is never a mailbox stays legal — its
+/// constructors are simply unusable as message builders.
+#[test]
+fn reply_to_carrying_sum_unused_is_legal() {
+    insta::assert_snapshot!(check_str(
+        "type Status = Status(Int)\n\
+         type Query = Ask(ReplyTo<Status>) | Cancel"
+    ));
+}
+
 // ── receive exhaustiveness ──────────────────────────────────────
 
 /// An actor missing a handler is rejected with the unhandled variant named.

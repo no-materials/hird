@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+grab : ∀a. a
+error[C0043] 350..353: `Get` carries a reply channel; it can only be used as the message builder of `request`

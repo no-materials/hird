@@ -28,7 +28,7 @@ use hird_types::{EffectRow, Name, Type, TypeError, unify_row};
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
-use crate::registry::CtorInfo;
+use crate::registry::{CtorInfo, is_reply_to};
 use crate::{NodeKey, expr_span, name_token_span, node_span, type_expr_span};
 
 /// A registered actor: the interface `spawn` and encapsulation checks consult.
@@ -305,6 +305,8 @@ impl Checker {
             return Ok(());
         };
 
+        self.check_message_reply_to(decl);
+
         if let Some(init_field) = actor_field(decl, "init") {
             let _ = self.check_init_body(&init_field, &info);
         }
@@ -318,6 +320,79 @@ impl Checker {
         self.check_handler_coverage(decl, name, &info, &seen);
         self.check_effect_summary(decl, name, &member_rows);
         Ok(())
+    }
+
+    /// Enforces the wire restrictions on `ReplyTo` within a mailbox's message
+    /// constructors: a reply channel may appear only as a direct field, at most
+    /// once, and never alongside other fields. Nesting is
+    /// checked through named type references (cycle-safe), so a `ReplyTo`
+    /// smuggled inside a record or another ADT is caught. `ReplyTo` elsewhere —
+    /// an actor's state type, a non-mailbox sum — stays legal, since only a
+    /// mailbox's own constructors are walked here.
+    fn check_message_reply_to(&mut self, decl: &ActorDecl) {
+        let Some(message_field) = actor_field(decl, "message") else {
+            return;
+        };
+        let mut diags = Vec::new();
+        for ctor in message_field.constructors() {
+            let Some(name) = ctor.name() else {
+                continue;
+            };
+            let span = name_token_span(ctor.syntax(), self.source_id);
+            let fields = self.registry.ctor_field_types(name);
+            let mut direct = 0_usize;
+            let mut payload = 0_usize;
+            let mut nested: Option<Type> = None;
+            for field in &fields {
+                if is_reply_to(field) {
+                    direct += 1;
+                    // A direct channel is legal; a `ReplyTo` inside its own type
+                    // argument (`ReplyTo<ReplyTo<…>>`) is a nested occurrence.
+                    if let Type::TyCon(_, args) = field
+                        && args.iter().any(|arg| self.registry.contains_reply_to(arg))
+                        && nested.is_none()
+                    {
+                        nested = Some(field.clone());
+                    }
+                } else {
+                    payload += 1;
+                    if self.registry.contains_reply_to(field) && nested.is_none() {
+                        nested = Some(field.clone());
+                    }
+                }
+            }
+            if let Some(field) = nested {
+                diags.push(CheckDiagnostic::error(
+                    CheckCode::C0044,
+                    span,
+                    format!(
+                        "message constructor `{name}` nests `ReplyTo` within `{}`; a reply \
+                         channel may appear only as a direct field of a message constructor",
+                        field.normalized()
+                    ),
+                ));
+            } else if direct >= 2 {
+                diags.push(CheckDiagnostic::error(
+                    CheckCode::C0044,
+                    span,
+                    format!(
+                        "message constructor `{name}` declares more than one `ReplyTo` field; \
+                         a reply channel may appear at most once"
+                    ),
+                ));
+            }
+            if direct >= 1 && payload >= 1 {
+                diags.push(CheckDiagnostic::error(
+                    CheckCode::C0045,
+                    span,
+                    format!(
+                        "message constructor `{name}` carries a `ReplyTo` field alongside other \
+                         fields; a reply channel must be the constructor's only field"
+                    ),
+                ));
+            }
+        }
+        self.diags.extend(diags);
     }
 
     /// Checks that the handlers cover every constructor of the message type.

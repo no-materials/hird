@@ -123,6 +123,17 @@ pub enum CheckCode {
     /// An actor's handlers do not cover every constructor of its message
     /// type.
     C0041,
+    /// A `request` message builder is not a bare message constructor.
+    C0042,
+    /// A constructor carrying a `ReplyTo` field is used outside a `request`
+    /// builder — as an ordinary value or application.
+    C0043,
+    /// A message constructor nests a `ReplyTo` field (directly or through a
+    /// named type) or declares more than one.
+    C0044,
+    /// A message constructor carries a `ReplyTo` field alongside other fields;
+    /// a reply channel must be the constructor's only field.
+    C0045,
 }
 
 /// A secondary source location attached to a diagnostic.

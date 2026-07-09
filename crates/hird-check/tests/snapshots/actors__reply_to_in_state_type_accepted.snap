@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Pending = Pending(Option<ReplyTo<Status>>)\\n\\\n         actor A {\\n\\\n           state: Pending,\\n\\\n           message: Msg = | Ask(ReplyTo<Status>) | Stop,\\n\\\n           init: fn(s: Pending) -> Pending ! {} = s,\\n\\\n           handle Ask(r), st -> Pending ! {} = st,\\n\\\n           handle Stop, st -> Pending ! {} = st,\\n\\\n         }\")"
+---
+Ask : ReplyTo<Status> → Msg
+Pending : Option<ReplyTo<Status>> → Pending
+Status : Int → Status
+Stop : Msg

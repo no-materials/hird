@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+mk : Int → Status
+query : Pid<Msg> → Status ! {Await<Status>, Send<Msg>}
+error[C0042] 448..450: the message builder of `request` must be a bare message constructor (e.g. `Get`), not an arbitrary function

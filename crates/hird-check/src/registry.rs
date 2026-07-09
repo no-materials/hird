@@ -3,7 +3,7 @@
 
 //! The ADT registry: declared types, their constructors, and built-ins.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use hird_types::{Name, Type};
@@ -160,4 +160,81 @@ impl Registry {
             .get(&Name::new(name))
             .map(|info| info.constructors.as_slice())
     }
+
+    /// Whether constructor `name` carries a `ReplyTo` field directly — a "call
+    /// constructor" in the actor protocol, usable only as `request`'s message
+    /// builder. Undeclared or nullary constructors carry none.
+    pub(crate) fn ctor_carries_reply_to(&self, name: &str) -> bool {
+        self.ctor(name)
+            .is_some_and(|info| ctor_fields(&info.scheme).iter().any(is_reply_to))
+    }
+
+    /// The field types of constructor `name` — the parameter types of its
+    /// scheme — or empty when the constructor is nullary or undeclared.
+    pub(crate) fn ctor_field_types(&self, name: &str) -> Vec<Type> {
+        self.ctor(name)
+            .map(|info| ctor_fields(&info.scheme).to_vec())
+            .unwrap_or_default()
+    }
+
+    /// Whether `ty` mentions `ReplyTo` anywhere, resolving named ADTs through
+    /// their declared constructors so a `ReplyTo` baked into a type's fields is
+    /// found. Cycle-guarded, so a recursive type terminates.
+    pub(crate) fn contains_reply_to(&self, ty: &Type) -> bool {
+        self.reply_to_within(ty, &mut BTreeSet::new())
+    }
+
+    /// The cycle-guarded walk behind [`Registry::contains_reply_to`]. A named
+    /// type is descended once (tracked in `visited`); a type argument's
+    /// `ReplyTo` is found directly, so instantiation need not be modelled.
+    fn reply_to_within(&self, ty: &Type, visited: &mut BTreeSet<Name>) -> bool {
+        match ty {
+            Type::TyVar(_) => false,
+            Type::TyCon(name, args) => {
+                if name.as_str() == "ReplyTo" {
+                    return true;
+                }
+                if args.iter().any(|arg| self.reply_to_within(arg, visited)) {
+                    return true;
+                }
+                match self.adts.get(name) {
+                    Some(info) if visited.insert(name.clone()) => {
+                        let ctors = info.constructors.clone();
+                        ctors.iter().any(|ctor| {
+                            self.ctor_field_types(ctor.as_str())
+                                .iter()
+                                .any(|field| self.reply_to_within(field, visited))
+                        })
+                    }
+                    _ => false,
+                }
+            }
+            Type::TyFn(params, ret, _) => {
+                params.iter().any(|p| self.reply_to_within(p, visited))
+                    || self.reply_to_within(ret, visited)
+            }
+            Type::TyTuple(elems) => elems.iter().any(|e| self.reply_to_within(e, visited)),
+            Type::TyRecord(fields) => fields.values().any(|v| self.reply_to_within(v, visited)),
+            Type::TyForall(_, _, inner) => self.reply_to_within(inner, visited),
+        }
+    }
+}
+
+/// The parameter (field) types of a constructor scheme, or an empty slice when
+/// the constructor is nullary. Strips the generalisation quantifier a declared
+/// ADT's scheme carries.
+fn ctor_fields(scheme: &Type) -> &[Type] {
+    let body = match scheme {
+        Type::TyForall(_, _, inner) => inner.as_ref(),
+        other => other,
+    };
+    match body {
+        Type::TyFn(params, _, _) => params,
+        _ => &[],
+    }
+}
+
+/// Whether `ty`'s head is the built-in `ReplyTo`.
+pub(crate) fn is_reply_to(ty: &Type) -> bool {
+    matches!(ty, Type::TyCon(name, _) if name.as_str() == "ReplyTo")
 }

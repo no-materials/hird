@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Query = Ask(ReplyTo<Status>) | Cancel\")"
+---
+Ask : ReplyTo<Status> → Query
+Cancel : Query
+Status : Int → Status

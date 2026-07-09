@@ -77,6 +77,20 @@ impl Checker {
                         format!("unbound name `{text}`"),
                     ));
                 };
+                // A constructor carrying a reply channel has exactly one wire
+                // shape: it is applicable only as `request`'s builder, which
+                // resolves it without reaching this value path.
+                if self.registry.ctor_carries_reply_to(text) {
+                    let span = token_span(name.syntax(), self.source_id);
+                    return Err(self.error(
+                        CheckCode::C0043,
+                        span,
+                        format!(
+                            "`{text}` carries a reply channel; it can only be used as \
+                             the message builder of `request`"
+                        ),
+                    ));
+                }
                 Ok(self.subst.instantiate(&scheme))
             }
             Expr::Let(le) => self.infer_let(le),
@@ -421,7 +435,7 @@ impl Checker {
         let msg_ty = self.check_pid(&pid)?;
         let reply_ty = self.subst.fresh_type();
         let fn_span = expr_span(&message_fn, self.source_id);
-        let fn_ty = self.infer_expr(&message_fn)?;
+        let fn_ty = self.request_builder_type(&message_fn, fn_span)?;
         // A fresh row for the builder: a constructor is pure, but whatever the
         // builder performs happens here, in the caller, so its row joins the
         // caller's alongside the messaging effects.
@@ -439,6 +453,42 @@ impl Checker {
         ]);
         self.add_effects(&row, span);
         Ok(reply_ty)
+    }
+
+    /// Resolves a `request` builder, which must be a bare message constructor:
+    /// only then can codegen statically strip the reply channel to build the
+    /// call payload. Resolving it here — rather than through
+    /// [`Checker::infer_expr`] — is what lets its one legal use escape the
+    /// call-constructor ban ([`CheckCode::C0043`]). A lambda or any other
+    /// expression is rejected ([`CheckCode::C0042`]); whether the constructor
+    /// actually carries a reply channel is left to the caller's unification.
+    fn request_builder_type(&mut self, message_fn: &Expr, span: Span) -> Checked<Type> {
+        let mut expr = message_fn.clone();
+        while let Expr::Paren(paren) = &expr {
+            let Some(inner) = paren.inner() else {
+                return Err(Aborted);
+            };
+            expr = inner;
+        }
+        if let Expr::Name(name) = &expr {
+            let scheme = self
+                .registry
+                .ctor(name.text())
+                .map(|info| info.scheme.clone());
+            if let Some(scheme) = scheme {
+                let fn_ty = self.subst.instantiate(&scheme);
+                self.types.push((NodeKey::of_expr(&expr), fn_ty.clone()));
+                return Ok(fn_ty);
+            }
+        }
+        Err(self.error(
+            CheckCode::C0042,
+            span,
+            String::from(
+                "the message builder of `request` must be a bare message constructor \
+                 (e.g. `Get`), not an arbitrary function",
+            ),
+        ))
     }
 
     /// `reply(reply_to, value)` — answers a request on its typed channel.
