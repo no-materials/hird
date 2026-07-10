@@ -1,6 +1,6 @@
 ---
 id: hir-zp13
-status: open
+status: closed
 deps: [hir-0bhk]
 links: []
 created: 2026-05-22T21:41:10Z
@@ -94,3 +94,7 @@ Also emits the crash! primitive: the IrExpr::Crash node (introduced by hir-0bhk)
 **2026-07-10T09:16:54Z**
 
 Emission mechanics locked as ADR-022: single trailing handler-map parameter on effectful functions, tool calls route through hird_tool_dispatch:call/3, unhandled tools fall back to the runtime registry then crash, declaration-level source comments backed by new span fields on IR declaration structs. Body and acceptance criteria amended accordingly; hird_runtime.erl line removed (runtime modules are hir-7oph's, this ticket only references them).
+
+**2026-07-10T09:56:10Z**
+
+Implemented and closed. hird-codegen emits one .erl per module: all IR expression kinds, ADR-022 handler-map threading (trailing Handlers@ param on non-empty/open rows, handle blocks extend the in-scope map with binary-fun entries, tool calls route through hird_tool_dispatch:call/3, eta-expansion on convention mismatch), ADR-020 messaging (spawn -> start_link, send -> cast, request -> call/5000, reply -> gen_server:reply), crash! -> erlang:error/1, and declaration-level %% file:line comments backed by new serde-skipped IrSpan fields populated in lowering (IrLambda also gained its effect row for the type-directed convention). 17 erlc-validated snapshot tests; also verified end to end on BEAM against a stub dispatcher honouring the runtime contract (mocked tool + handle block returned the expected value). Actor/supervisor behaviour-module shells remain hir-1dvq/hir-z9rn; runtime library is hir-7oph. Commits: 880c917 (ir), bbeb764 (codegen).

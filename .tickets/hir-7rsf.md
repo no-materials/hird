@@ -59,7 +59,7 @@ inspectable).
 
 ## Task sequence
 
-1. [ ] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
+1. [x] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
 2. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 3. [ ] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
@@ -98,3 +98,9 @@ Steps 2–5 are independent after step 1. Step 6 requires all of them.
 - Generated Erlang is human-readable (inspectable, not obfuscated).
 - `cargo clippy` and `cargo test` pass for `hird-codegen` and `hird-cli`.
 
+
+## Notes
+
+**2026-07-10T09:56:10Z**
+
+Task 1 (hir-zp13, Erlang source emission from IR) is done: expression emitter, handler-map threading, tool dispatch call sites, and declaration span comments are in hird-codegen, erlc-validated. Steps 2-5 (hir-1dvq, hir-z9rn, hir-7oph, hir-y9jo) are now unblocked and independent.
