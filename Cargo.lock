@@ -337,7 +337,12 @@ dependencies = [
 name = "hird-codegen"
 version = "0.1.0"
 dependencies = [
+ "hird-ast",
+ "hird-check",
  "hird-ir",
+ "hird-parse",
+ "hird-types",
+ "insta",
 ]
 
 [[package]]

@@ -1,0 +1,16 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Person\"), \"Person\")"
+---
+%% Generated from src/person.hird by the Hirð compiler. Do not edit.
+-module(hird_person).
+-export([make/0, age/0]).
+
+%% src/person.hird:1
+make() ->
+    #{name => <<"x"/utf8>>, age => 1}.
+
+%% src/person.hird:2
+age() ->
+    R = #{name => <<"x"/utf8>>, age => 1},
+    maps:get(age, R).

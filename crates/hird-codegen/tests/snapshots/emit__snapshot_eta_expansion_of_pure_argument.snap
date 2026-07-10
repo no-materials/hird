@@ -1,0 +1,30 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Eta\"), \"Eta\")"
+---
+%% Generated from src/eta.hird by the Hirð compiler. Do not edit.
+-module(hird_eta).
+-export([apply/3, call_pure/2, inc/1, absorb/0, supply/0]).
+
+%% src/eta.hird:1
+apply(G, X, Handlers@) ->
+    G(X, Handlers@).
+
+%% src/eta.hird:2
+call_pure(F, X) ->
+    F(X).
+
+%% src/eta.hird:3
+inc(N) ->
+    N + 1.
+
+%% src/eta.hird:4
+absorb() ->
+    apply(fun(V@1, _) -> inc(V@1) end, 1, #{}).
+
+%% src/eta.hird:5
+supply() ->
+    Id = fun(X) ->
+        X
+    end,
+    call_pure(Id, 2).

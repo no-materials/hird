@@ -1,0 +1,11 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Repo\"), \"Repo\")"
+---
+%% Generated from src/repo.hird by the Hirð compiler. Do not edit.
+-module(hird_repo).
+-export([scan/2]).
+
+%% src/repo.hird:5
+scan(P, Handlers@) ->
+    hird_tool_dispatch:call(read_repo, Handlers@, #{path => P}).

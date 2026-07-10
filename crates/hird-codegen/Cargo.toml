@@ -10,6 +10,13 @@ publish = false
 
 [dependencies]
 hird-ir.workspace = true
+hird-types.workspace = true
+
+[dev-dependencies]
+hird-ast.workspace = true
+hird-check.workspace = true
+hird-parse.workspace = true
+insta = "1"
 
 [lints]
 workspace = true

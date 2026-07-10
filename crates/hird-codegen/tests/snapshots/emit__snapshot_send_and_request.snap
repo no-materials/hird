@@ -1,0 +1,15 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Msg\"), \"Msg\")"
+---
+%% Generated from src/msg.hird by the Hirð compiler. Do not edit.
+-module(hird_msg).
+-export([poke/2, query/2]).
+
+%% src/msg.hird:12
+poke(P, _Handlers@) ->
+    gen_server:cast(P, inc).
+
+%% src/msg.hird:13
+query(P, _Handlers@) ->
+    gen_server:call(P, get, 5000).

@@ -1,0 +1,16 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Boom\"), \"Boom\")"
+---
+%% Generated from src/boom.hird by the Hirð compiler. Do not edit.
+-module(hird_boom).
+-export([unwrap/1]).
+
+%% src/boom.hird:2
+unwrap(O) ->
+    case O of
+        {some, X} ->
+            X;
+        none ->
+            erlang:error(<<"empty"/utf8>>)
+    end.

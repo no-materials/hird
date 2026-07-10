@@ -1,0 +1,16 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Opt\"), \"Opt\")"
+---
+%% Generated from src/opt.hird by the Hirð compiler. Do not edit.
+-module(hird_opt).
+-export([unwrap/1]).
+
+%% src/opt.hird:2
+unwrap(Opt) ->
+    case Opt of
+        {some, X} ->
+            X;
+        none ->
+            0
+    end.

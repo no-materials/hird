@@ -1,0 +1,12 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Boot\"), \"Boot\")"
+---
+%% Generated from src/boot.hird by the Hirð compiler. Do not edit.
+-module(hird_boot).
+-export([boot/2]).
+
+%% src/boot.hird:9
+boot(S, _Handlers@) ->
+    {ok, Pid@1} = hird_counter:start_link(S),
+    Pid@1.

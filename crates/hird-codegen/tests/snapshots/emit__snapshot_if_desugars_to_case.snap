@@ -1,0 +1,16 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Pick\"), \"Pick\")"
+---
+%% Generated from src/pick.hird by the Hirð compiler. Do not edit.
+-module(hird_pick).
+-export([pick/1]).
+
+%% src/pick.hird:1
+pick(B) ->
+    case B of
+        true ->
+            1;
+        false ->
+            2
+    end.

@@ -1,0 +1,28 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Funs\"), \"Funs\")"
+---
+%% Generated from src/funs.hird by the Hirð compiler. Do not edit.
+-module(hird_funs).
+-export([use_id/0, answer/0, get/0, immediate/0]).
+
+%% src/funs.hird:1
+use_id() ->
+    Id = fun(X) ->
+        X
+    end,
+    Id(1).
+
+%% src/funs.hird:2
+answer() ->
+    42.
+
+%% src/funs.hird:3
+get() ->
+    fun answer/0.
+
+%% src/funs.hird:4
+immediate() ->
+    (fun(X, _Y) ->
+        X
+    end)(1, 2).

@@ -1,0 +1,23 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Values\"), \"Values\")"
+---
+%% Generated from src/values.hird by the Hirð compiler. Do not edit.
+-module(hird_values).
+-export([triple/0, nums/0, nothing/0, pi/0]).
+
+%% src/values.hird:1
+triple() ->
+    {1, <<"a"/utf8>>, true}.
+
+%% src/values.hird:2
+nums() ->
+    [1, 2, 3].
+
+%% src/values.hird:3
+nothing() ->
+    ok.
+
+%% src/values.hird:4
+pi() ->
+    3.14.

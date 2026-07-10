@@ -1,0 +1,15 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Multi\"), \"Multi\")"
+---
+%% Generated from src/multi.hird by the Hirð compiler. Do not edit.
+-module(hird_multi).
+-export([run/3]).
+
+%% src/multi.hird:4
+run(F, Lh, Th) ->
+    Handlers@5 = #{
+        log => fun(Args@1, _Handlers@2) -> Lh(Args@1) end,
+        {tool, repo} => fun(Args@3, _Handlers@4) -> Th(Args@3) end
+    },
+    F(0, Handlers@5).

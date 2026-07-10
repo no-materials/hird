@@ -1,0 +1,16 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Reserved\"), \"Reserved\")"
+---
+%% Generated from src/reserved.hird by the Hirð compiler. Do not edit.
+-module(hird_reserved).
+-export(['rem'/1]).
+
+%% src/reserved.hird:2
+'rem'(M) ->
+    case M of
+        'end' ->
+            query;
+        query ->
+            'end'
+    end.

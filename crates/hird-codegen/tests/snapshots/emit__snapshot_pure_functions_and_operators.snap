@@ -1,0 +1,19 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Math\"), \"Math\")"
+---
+%% Generated from src/math.hird by the Hirð compiler. Do not edit.
+-module(hird_math).
+-export([add/2, precedence/2, logic/2]).
+
+%% src/math.hird:1
+add(X, Y) ->
+    X + Y.
+
+%% src/math.hird:2
+precedence(A, B) ->
+    (((A + B) * 2) - 1) =:= (B div 2).
+
+%% src/math.hird:3
+logic(P, Q) ->
+    (P andalso Q) orelse (P =/= Q).

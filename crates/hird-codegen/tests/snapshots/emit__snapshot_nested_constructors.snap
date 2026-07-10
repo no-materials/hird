@@ -1,0 +1,11 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Build\"), \"Build\")"
+---
+%% Generated from src/build.hird by the Hirð compiler. Do not edit.
+-module(hird_build).
+-export([build/0]).
+
+%% src/build.hird:2
+build() ->
+    {cons, 1, {cons, 2, nil}}.

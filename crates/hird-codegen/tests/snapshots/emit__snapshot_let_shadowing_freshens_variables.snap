@@ -1,0 +1,14 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Shadow\"), \"Shadow\")"
+---
+%% Generated from src/shadow.hird by the Hirð compiler. Do not edit.
+-module(hird_shadow).
+-export([chain/0]).
+
+%% src/shadow.hird:1
+chain() ->
+    X = 1,
+    X@1 = X + 1,
+    Y = X@1,
+    X@1 + Y.

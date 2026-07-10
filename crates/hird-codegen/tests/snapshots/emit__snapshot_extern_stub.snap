@@ -1,0 +1,15 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Ffi\"), \"Ffi\")"
+---
+%% Generated from src/ffi.hird by the Hirð compiler. Do not edit.
+-module(hird_ffi).
+-export([sqrt/1, twice/1]).
+
+%% src/ffi.hird:1
+sqrt(_) ->
+    erlang:error({unbound_extern, sqrt}).
+
+%% src/ffi.hird:2
+twice(X) ->
+    sqrt(sqrt(X)).
