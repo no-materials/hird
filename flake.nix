@@ -82,6 +82,9 @@
           # New: tools for wasm C compilation
           clangWasm
           bintoolsWasm
+
+          # BEAM toolchain: erlc/erl/escript/dialyzer for Erlang codegen tests
+          erlang
         ];
 
         nightlyPkgs = [];
