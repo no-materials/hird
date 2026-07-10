@@ -60,3 +60,28 @@ init([]) ->
   each restart disposition (permanent/temporary/transient).
 - At least 4 snapshot tests.
 
+## Decisions locked (v0.1)
+
+**Non-`one_for_one` strategies emit verbatim.** hir-xbs5 made `one_for_all`
+and `rest_for_one` a frontend *warning*, not an error, so they reach the IR.
+All three strategy names are valid OTP supervisor atoms and the emission code
+is identical, so codegen renders `strategy` verbatim rather than skipping or
+erroring. The "only one_for_one is lowered" scope line means only one_for_one
+is supported/tested; the others compile but carry the frontend's
+not-yet-implemented warning.
+
+**Module naming follows the locked `hird_` convention, not the sketch.**
+`PlannerSup` emits as module `hird_planner_sup` (via `erlang_module_name`),
+consistent with actor and base modules. The `planner_sup` in the sketch above
+is illustrative only.
+
+**Child specs omit the `shutdown` key.** OTP's default (5000 for workers)
+applies. Likewise `type => worker` is written explicitly since all v0.1
+children are actors.
+
+**Supervisor registers as `{local, Module}`; children stay unregistered.**
+Matches the sketch and hir-1dvq's unregistered `gen_server:start_link/3`
+mapping. How the demo reaches a child's pid (`supervisor:which_children/1`
+or runtime-library support) is hir-7oph/hir-bxdd's concern, not this
+ticket's.
+
