@@ -1,6 +1,6 @@
 ---
 id: hir-fbze
-status: open
+status: closed
 deps: []
 links: [hir-0bhk]
 created: 2026-05-22T21:42:55Z
@@ -46,3 +46,13 @@ codegen and error-model documentation.
 - docs/error-model.md reflects the decision with examples.
 - Compiler implements the chosen semantics.
 
+
+## Notes
+
+**2026-07-10T06:33:23Z**
+
+Resolved. The decision is locked as ADR-021 in DECISIONS.md (context, decision,
+alternatives, consequences); docs/error-model.md reflects it with examples; and
+the compiler implements the chosen semantics — domain errors are Exn values in
+the effect row, crashes are the divergent crash!/panic! primitive typed
+∀a.(String)→a with an empty row, propagating as Erlang exits to the supervisor.
