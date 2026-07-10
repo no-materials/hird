@@ -7,10 +7,9 @@
 //! `.erl` files that compile with stock `erlc`: a base module (plain
 //! functions, every IR expression kind, handler-map threading for DI-style
 //! effects, and dispatcher-routed tool calls) plus one `gen_server` behaviour
-//! module per actor declaration. Supervisor declarations produce no forms yet
-//! — their `supervisor` behaviour modules are emitted separately — and the
-//! hand-written runtime modules (`hird_tool_dispatch`, …) are only
-//! referenced, never generated.
+//! module per actor declaration and one `supervisor` behaviour module per
+//! supervisor declaration. The hand-written runtime modules
+//! (`hird_tool_dispatch`, …) are only referenced, never generated.
 //!
 //! [`erlang_module_name`] is the module-file naming rule (`Planner` →
 //! `hird_planner`), shared with callers that need to place or reference the

@@ -4,10 +4,10 @@
 //! Erlang source emission: one IR module to a set of `.erl` files.
 //!
 //! [`emit_modules`] renders the base module — functions and extern stubs —
-//! plus one `gen_server` behaviour module per actor declaration. The output
+//! plus one `gen_server` behaviour module per actor declaration and one
+//! `supervisor` behaviour module per supervisor declaration. The output
 //! compiles with stock `erlc` and is formatted for human reading. Types are
-//! erased (no forms for type, tool, or supervisor declarations — supervisor
-//! behaviour modules are emitted separately); each form is headed by a
+//! erased (no forms for type or tool declarations); each form is headed by a
 //! `%% <file>:<line>` comment from its declaration span.
 //!
 //! # Calling convention
@@ -52,6 +52,17 @@
 //! calls in handler bodies. Handler maps never cross the spawn boundary:
 //! callbacks run init and handler bodies against no in-scope map, so tool
 //! calls inside actors fall back to the runtime registry.
+//!
+//! # Supervisor modules
+//!
+//! A supervisor emits a `supervisor` behaviour module exporting
+//! `start_link/0` — registering the process as `{local, Module}` — and
+//! `init/1`, which builds the flags map (strategy rendered verbatim,
+//! intensity, period) and one child-spec map per child: id, a start MFA
+//! through the actor module's `start_link/1`, the restart disposition, and an
+//! explicit `worker` type (`shutdown` is left to the OTP default). Children
+//! stay unregistered; `start_args` is pure, so it renders against no in-scope
+//! handler map.
 
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -60,9 +71,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ir::{
-    IrActorDef, IrActorHandler, IrApp, IrConstructor, IrConstructorPat, IrDecl, IrExpr,
-    IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch, IrModule, IrPattern, IrSpan, IrVar,
-    LiteralValue,
+    IrActorDef, IrActorHandler, IrApp, IrChildSpec, IrConstructor, IrConstructorPat, IrDecl,
+    IrExpr, IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch, IrModule, IrPattern, IrSpan,
+    IrSupervisorDef, IrVar, LiteralValue,
 };
 use hird_types::{Effect, EffectRow, Type};
 
@@ -78,8 +89,8 @@ pub struct EmittedModule {
 }
 
 /// Renders `module` as Erlang source files: the base module (functions and
-/// extern stubs) first, then one `gen_server` behaviour module per actor
-/// declaration, in source order.
+/// extern stubs) first, then one behaviour module per actor (`gen_server`)
+/// and supervisor (`supervisor`) declaration, in source order.
 ///
 /// `source_path` is the Hirð source the module was lowered from; it appears
 /// in each file's generated-file banner and `%% <file>:<line>` comments.
@@ -94,11 +105,16 @@ pub fn emit_modules(module: &IrModule, source_path: &str) -> Vec<EmittedModule> 
     }]);
     emitter.remote = Some(base);
     for decl in &module.declarations {
-        if let IrDecl::Actor(actor) = decl {
-            out.push(EmittedModule {
+        match decl {
+            IrDecl::Actor(actor) => out.push(EmittedModule {
                 name: erlang_module_name(&actor.name),
                 source: emitter.actor_module(actor, source_path),
-            });
+            }),
+            IrDecl::Supervisor(sup) => out.push(EmittedModule {
+                name: erlang_module_name(&sup.name),
+                source: emitter.supervisor_module(sup, source_path),
+            }),
+            _ => {}
         }
     }
     out
@@ -505,6 +521,92 @@ impl<'a> Emitter<'a> {
                 ind(1)
             ));
         }
+    }
+
+    // ── supervisor modules ───────────────────────────────────────
+
+    /// One supervisor as a `supervisor` behaviour module: banner, span
+    /// comment, module/behaviour/export attributes, `start_link/0`
+    /// registering the process as `{local, Module}`, and `init/1`.
+    fn supervisor_module(&self, sup: &IrSupervisorDef, source_path: &str) -> String {
+        let mut out = String::new();
+        out.push_str(&format!(
+            "%% Generated from {source_path} by the Hirð compiler. Do not edit.\n"
+        ));
+        Self::span_comment(sup.span, source_path, &mut out);
+        out.push_str(&format!("-module({}).\n", erlang_module_name(&sup.name)));
+        out.push_str("-behaviour(supervisor).\n");
+        out.push_str("-export([start_link/0]).\n");
+        out.push_str("-export([init/1]).\n");
+        out.push_str(&format!(
+            "\nstart_link() ->\n{}supervisor:start_link({{local, ?MODULE}}, ?MODULE, []).\n",
+            ind(1)
+        ));
+        self.sup_init_form(sup, &mut out);
+        out
+    }
+
+    /// The supervisor `init/1` callback: the flags map (strategy rendered
+    /// verbatim, intensity, period) and the child-spec list. One variable
+    /// context spans every child, so `start_args` bindings stay distinct
+    /// within the shared function scope.
+    fn sup_init_form(&self, sup: &IrSupervisorDef, out: &mut String) {
+        let mut cx = FnCx::default();
+        cx.used.insert(String::from("SupFlags"));
+        cx.used.insert(String::from("ChildSpecs"));
+        let children: Vec<String> = sup
+            .children
+            .iter()
+            .map(|child| self.child_spec(child, &mut cx))
+            .collect();
+        let specs = if children.is_empty() {
+            String::from("[]")
+        } else {
+            format!(
+                "[\n{}{}\n{}]",
+                ind(2),
+                children.join(&format!(",\n{}", ind(2))),
+                ind(1)
+            )
+        };
+        out.push_str(&format!(
+            "\ninit([]) ->\n\
+             {i}SupFlags = #{{\n\
+             {ii}strategy => {},\n\
+             {ii}intensity => {},\n\
+             {ii}period => {}\n\
+             {i}}},\n\
+             {i}ChildSpecs = {specs},\n\
+             {i}{{ok, {{SupFlags, ChildSpecs}}}}.\n",
+            atom(&sup.strategy),
+            sup.intensity,
+            sup.period,
+            i = ind(1),
+            ii = ind(2),
+        ));
+    }
+
+    /// One child-spec map: id, a start MFA through the actor module's
+    /// `start_link/1` (`start_args` is pure, so it renders against no
+    /// in-scope handler map), the restart disposition, and an explicit
+    /// `worker` type (`shutdown` is left to the OTP default). Children stay
+    /// unregistered.
+    fn child_spec(&self, child: &IrChildSpec, cx: &mut FnCx) -> String {
+        let env = Env::default();
+        let arg = self.expr(&child.start_args, &env, cx, 3, Ctx::Expr);
+        format!(
+            "#{{\n\
+             {i}id => {},\n\
+             {i}start => {{{}, start_link, [{arg}]}},\n\
+             {i}restart => {},\n\
+             {i}type => worker\n\
+             {}}}",
+            atom(&child.id),
+            erlang_module_name(&child.actor),
+            atom(&child.restart),
+            ind(2),
+            i = ind(3),
+        )
     }
 
     // ── expressions ──────────────────────────────────────────────

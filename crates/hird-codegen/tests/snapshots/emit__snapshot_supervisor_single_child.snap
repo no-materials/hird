@@ -1,0 +1,29 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "behaviour_module(program(\"Solo\"), \"Solo\", \"hird_planner_sup\")"
+---
+%% Generated from src/solo.hird by the Hirð compiler. Do not edit.
+%% src/solo.hird:9
+-module(hird_planner_sup).
+-behaviour(supervisor).
+-export([start_link/0]).
+-export([init/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+init([]) ->
+    SupFlags = #{
+        strategy => one_for_one,
+        intensity => 5,
+        period => 60
+    },
+    ChildSpecs = [
+        #{
+            id => planner,
+            start => {hird_planner, start_link, [hird_solo:default_config()]},
+            restart => permanent,
+            type => worker
+        }
+    ],
+    {ok, {SupFlags, ChildSpecs}}.

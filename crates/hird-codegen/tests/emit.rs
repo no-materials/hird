@@ -33,6 +33,11 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Clock", CLOCK),
     ("Duo", DUO),
     ("Echo", ECHO),
+    ("Solo", SOLO),
+    ("Fleet", FLEET),
+    ("Nest", NEST),
+    ("Drift", DRIFT),
+    ("Idle", IDLE),
 ];
 
 const MATH: &str = "fn add(x: Int, y: Int) -> Int = x + y\n\
@@ -160,6 +165,100 @@ const ECHO: &str = "effect Send<t>\n\
        handle Get(r), St(n) -> St ! {Send<Ping>} = let ack = reply(r, Ping) in St(n),\n\
      } ! {Send<Ping>}";
 
+const SOLO: &str = "type St = St(Int)\n\
+     fn default_config() -> St = St(0)\n\
+     actor Planner {\n\
+       state: St,\n\
+       message: PlannerMsg = | Nop,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Nop, st -> St ! {} = st,\n\
+     }\n\
+     supervisor PlannerSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: planner, actor: Planner, start_args: default_config(), restart: permanent },\n\
+       ]\n\
+     }";
+
+const FLEET: &str = "type St = St(Int)\n\
+     fn planner_config() -> St = St(0)\n\
+     actor Planner {\n\
+       state: St,\n\
+       message: PlannerMsg = | Plan,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Plan, st -> St ! {} = st,\n\
+     }\n\
+     actor Worker {\n\
+       state: St,\n\
+       message: WorkerMsg = | Work,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Work, st -> St ! {} = st,\n\
+     }\n\
+     actor Logger {\n\
+       state: St,\n\
+       message: LoggerMsg = | Note,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Note, st -> St ! {} = st,\n\
+     }\n\
+     supervisor RootSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 3,\n\
+       period: 10,\n\
+       children: [\n\
+         { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n\
+         { id: worker, actor: Worker, start_args: St(1), restart: transient },\n\
+         { id: logger, actor: Logger, start_args: St(2), restart: temporary },\n\
+       ]\n\
+     }";
+
+const NEST: &str = "type St = St(Int)\n\
+     actor Planner {\n\
+       state: St,\n\
+       message: PlannerMsg = | Nop,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Nop, st -> St ! {} = st,\n\
+     }\n\
+     actor Worker {\n\
+       state: St,\n\
+       message: WorkerMsg = | Nap,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Nap, st -> St ! {} = st,\n\
+     }\n\
+     supervisor NestSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 2,\n\
+       period: 30,\n\
+       children: [\n\
+         { id: planner, actor: Planner, start_args: let base = 1 in St(base), restart: permanent },\n\
+         { id: worker, actor: Worker, start_args: let base = 2 in St(base + 1), restart: permanent },\n\
+       ]\n\
+     }";
+
+const DRIFT: &str = "type St = St(Int)\n\
+     actor Planner {\n\
+       state: St,\n\
+       message: PlannerMsg = | Nop,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Nop, st -> St ! {} = st,\n\
+     }\n\
+     supervisor DriftSup {\n\
+       strategy: one_for_all,\n\
+       intensity: 1,\n\
+       period: 5,\n\
+       children: [\n\
+         { id: planner, actor: Planner, start_args: St(0), restart: permanent },\n\
+       ]\n\
+     }";
+
+const IDLE: &str = "supervisor IdleSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 1,\n\
+       period: 5,\n\
+       children: []\n\
+     }";
+
 /// Parses, checks, and lowers `source`, panicking on any parse or type error.
 fn lower(source: &str, name: &str) -> IrModule {
     let parsed = hird_parse::parse(source, 0);
@@ -189,12 +288,13 @@ fn emit(source: &str, name: &str) -> String {
     emit_all(source, name).swap_remove(0).source
 }
 
-/// The emitted module named `module_name` (an actor's `gen_server` module).
-fn actor_module(source: &str, name: &str, module_name: &str) -> String {
+/// The emitted module named `module_name` (an actor's `gen_server` or a
+/// supervisor's `supervisor` behaviour module).
+fn behaviour_module(source: &str, name: &str, module_name: &str) -> String {
     emit_all(source, name)
         .into_iter()
         .find(|m| m.name == module_name)
-        .expect("actor module is emitted")
+        .expect("behaviour module is emitted")
         .source
 }
 
@@ -305,22 +405,26 @@ fn snapshot_reserved_words_are_quoted() {
 
 #[test]
 fn snapshot_actor_gen_server_cast_only() {
-    insta::assert_snapshot!(actor_module(program("Boot"), "Boot", "hird_counter"));
+    insta::assert_snapshot!(behaviour_module(program("Boot"), "Boot", "hird_counter"));
 }
 
 #[test]
 fn snapshot_actor_gen_server_call_and_reply() {
-    insta::assert_snapshot!(actor_module(program("Msg"), "Msg", "hird_counter"));
+    insta::assert_snapshot!(behaviour_module(program("Msg"), "Msg", "hird_counter"));
 }
 
 #[test]
 fn snapshot_actor_payload_and_tool_dispatch() {
-    insta::assert_snapshot!(actor_module(program("Workshop"), "Workshop", "hird_worker"));
+    insta::assert_snapshot!(behaviour_module(
+        program("Workshop"),
+        "Workshop",
+        "hird_worker"
+    ));
 }
 
 #[test]
 fn snapshot_actor_qualifies_module_functions() {
-    insta::assert_snapshot!(actor_module(program("Clock"), "Clock", "hird_ticker"));
+    insta::assert_snapshot!(behaviour_module(program("Clock"), "Clock", "hird_ticker"));
 }
 
 #[test]
@@ -330,7 +434,40 @@ fn snapshot_actor_multi_param_init() {
 
 #[test]
 fn snapshot_actor_call_only_cast_fallback() {
-    insta::assert_snapshot!(actor_module(program("Echo"), "Echo", "hird_responder"));
+    insta::assert_snapshot!(behaviour_module(program("Echo"), "Echo", "hird_responder"));
+}
+
+#[test]
+fn snapshot_supervisor_single_child() {
+    insta::assert_snapshot!(behaviour_module(
+        program("Solo"),
+        "Solo",
+        "hird_planner_sup"
+    ));
+}
+
+#[test]
+fn snapshot_supervisor_multi_child_restart_dispositions() {
+    insta::assert_snapshot!(behaviour_module(program("Fleet"), "Fleet", "hird_root_sup"));
+}
+
+#[test]
+fn snapshot_supervisor_start_args_share_one_variable_scope() {
+    insta::assert_snapshot!(behaviour_module(program("Nest"), "Nest", "hird_nest_sup"));
+}
+
+#[test]
+fn snapshot_supervisor_strategy_emitted_verbatim() {
+    insta::assert_snapshot!(behaviour_module(
+        program("Drift"),
+        "Drift",
+        "hird_drift_sup"
+    ));
+}
+
+#[test]
+fn snapshot_supervisor_empty_children() {
+    insta::assert_snapshot!(behaviour_module(program("Idle"), "Idle", "hird_idle_sup"));
 }
 
 // ── erlc validation ──────────────────────────────────────────────

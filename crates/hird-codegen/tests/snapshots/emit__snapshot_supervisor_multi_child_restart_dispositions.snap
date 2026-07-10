@@ -1,0 +1,41 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "behaviour_module(program(\"Fleet\"), \"Fleet\", \"hird_root_sup\")"
+---
+%% Generated from src/fleet.hird by the Hirð compiler. Do not edit.
+%% src/fleet.hird:21
+-module(hird_root_sup).
+-behaviour(supervisor).
+-export([start_link/0]).
+-export([init/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+init([]) ->
+    SupFlags = #{
+        strategy => one_for_one,
+        intensity => 3,
+        period => 10
+    },
+    ChildSpecs = [
+        #{
+            id => planner,
+            start => {hird_planner, start_link, [hird_fleet:planner_config()]},
+            restart => permanent,
+            type => worker
+        },
+        #{
+            id => worker,
+            start => {hird_worker, start_link, [{st, 1}]},
+            restart => transient,
+            type => worker
+        },
+        #{
+            id => logger,
+            start => {hird_logger, start_link, [{st, 2}]},
+            restart => temporary,
+            type => worker
+        }
+    ],
+    {ok, {SupFlags, ChildSpecs}}.
