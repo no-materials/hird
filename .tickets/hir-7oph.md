@@ -18,10 +18,15 @@ programs depend on.
 **Modules in runtime/**:
 
 1. **hird_tool_dispatch.erl** — tool effect dispatcher.
-   - Looks up the handler for a tool effect (from handler chain or default).
-   - Invokes the handler with structured arguments.
-   - Captures the invocation record (tool name, args, result, timestamp, caller).
-   - Sends the record to the audit sink.
+   - API: call(ToolName, Handlers, Args) — the shape every generated tool
+     call site uses (ADR-022).
+   - Looks up `{tool, ToolName}` in the threaded handler map; entries are
+     binary funs fun(Args, Handlers).
+   - On a miss, falls back to the hird_handlers registry; if that misses
+     too, raises erlang:error({unhandled_tool, ToolName}).
+   - Captures the invocation record (tool name, args, result, timestamp,
+     caller) around every invocation — mocked or real — and sends it to the
+     audit sink.
 
 2. **hird_audit.erl** — audit log sink.
    - Accepts invocation records from the tool dispatcher.
@@ -29,11 +34,15 @@ programs depend on.
    - API: start_link/1 (configure sink), log/1 (record an invocation).
    - Implemented as a gen_server for ordered writes.
 
-3. **hird_handlers.erl** — DI handler installation machinery.
-   - Install/lookup handler functions for effects.
-   - If using process dictionary approach: put/get handlers keyed by effect name.
-   - If using parameter threading: provide a handler-map data structure.
+3. **hird_handlers.erl** — the runtime default-handler registry.
+   - Lexical handle blocks thread a handler map through calls (ADR-013/022);
+     this module is the *process-independent* fallback the dispatcher
+     consults on a map miss — where deployments and test harnesses install
+     process-wide defaults (e.g. mocks seen by spawned actors).
+   - Keys match the threaded map's scheme: {tool, name} / bare head atom.
    - API: install_handler/2, lookup_handler/1, with_handlers/2.
+   - Whether spawn should also snapshot the spawner's in-scope map
+     (ADR-020 §6) is decided here, against this registry.
 
 4. **hird_sup_util.erl** — supervisor utility functions.
    - Helper for constructing child specs from Hirð declarations.
@@ -58,3 +67,9 @@ a dependency, not a framework.
 - Each module is under 200 lines.
 - At least one Erlang-level test per module (eunit or common_test).
 
+
+## Notes
+
+**2026-07-10T09:17:20Z**
+
+ADR-022 pins the generated-code contract this library implements: hird_tool_dispatch:call(ToolName, Handlers, Args), map keys {tool, name} / bare head atoms, binary-fun entries, registry fallback then {unhandled_tool, _} crash. hird_handlers is the process-independent default registry, not process-dictionary storage (rejected by ADR-013). Body amended.

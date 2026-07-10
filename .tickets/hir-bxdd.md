@@ -69,3 +69,9 @@ The effect graph JSON output includes:
 - Generated Erlang is inspectable and corresponds to the Hirð source.
 - The demo is documented in README.md with build/run instructions.
 
+
+## Notes
+
+**2026-07-10T09:17:31Z**
+
+ADR-022 consequence: non-tool effects have no compiler-known operation in v0.1, so a bare Log handler arm threads but is never invoked by emitted code. For the harness's capturing Log handler and Log audit entries to work, the demo must declare logging as a tool (Tool<Log>) in its fixtures.

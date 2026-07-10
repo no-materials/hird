@@ -21,7 +21,16 @@ with stock erlc.
   Phase 7 mapping ADR, ha-8fyg).
 - One .erl file per supervisor (supervisor module, per Phase 8 codegen
   decisions).
-- A hird_runtime.erl support module providing shared runtime utilities.
+- Runtime support modules (dispatcher, audit, handler registry) are
+  hand-written by hir-7oph; this ticket emits *references* to them and never
+  generates runtime code.
+
+**Scope**: this ticket is plain modules plus every IR *expression* kind —
+including spawn/send/request/reply, which lower to gen_server calls per
+ADR-020 inside ordinary function bodies. IrDecl::Actor and
+IrDecl::Supervisor behaviour-module shells are hir-1dvq and hir-z9rn
+respectively. IrRequest's message builder is guaranteed to be a bare message
+constructor by the checker (C0042), so its emission is total.
 
 **IR-to-Erlang mapping**:
 - IrLet → variable binding (Erlang doesn't have let-in; map to case or match).
@@ -41,27 +50,36 @@ with stock erlc.
 - Mapping: x → X, foo_bar → Foo_bar, or a systematic renaming scheme.
 - Avoid collisions with Erlang reserved words.
 
-**Effect handler wiring**:
-- DI-style handlers lower to either:
-  (a) Extra function parameters (handler map threaded through calls), or
-  (b) Process dictionary storage (simpler codegen, less pure).
-- This ticket implements the chosen strategy from Phase 5's handler ticket.
+**Effect handler wiring** (per ADR-022):
+- Functions with a non-empty or open effect row take one trailing
+  handler-map parameter; pure functions keep surface arity. Lambdas follow
+  the same type-directed rule; pure funs meeting effectful function types
+  are eta-expanded.
+- A handle block emits map extension over the in-scope map (or `#{}`);
+  entries are normalised to binary funs `fun(Args, Handlers)`.
+- Tool call sites emit `hird_tool_dispatch:call(tool_name, Handlers, Args)`
+  — never a direct handler invocation — so audit capture is unconditional.
+  Map keys: `{tool, marker}` for `Tool<Marker>`, head atom for bare effects.
 
 **Source readability**:
 - Generated Erlang should be indented and formatted for human reading.
-- Comments indicating the corresponding Hirð source location.
+- Declaration-level source comments (`%% <file>:<line>` above each form),
+  per ADR-022. This requires adding a span field to IR declaration structs
+  (serde-skipped) and populating it in lowering — in scope here.
+  Expression-level mapping is v0.2 (abstract forms, ADR-002).
 - Not beautiful, but inspectable.
 
 ## Acceptance Criteria
 
-- All IR node kinds emit valid Erlang.
+- All IR expression kinds emit valid Erlang (Actor/Supervisor declaration
+  shells are hir-1dvq/hir-z9rn).
 - Generated .erl files compile with stock erlc without errors.
 - Variable renaming avoids Erlang reserved word conflicts.
 - ADT constructors map to tagged tuples.
 - Pattern matching maps to Erlang case expressions.
 - Lambdas map to Erlang funs.
-- Effect handler wiring present in generated code.
-- Source location comments in generated Erlang.
+- Handler-map threading and tool-dispatch call sites emitted per ADR-022.
+- Declaration-level source location comments in generated Erlang.
 - Snapshot tests: generated Erlang for pure functions, effectful functions,
   pattern matching, ADTs, modules with exports.
 - At least 10 snapshot tests of generated Erlang.
@@ -72,3 +90,7 @@ with stock erlc.
 **2026-07-09T12:59:51Z**
 
 Also emits the crash! primitive: the IrExpr::Crash node (introduced by hir-0bhk) lowers to an Erlang exit (e.g. erlang:error/1). Add a crash! emission snapshot here. Supervisor behaviour-module emission is a separate ticket, hir-z9rn.
+
+**2026-07-10T09:16:54Z**
+
+Emission mechanics locked as ADR-022: single trailing handler-map parameter on effectful functions, tool calls route through hird_tool_dispatch:call/3, unhandled tools fall back to the runtime registry then crash, declaration-level source comments backed by new span fields on IR declaration structs. Body and acceptance criteria amended accordingly; hird_runtime.erl line removed (runtime modules are hir-7oph's, this ticket only references them).

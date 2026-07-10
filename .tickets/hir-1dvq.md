@@ -83,3 +83,9 @@ end-to-end demo ticket.
   ReplyTo messages, for spawn/send/request/reply call sites.
 - At least 5 snapshot tests of generated Erlang.
 
+
+## Notes
+
+**2026-07-10T09:17:20Z**
+
+Scope boundary per ADR-022 discussion: the spawn/send/request/reply *expressions* are emitted by hir-zp13's expression emitter (they lower inside ordinary function bodies); this ticket emits the gen_server behaviour-module shells (init/1, handle_call/3, handle_cast/2, exports) around handler bodies, reusing that emitter.

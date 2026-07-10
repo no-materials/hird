@@ -1221,6 +1221,113 @@ site.
 
 ---
 
+## ADR-022: Erlang emission mechanics — handler-map threading, tool dispatch, declaration spans
+
+**Date**: 2026-07-10
+**Status**: Accepted (mechanises ADR-013's parameter threading; fixes the
+call-site contract the runtime library implements)
+
+### Context
+
+ADR-013 locked DI-style handlers to parameter threading, but at one sentence
+of resolution: "a handler lowers by threading its implementation as an
+explicit parameter through the handled scope." Building the source emitter
+forces the mechanics: what parameter shape effectful functions grow, how a
+tool call site finds its handler, what happens when no handler is in scope
+(tools are pure declarations per ADR-015 — there is no "real" implementation
+to fall back on), and where the per-call invocation record ADR-016 requires
+is captured. The last two are a contract shared with the hand-written runtime
+library, not private emitter detail, so they must be pinned before either
+side is written.
+
+Separately, the Phase 9 epic promises source locations preserved as comments
+in generated Erlang, but no IR node carries a span — lowering discards them —
+so that promise is currently unimplementable as stated.
+
+### Decision
+
+1. **Effectful functions thread one trailing handler-map parameter.** The
+   emitted calling convention is decided by the function *type*: a function
+   whose effect row is non-empty or open (contains a row variable) takes one
+   extra trailing parameter, an Erlang map from effect keys to handler
+   implementations; a function whose row is closed and empty keeps its
+   surface arity. The rule is uniform across named functions and lambdas, so
+   every call site can be emitted from the callee's type alone. Where a pure
+   function value meets an effectful function type, the emitter eta-expands
+   it to absorb the ignored map. Map keys are derived from the effect
+   instance: a bare effect keys by its snake_cased head atom (`log`), a
+   parametric effect by a tuple of head and argument atoms
+   (`{tool, read_repo}`).
+
+   A `handle` block emits map extension: the arm implementations are merged
+   over the in-scope map (or over `#{}` when the enclosing function is pure)
+   and the body is emitted against the extended map. Each entry is
+   normalised to a binary fun `fun(Args, Handlers)` so the dispatcher can
+   invoke any entry uniformly, whatever the handler's own arity and
+   effectfulness. Because the map travels with calls rather than being
+   captured at fun creation, handlers resolve at the *call* — a fun escaping
+   a `handle` block runs against its eventual caller's handlers, which is
+   what the escaping fun's (unhandled) effect row already says.
+
+   *Rejected — one parameter per handled effect.* More dialyzer-legible, but
+   a function's arity would churn with its inferred row, and higher-order
+   code has no stable convention: a `(a → b ! e)` parameter's arity would
+   depend on the instantiation of `e`, which a once-emitted caller cannot
+   branch on. The map keeps arity stable at +1 and composes through
+   higher-order calls.
+
+2. **Every tool call site routes through the runtime dispatcher.** A call to
+   a tool function emits as
+   `hird_tool_dispatch:call(read_repo, Handlers, ArgsMap)`, never as a
+   direct handler invocation. The dispatcher looks up `{tool, read_repo}` in
+   the map, invokes the entry, and wraps the invocation with the ADR-016
+   record (tool, args, result, timestamp, caller) sent to the audit sink.
+   Auditing is therefore unconditional — a mocked tool call in a test
+   harness produces the same invocation record a real one does, which is
+   exactly what the dry-run harness asserts against.
+
+3. **Unhandled tool calls fall back to the runtime registry, then crash.**
+   On a map miss the dispatcher consults the process-independent default
+   registry (the runtime library's handler-installation machinery); if that
+   also misses, it raises `erlang:error({unhandled_tool, read_repo})` — a
+   crash in ADR-021's sense, caught by the supervisor, never by Hirð code.
+   No compile-time obligation forces a root `handle`: tools are deployment
+   points by design, and the registry is where deployments and test
+   harnesses install process-wide defaults.
+
+4. **Declarations carry spans; emission comments are per-declaration.**
+   Every IR declaration struct gains a span field (serde-skipped, so the
+   IR's JSON stays a semantic artifact), populated by lowering, and the
+   emitter renders one `%% <file>:<line>` comment above each generated form.
+   Expression-level source mapping is not attempted in v0.1 — it belongs to
+   the v0.2 abstract-forms backend that ADR-002 already designates for
+   span preservation, and per-expression comments would work against the
+   readability the source backend exists for.
+
+### Consequences
+
+- The dispatcher's signature, the map key scheme, and the binary-fun entry
+  shape are the frozen contract between generated code and the runtime
+  library; either side can be rewritten against it.
+- Threading is visible in every emitted signature — an effectful function's
+  extra parameter is the explicit record that its behaviour is
+  handler-dependent, per ADR-005/ADR-013's explicitness rationale.
+- Non-tool effects have no compiler-known operation in v0.1 (ADR-015), so no
+  emitted call site consults their map entries; a `Log` handler arm
+  type-checks and threads but is never invoked. The v0.1 demo's log capture
+  must declare logging as a tool (`Tool<Log>`) for interception and audit to
+  apply; bare-effect operations await operation signatures.
+- The registry fallback gives cross-process handling a natural resting
+  place: a spawned actor's processes see registry defaults without any map
+  crossing the spawn boundary. Whether `spawn` should *also* snapshot the
+  spawner's in-scope map (ADR-020 §6) remains open and is decided with the
+  runtime library.
+- Pure functions pay nothing; effectful calls pay one map argument and tool
+  calls one dispatcher hop — accepted for v0.1 in exchange for uniform
+  audit capture.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
