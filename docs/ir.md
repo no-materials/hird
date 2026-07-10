@@ -62,6 +62,12 @@ single argument (`f((a, b))` passes one tuple).
 
 - `IrModule { name, declarations }` — a module's name and its declarations in
   source order.
+
+Every declaration also carries an `IrSpan { line }` — the 1-based source line
+of its first token, populated by lowering. Spans back the `%% <file>:<line>`
+comments in generated Erlang and are **not serialized**: the JSON stays a
+semantic artifact that unrelated layout edits do not churn.
+
 - `IrFnDef { name, params, return_type, effect_row, body }` — a function. Each
   `IrParam { name, type }` is explicitly typed; `effect_row` is the function's
   declared effect row (empty when it declares none), serialized as its textual
@@ -96,7 +102,9 @@ Every expression node carries its resolved type.
 - `IrLet { name, type, value, body }` — `type` is the bound value's type. A
   polymorphic binding keeps its monomorphic value type here; each use site in
   the body carries its own instantiation.
-- `IrLambda { params, body, body_type }`.
+- `IrLambda { params, body, body_type, effect_row }` — `effect_row` is the row
+  of the lambda's own function type (backends read the calling convention off
+  it; an open row counts as effectful).
 - `IrApp { func, args, result_type }`.
 - `IrMatch { scrutinee, scrutinee_type, arms, result_type }`, where each
   `IrArm { pattern, body }`.

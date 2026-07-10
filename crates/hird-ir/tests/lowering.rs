@@ -702,3 +702,47 @@ fn crash_json_snapshot() {
     let module = lower(r#"fn boom() -> Int = crash!("nope")"#, "Crash");
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
+
+// ── declaration spans ────────────────────────────────────────────
+
+#[test]
+fn declarations_carry_source_lines() {
+    let module = lower(
+        "type Flag = On | Off\n\
+         \n\
+         fn pick(f: Flag) -> Int =\n\
+           match f { On -> 1, Off -> 0, }\n\
+         extern fn sqrt(x: Float) -> Float",
+        "Spans",
+    );
+    let lines: Vec<u32> = module
+        .declarations
+        .iter()
+        .map(|d| match d {
+            IrDecl::Fn(f) => f.span.line,
+            IrDecl::Type(t) => t.span.line,
+            IrDecl::Extern(e) => e.span.line,
+            other => panic!("unexpected declaration {other:?}"),
+        })
+        .collect();
+    assert_eq!(lines, [1, 3, 5]);
+}
+
+// ── lambda effect rows ───────────────────────────────────────────
+
+#[test]
+fn lambda_carries_its_effect_row() {
+    // The outer lambda's own function type carries `{Log}`; the pure inner
+    // binding carries an empty (or open, once generalised) row distinct from it.
+    let module = lower(
+        "effect Log\n\
+         fn wrap(run: Int -> Int ! {Log}) -> (Int -> Int ! {Log}) ! {} =\n\
+           \\x -> run(x)",
+        "Rows",
+    );
+    let wrap = only_fn(&module);
+    let IrExpr::Lambda(lambda) = &wrap.body else {
+        panic!("body should be a lambda, got {:?}", wrap.body);
+    };
+    assert_eq!(format!("{}", lambda.effect_row), "{Log}");
+}

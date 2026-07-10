@@ -53,6 +53,18 @@ where
     serializer.serialize_str(&format!("{effect}"))
 }
 
+/// A declaration's source position, for `%% <file>:<line>` comments in
+/// generated Erlang.
+///
+/// Not serialized: the IR's JSON stays a semantic artifact, and positions
+/// would churn it on every unrelated edit. `line` is 1-based; `0` means
+/// unknown (an IR built by hand rather than by lowering).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IrSpan {
+    /// 1-based source line of the declaration's first token; 0 when unknown.
+    pub line: u32,
+}
+
 // ── module and declarations ─────────────────────────────────────
 
 /// A lowered module: a name and its declarations in source order.
@@ -122,6 +134,9 @@ pub struct IrFnDef {
     pub effect_row: EffectRow,
     /// The body expression.
     pub body: IrExpr,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// A named, typed parameter.
@@ -143,6 +158,9 @@ pub struct IrTypeDef {
     pub params: Vec<String>,
     /// The constructors, in declaration order.
     pub constructors: Vec<IrConstructorDef>,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// One constructor of a data type definition.
@@ -175,6 +193,9 @@ pub struct IrToolDef {
     /// not included.
     #[serde(serialize_with = "serialize_effect_row")]
     pub effect_row: EffectRow,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// An actor declaration: a typed mailbox, encapsulated state, an init
@@ -198,6 +219,9 @@ pub struct IrActorDef {
     /// every handler row.
     #[serde(serialize_with = "serialize_effect_row")]
     pub effect_row: EffectRow,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// An actor's init function (`init: fn(params) → State ! {row} = body`).
@@ -247,6 +271,9 @@ pub struct IrSupervisorDef {
     /// per-actor effect summaries. Computed, never declared.
     #[serde(serialize_with = "serialize_effect_row")]
     pub effect_row: EffectRow,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// One supervised child: an actor started and monitored by the supervisor.
@@ -274,6 +301,9 @@ pub struct IrExternRef {
     /// The backing foreign module, if known. Always `None` in v0.1: the
     /// surface syntax does not yet name an FFI module.
     pub module: Option<String>,
+    /// The declaration's source position.
+    #[serde(skip)]
+    pub span: IrSpan,
 }
 
 /// Serializes a list of [`Type`]s as their canonical textual renderings.
@@ -351,6 +381,10 @@ pub struct IrLambda {
     /// The body's (result) type.
     #[serde(serialize_with = "serialize_type")]
     pub body_type: Type,
+    /// The effect row of the lambda's own function type. Backends read the
+    /// calling convention off it; an open row counts as effectful.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
 }
 
 /// A function application (`func(args)`). N-ary: `args` is the full argument

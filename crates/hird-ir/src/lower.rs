@@ -44,7 +44,7 @@ use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
     IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule,
-    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn,
+    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
     IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
@@ -61,7 +61,10 @@ use crate::ir::{
 /// error-free.
 #[must_use]
 pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrModule {
-    let lowerer = Lowerer { checked };
+    let lowerer = Lowerer {
+        checked,
+        newlines: newline_offsets(file),
+    };
     let mut declarations = Vec::new();
     for decl in file.declarations() {
         match decl {
@@ -89,6 +92,8 @@ struct Lowerer<'a> {
     /// The check result: resolved types keyed by CST identity, plus the ADT
     /// table.
     checked: &'a CheckedFile,
+    /// Byte offsets of the source's newlines, ascending, for span lines.
+    newlines: Vec<u32>,
 }
 
 impl Lowerer<'_> {
@@ -122,6 +127,7 @@ impl Lowerer<'_> {
             return_type,
             effect_row,
             body: self.lower_expr(&body),
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -144,6 +150,7 @@ impl Lowerer<'_> {
             name: String::from(name),
             params,
             constructors,
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -160,6 +167,7 @@ impl Lowerer<'_> {
             input,
             output,
             effect_row,
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -193,6 +201,7 @@ impl Lowerer<'_> {
             init,
             handlers,
             effect_row,
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -216,6 +225,7 @@ impl Lowerer<'_> {
             name: String::from(name.text()),
             params: Vec::new(),
             constructors,
+            span: self.span(field.syntax()),
         })
     }
 
@@ -284,6 +294,7 @@ impl Lowerer<'_> {
             period,
             children,
             effect_row,
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -327,6 +338,7 @@ impl Lowerer<'_> {
             ty,
             // The surface syntax does not yet name a backing FFI module.
             module: None,
+            span: self.span(decl.syntax()),
         })
     }
 
@@ -397,12 +409,13 @@ impl Lowerer<'_> {
         })
     }
 
-    /// `λparams → body`. Parameter types come from the lambda's own function
-    /// type, so each parameter is explicitly typed.
+    /// `λparams → body`. Parameter types and the effect row come from the
+    /// lambda's own function type, so each parameter is explicitly typed and
+    /// the calling convention is readable off the node.
     fn lower_lambda(&self, lambda: &LambdaExpr) -> IrExpr {
-        let (param_tys, body_type) = match self.node_type(lambda.syntax()) {
-            Type::TyFn(params, ret, _) => (params, *ret),
-            other => (Vec::new(), other),
+        let (param_tys, body_type, effect_row) = match self.node_type(lambda.syntax()) {
+            Type::TyFn(params, ret, row) => (params, *ret, row),
+            other => (Vec::new(), other, EffectRow::empty()),
         };
         let params = lambda
             .param_names()
@@ -417,6 +430,7 @@ impl Lowerer<'_> {
             params,
             body: Box::new(self.lower_expr(&body)),
             body_type,
+            effect_row,
         })
     }
 
@@ -689,6 +703,32 @@ impl Lowerer<'_> {
         }
     }
 
+    // ── spans ────────────────────────────────────────────────────
+
+    /// The source position of a declaration node: the 1-based line its first
+    /// non-trivia token starts on (leading whitespace and comments are part of
+    /// the node's range, so the node start itself can point at blank lines).
+    fn span(&self, node: &hird_ast::SyntaxNode) -> IrSpan {
+        let offset: u32 = node
+            .children_with_tokens()
+            .filter_map(|elem| elem.into_token())
+            .find(|token| {
+                !matches!(
+                    token.kind(),
+                    SyntaxKind::WHITESPACE | SyntaxKind::LINE_COMMENT | SyntaxKind::BLOCK_COMMENT
+                )
+            })
+            .map_or_else(
+                || node.text_range().start(),
+                |token| token.text_range().start(),
+            )
+            .into();
+        let before = self.newlines.partition_point(|&nl| nl < offset);
+        IrSpan {
+            line: u32::try_from(before).unwrap_or(u32::MAX).saturating_add(1),
+        }
+    }
+
     // ── type lookup ──────────────────────────────────────────────
 
     /// The resolved type the checker recorded for `expr`.
@@ -709,6 +749,21 @@ impl Lowerer<'_> {
 }
 
 // ── free helpers ─────────────────────────────────────────────────
+
+/// The byte offsets of every newline in the file, ascending.
+fn newline_offsets(file: &SourceFile) -> Vec<u32> {
+    let mut newlines = Vec::new();
+    let mut offset: u32 = 0;
+    file.syntax().text().for_each_chunk(|chunk| {
+        for (i, byte) in chunk.bytes().enumerate() {
+            if byte == b'\n' {
+                newlines.push(offset.saturating_add(u32::try_from(i).unwrap_or(u32::MAX)));
+            }
+        }
+        offset = offset.saturating_add(u32::try_from(chunk.len()).unwrap_or(u32::MAX));
+    });
+    newlines
+}
 
 /// The actor body field named `member`, if present.
 fn actor_field(decl: &ActorDecl, member: &str) -> Option<ActorField> {

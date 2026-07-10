@@ -21,8 +21,8 @@ use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
     IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpawn, IrSupervisorDef,
-    IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
+    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
+    IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -183,7 +183,8 @@ fn normalize(module: &IrModule) -> IrModule {
 }
 
 /// Normalises one declaration's type variables (with a per-declaration map),
-/// or returns a type declaration verbatim.
+/// or returns a type declaration verbatim. Spans are cleared everywhere: the
+/// printed source has its own layout, so positions never round-trip.
 fn normalize_decl(decl: &IrDecl) -> IrDecl {
     match decl {
         IrDecl::Fn(f) => {
@@ -194,12 +195,19 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 return_type: canon_type(&f.return_type, &mut map),
                 effect_row: canon_effect_row(&f.effect_row, &mut map),
                 body: canon_expr(&f.body, &mut map),
+                span: IrSpan::default(),
             })
         }
         // Type and tool declarations render under their declared parameter
-        // names, with no inference freedom: compared verbatim.
-        IrDecl::Type(t) => IrDecl::Type(t.clone()),
-        IrDecl::Tool(t) => IrDecl::Tool(t.clone()),
+        // names, with no inference freedom: compared verbatim (minus spans).
+        IrDecl::Type(t) => IrDecl::Type(hird_ir::IrTypeDef {
+            span: IrSpan::default(),
+            ..t.clone()
+        }),
+        IrDecl::Tool(t) => IrDecl::Tool(hird_ir::IrToolDef {
+            span: IrSpan::default(),
+            ..t.clone()
+        }),
         // An actor's interface types are concrete, but its bodies may bind
         // let-polymorphic values whose variable identities differ per run.
         IrDecl::Actor(a) => {
@@ -207,7 +215,10 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
             IrDecl::Actor(IrActorDef {
                 name: a.name.clone(),
                 state: canon_type(&a.state, &mut map),
-                message: a.message.clone(),
+                message: hird_ir::IrTypeDef {
+                    span: IrSpan::default(),
+                    ..a.message.clone()
+                },
                 init: IrActorInit {
                     params: a
                         .init
@@ -229,6 +240,7 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                     })
                     .collect(),
                 effect_row: canon_effect_row(&a.effect_row, &mut map),
+                span: IrSpan::default(),
             })
         }
         IrDecl::Extern(e) => {
@@ -237,6 +249,7 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 name: e.name.clone(),
                 ty: canon_type(&e.ty, &mut map),
                 module: e.module.clone(),
+                span: IrSpan::default(),
             })
         }
         // A supervisor's only inference freedom is its children's `start_args`
@@ -259,6 +272,7 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                     })
                     .collect(),
                 effect_row: canon_effect_row(&s.effect_row, &mut map),
+                span: IrSpan::default(),
             })
         }
     }
@@ -293,6 +307,7 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             params: lambda.params.iter().map(|p| canon_param(p, map)).collect(),
             body: Box::new(canon_expr(&lambda.body, map)),
             body_type: canon_type(&lambda.body_type, map),
+            effect_row: canon_effect_row(&lambda.effect_row, map),
         }),
         IrExpr::App(app) => IrExpr::App(IrApp {
             func: Box::new(canon_expr(&app.func, map)),
