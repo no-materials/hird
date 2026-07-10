@@ -1124,6 +1124,30 @@ when a handler forwards a received reply channel to another actor via
    spawned process is a Phase 9 decision, made alongside the runtime
    support library.
 
+   *Amended 2026-07-10*: resolved — **handler maps never cross the
+   spawn boundary.** Generated gen_server callbacks invoke the actor's
+   init and handler bodies with the empty map `#{}`; a tool call inside
+   an actor therefore resolves through ADR-022 §3's registry fallback.
+   Three reasons. First, the flagship scenario cannot use a snapshot: a
+   supervised actor is started — and restarted — by its supervisor from
+   a static child spec, with no spawner `handle` block in sight, so
+   mocks must go through the registry regardless; snapshotting would be
+   a second mechanism the primary use case cannot benefit from. Second,
+   a `handle` block discharges effects from its own scope's row, and a
+   `spawn` site contributes only `Spawn` — the checker never claims the
+   spawner's handlers cover the actor's effect summary, so a snapshot
+   would be hidden action-at-a-distance the types do not record. Third,
+   forbid-then-relax is additive (as with decision 3): adding a
+   snapshot later only changes what `start_link` receives and breaks no
+   program, while retracting one would.
+
+   *Rejected*: snapshotting the spawner's in-scope map into the
+   gen_server state via an extra `start_link` argument. It makes a
+   `handle` block visually wrapping a `spawn` affect the spawned actor
+   — which reads intuitively but exceeds what the effect rows state.
+   The residual surprise (such a block does nothing for the actor) is a
+   documentation and future-lint concern, not a semantics one.
+
 ### Consequences
 
 - `request(pid, GetStatus)` lowers to `gen_server:call(Pid, get_status)`;
@@ -1319,9 +1343,10 @@ so that promise is currently unimplementable as stated.
   apply; bare-effect operations await operation signatures.
 - The registry fallback gives cross-process handling a natural resting
   place: a spawned actor's processes see registry defaults without any map
-  crossing the spawn boundary. Whether `spawn` should *also* snapshot the
-  spawner's in-scope map (ADR-020 §6) remains open and is decided with the
-  runtime library.
+  crossing the spawn boundary. ADR-020 §6 (as amended) locks this as the
+  only mechanism: `spawn` never snapshots the spawner's in-scope map, and
+  generated gen_server callbacks invoke actor init and handler bodies with
+  the empty map.
 - Pure functions pay nothing; effectful calls pay one map argument and tool
   calls one dispatcher hop — accepted for v0.1 in exchange for uniform
   audit capture.

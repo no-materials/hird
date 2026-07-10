@@ -89,3 +89,37 @@ end-to-end demo ticket.
 **2026-07-10T09:17:20Z**
 
 Scope boundary per ADR-022 discussion: the spawn/send/request/reply *expressions* are emitted by hir-zp13's expression emitter (they lower inside ordinary function bodies); this ticket emits the gen_server behaviour-module shells (init/1, handle_call/3, handle_cast/2, exports) around handler bodies, reusing that emitter.
+
+**2026-07-10T12:10:01Z**
+
+Pre-implementation decisions locked:
+
+1. **Handler maps never cross the spawn boundary** (ADR-020 §6, amended
+   2026-07-10). Generated callbacks invoke init and handler bodies with
+   `#{}`; tool calls inside actors resolve via ADR-022 §3's registry
+   fallback. Rationale in the ADR (supervisor restarts have no spawner
+   context; a snapshot would exceed what effect rows state; forbid-then-
+   relax is additive). Shared contract with hir-7oph and hir-bxdd's test
+   harness: mocks for spawned actors install via the registry.
+
+2. **No per-message client wrapper functions.** The ticket sketch's
+   plan_repo/2, get_status/1 etc. would be dead code — call sites emit
+   gen_server:cast/call directly (hir-zp13). Only start_link is emitted
+   (needed by spawn and by supervisor child specs).
+
+3. **No shutdown/stop clause.** The sketch's shutdown → {stop, normal}
+   has no surface primitive behind it; v0.1 actors run until crash or
+   supervisor shutdown.
+
+4. **Only required callbacks emitted**: init/1, handle_call/3,
+   handle_cast/2. handle_info/terminate/code_change are optional
+   gen_server callbacks in modern OTP; rely on defaults, keep modules
+   minimal and readable.
+
+5. **Codegen public API grows multi-module output** — one .erl per actor
+   (ADR-020 §5) plus the base module, returned as named (module, source)
+   pairs instead of a single string. Affects hir-y9jo's `hird build`.
+
+Reminder from the sketch-vs-ADR check: handle_call clauses always return
+{noreply, State} with explicit gen_server:reply (ADR-020 §4); call
+payloads are bare constructor atoms, reply_to binds From.

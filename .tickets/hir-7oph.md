@@ -73,3 +73,14 @@ a dependency, not a framework.
 **2026-07-10T09:17:20Z**
 
 ADR-022 pins the generated-code contract this library implements: hird_tool_dispatch:call(ToolName, Handlers, Args), map keys {tool, name} / bare head atoms, binary-fun entries, registry fallback then {unhandled_tool, _} crash. hird_handlers is the process-independent default registry, not process-dictionary storage (rejected by ADR-013). Body amended.
+
+**2026-07-10T12:10:09Z**
+
+Contract update from ADR-020 §6 (amended 2026-07-10): handler maps never
+cross the spawn boundary — actor codegen (hir-1dvq) invokes init and
+handler bodies with `#{}`, so every tool call inside a spawned actor
+reaches the dispatcher with an empty map and resolves through this
+library's default registry (or crashes {unhandled_tool, ...} per
+ADR-022 §3). The registry is therefore the *only* mechanism for
+supplying handlers to actors; test harnesses (hir-bxdd) install mocks
+here. No snapshot variant of start_link needs to be supported.
