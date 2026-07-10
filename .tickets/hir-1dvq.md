@@ -1,6 +1,6 @@
 ---
 id: hir-1dvq
-status: open
+status: closed
 deps: [hir-m6ra, hir-zp13, ha-8fyg, hc-uz3r]
 links: []
 created: 2026-05-22T21:40:27Z
@@ -123,3 +123,22 @@ Pre-implementation decisions locked:
 Reminder from the sketch-vs-ADR check: handle_call clauses always return
 {noreply, State} with explicit gen_server:reply (ADR-020 §4); call
 payloads are bare constructor atoms, reply_to binds From.
+
+**2026-07-10T12:27:55Z**
+
+Implemented in hird-codegen (commit 3d70a20). Each actor emits a
+gen_server behaviour module: start_link at init arity (multi-param
+inits pack into the single init/1 argument), init/1 wraps the Hirð
+init body in {ok, State}, call constructors (ReplyTo field) become
+handle_call clauses with bare-atom payloads / From-bound reply channel
+/ explicit gen_server:reply / {noreply, NextState}, cast constructors
+become handle_cast clauses on their ADT wire shape. Callbacks run
+bodies against no handler map (registry fallback); a side with no
+constructors gets a crashing fallback clause so all three required
+callbacks exist. Actor modules qualify base-module function references.
+Public API is now emit_modules → Vec<EmittedModule> (base module first,
+then one per actor) — hir-y9jo's build command consumes the pairs.
+Verified: 6 new actor snapshots (24 codegen tests total), erlc compiles
+every emitted module of every fixture, and a Planner-shaped end-to-end
+drive (parse → check → lower → emit → erlc) produced a working
+hird_planner gen_server module.

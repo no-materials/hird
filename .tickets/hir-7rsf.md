@@ -60,7 +60,7 @@ inspectable).
 ## Task sequence
 
 1. [x] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
-2. [ ] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
+2. [x] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 3. [ ] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
@@ -104,3 +104,15 @@ Steps 2–5 are independent after step 1. Step 6 requires all of them.
 **2026-07-10T09:56:10Z**
 
 Task 1 (hir-zp13, Erlang source emission from IR) is done: expression emitter, handler-map threading, tool dispatch call sites, and declaration span comments are in hird-codegen, erlc-validated. Steps 2-5 (hir-1dvq, hir-z9rn, hir-7oph, hir-y9jo) are now unblocked and independent.
+
+**2026-07-10T12:28:13Z**
+
+Task 2 (hir-1dvq, actor codegen to gen_server) is done: actors emit
+gen_server behaviour modules per the locked mapping (per-constructor
+call/cast dispatch, ReplyTo as From, explicit gen_server:reply,
+registry-only handler resolution inside actors), erlc-validated.
+Codegen's public API changed for multi-module output: emit_modules
+returns (module, source) pairs — base module plus one per actor —
+which hir-y9jo's `hird build` should consume. Remaining independent
+steps: hir-z9rn (supervisor codegen), hir-7oph (runtime library),
+hir-y9jo (CLI); hir-bxdd (demo) needs all of them.
