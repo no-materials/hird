@@ -1,6 +1,6 @@
 ---
 id: hir-z9rn
-status: open
+status: closed
 deps: [hir-zp13]
 links: [hir-0bhk, hir-xbs5]
 created: 2026-07-09T12:58:31Z
@@ -85,3 +85,9 @@ mapping. How the demo reaches a child's pid (`supervisor:which_children/1`
 or runtime-library support) is hir-7oph/hir-bxdd's concern, not this
 ticket's.
 
+
+## Notes
+
+**2026-07-10T13:37:34Z**
+
+Implemented and closed. hird-codegen emits one supervisor behaviour module per supervisor declaration: start_link/0 registering {local, Module}, init/1 with SupFlags (strategy rendered verbatim per the locked decision, intensity, period) and one child-spec map per child (id, {actor_module, start_link, [start_args]}, restart disposition, explicit worker type, shutdown left to the OTP default; children unregistered). start_args renders through the hir-zp13 expression emitter with one variable scope spanning all children, so let-bindings across children freshen instead of colliding in init/1's shared Erlang scope. 5 snapshot tests (single child, multi-child covering permanent/transient/temporary, let-bound start_args, verbatim one_for_all, empty children), all erlc-validated. Also verified end to end on BEAM: supervisor starts, which_children reports the worker started from the rendered start_args, and a killed child is restarted one_for_one with fresh init state. Commit: 085c2c1.

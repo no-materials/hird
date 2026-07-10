@@ -61,7 +61,7 @@ inspectable).
 
 1. [x] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
 2. [x] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
-3. [ ] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
+3. [x] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
 6. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
@@ -116,3 +116,7 @@ returns (module, source) pairs — base module plus one per actor —
 which hir-y9jo's `hird build` should consume. Remaining independent
 steps: hir-z9rn (supervisor codegen), hir-7oph (runtime library),
 hir-y9jo (CLI); hir-bxdd (demo) needs all of them.
+
+**2026-07-10T13:37:43Z**
+
+Task 3 (hir-z9rn, supervisor codegen) is done: supervisor declarations emit OTP supervisor behaviour modules ({local, Module} registration, verbatim strategy, child specs starting actor modules' start_link/1 with start_args rendered by the general expression emitter), erlc-validated and smoke-tested on BEAM (child starts, one_for_one restart works). emit_modules now returns base + actor + supervisor modules. Remaining independent steps: hir-7oph (runtime library), hir-y9jo (CLI); hir-bxdd (demo) needs both.
