@@ -6,7 +6,7 @@
 //! `erlc` is on the `PATH` — compiled with stock `erlc`.
 
 use hird_ast::{AstNode, SourceFile};
-use hird_codegen::{emit_module, erlang_module_name};
+use hird_codegen::{EmittedModule, emit_modules};
 use hird_ir::IrModule;
 
 /// Every fixture: `(module name, Hirð source)`. The erlc validation test
@@ -29,6 +29,10 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Boom", BOOM),
     ("Ffi", FFI),
     ("Reserved", RESERVED),
+    ("Workshop", WORKER),
+    ("Clock", CLOCK),
+    ("Duo", DUO),
+    ("Echo", ECHO),
 ];
 
 const MATH: &str = "fn add(x: Int, y: Int) -> Int = x + y\n\
@@ -115,6 +119,47 @@ const FFI: &str = "extern fn sqrt(x: Float) -> Float\n\
 const RESERVED: &str = "type Marker = End | Query\n\
      fn rem(m: Marker) -> Marker = match m { End -> Query, Query -> End, }";
 
+const WORKER: &str = "effect Tool<t>\n\
+     type St = St(Int)\n\
+     tool Audit : { n: Int } -> Int\n\
+     actor Worker {\n\
+       state: St,\n\
+       message: Msg = | Set(Int) | Bump,\n\
+       init: fn(s: St) -> St ! {} = s,\n\
+       handle Set(x), St(_) -> St ! {} = St(x),\n\
+       handle Bump, St(n) -> St ! {Tool<Audit>} = St(audit({ n: n })),\n\
+     } ! {Tool<Audit>}";
+
+const CLOCK: &str = "type St = St(Int)\n\
+     fn bump(n: Int) -> Int = n + 1\n\
+     actor Ticker {\n\
+       state: St,\n\
+       message: Msg = | Tick | Via,\n\
+       init: fn(s: St) -> St ! {} = s,\n\
+       handle Tick, St(n) -> St ! {} = St(bump(n)),\n\
+       handle Via, St(n) -> St ! {} = let f = bump in St(f(n)),\n\
+     }";
+
+const DUO: &str = "effect Spawn<t>\n\
+     type St = St(Int)\n\
+     actor Pair {\n\
+       state: St,\n\
+       message: Msg = | Nop,\n\
+       init: fn(a: Int, b: Int) -> St ! {} = St(a + b),\n\
+       handle Nop, St(n) -> St ! {} = St(n),\n\
+     }\n\
+     fn boot() -> Pid<Msg> ! {Spawn<Msg>} = spawn(Pair, 1, 2)";
+
+const ECHO: &str = "effect Send<t>\n\
+     type Ping = Ping\n\
+     type St = St(Int)\n\
+     actor Responder {\n\
+       state: St,\n\
+       message: Msg = | Get(ReplyTo<Ping>),\n\
+       init: fn(s: St) -> St ! {} = s,\n\
+       handle Get(r), St(n) -> St ! {Send<Ping>} = let ack = reply(r, Ping) in St(n),\n\
+     } ! {Send<Ping>}";
+
 /// Parses, checks, and lowers `source`, panicking on any parse or type error.
 fn lower(source: &str, name: &str) -> IrModule {
     let parsed = hird_parse::parse(source, 0);
@@ -133,10 +178,33 @@ fn lower(source: &str, name: &str) -> IrModule {
     hird_ir::lower_module(&file, &checked, name)
 }
 
-/// Emits `source` as Erlang, with a `src/<module>.hird` source path.
-fn emit(source: &str, name: &str) -> String {
+/// Emits `source` as Erlang modules, with a `src/<module>.hird` source path.
+fn emit_all(source: &str, name: &str) -> Vec<EmittedModule> {
     let module = lower(source, name);
-    emit_module(&module, &format!("src/{}.hird", name.to_lowercase()))
+    emit_modules(&module, &format!("src/{}.hird", name.to_lowercase()))
+}
+
+/// The base module's source for `source`.
+fn emit(source: &str, name: &str) -> String {
+    emit_all(source, name).swap_remove(0).source
+}
+
+/// The emitted module named `module_name` (an actor's `gen_server` module).
+fn actor_module(source: &str, name: &str, module_name: &str) -> String {
+    emit_all(source, name)
+        .into_iter()
+        .find(|m| m.name == module_name)
+        .expect("actor module is emitted")
+        .source
+}
+
+/// Every emitted module joined, each headed by its target file name.
+fn emit_joined(source: &str, name: &str) -> String {
+    let sections: Vec<String> = emit_all(source, name)
+        .into_iter()
+        .map(|m| format!("%%%% {}.erl\n{}", m.name, m.source))
+        .collect();
+    sections.join("\n")
 }
 
 /// The fixture source registered under `name`.
@@ -235,6 +303,36 @@ fn snapshot_reserved_words_are_quoted() {
     insta::assert_snapshot!(emit(program("Reserved"), "Reserved"));
 }
 
+#[test]
+fn snapshot_actor_gen_server_cast_only() {
+    insta::assert_snapshot!(actor_module(program("Boot"), "Boot", "hird_counter"));
+}
+
+#[test]
+fn snapshot_actor_gen_server_call_and_reply() {
+    insta::assert_snapshot!(actor_module(program("Msg"), "Msg", "hird_counter"));
+}
+
+#[test]
+fn snapshot_actor_payload_and_tool_dispatch() {
+    insta::assert_snapshot!(actor_module(program("Workshop"), "Workshop", "hird_worker"));
+}
+
+#[test]
+fn snapshot_actor_qualifies_module_functions() {
+    insta::assert_snapshot!(actor_module(program("Clock"), "Clock", "hird_ticker"));
+}
+
+#[test]
+fn snapshot_actor_multi_param_init() {
+    insta::assert_snapshot!(emit_joined(program("Duo"), "Duo"));
+}
+
+#[test]
+fn snapshot_actor_call_only_cast_fallback() {
+    insta::assert_snapshot!(actor_module(program("Echo"), "Echo", "hird_responder"));
+}
+
 // ── erlc validation ──────────────────────────────────────────────
 
 /// Compiles every fixture's generated Erlang with stock `erlc`. Skipped (with
@@ -249,21 +347,23 @@ fn generated_erlang_compiles_with_erlc() {
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("erlc");
     std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
     for (name, source) in PROGRAMS {
-        let erl = emit(source, name);
-        let module_name = erlang_module_name(name);
-        let path = dir.join(format!("{module_name}.erl"));
-        std::fs::write(&path, &erl).expect("write generated module");
-        let output = std::process::Command::new("erlc")
-            .arg("-o")
-            .arg(&dir)
-            .arg(&path)
-            .output()
-            .expect("run erlc");
-        assert!(
-            output.status.success(),
-            "erlc rejected {module_name}:\n{}{}\n--- generated ---\n{erl}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
+        for module in emit_all(source, name) {
+            let path = dir.join(format!("{}.erl", module.name));
+            std::fs::write(&path, &module.source).expect("write generated module");
+            let output = std::process::Command::new("erlc")
+                .arg("-o")
+                .arg(&dir)
+                .arg(&path)
+                .output()
+                .expect("run erlc");
+            assert!(
+                output.status.success(),
+                "erlc rejected {}:\n{}{}\n--- generated ---\n{}",
+                module.name,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+                module.source,
+            );
+        }
     }
 }

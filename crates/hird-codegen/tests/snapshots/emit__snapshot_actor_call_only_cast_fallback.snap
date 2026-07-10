@@ -1,0 +1,25 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "actor_module(program(\"Echo\"), \"Echo\", \"hird_responder\")"
+---
+%% Generated from src/echo.hird by the Hirð compiler. Do not edit.
+%% src/echo.hird:4
+-module(hird_responder).
+-behaviour(gen_server).
+-export([start_link/1]).
+-export([init/1, handle_call/3, handle_cast/2]).
+
+start_link(S) ->
+    gen_server:start_link(?MODULE, S, []).
+
+init(S) ->
+    {ok, S}.
+
+handle_call(get, R, {st, N}) ->
+    {noreply, begin
+        Ack = gen_server:reply(R, ping),
+        {st, N}
+    end}.
+
+handle_cast(Message, _State) ->
+    erlang:error({unexpected_cast, Message}).

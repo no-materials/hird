@@ -1,13 +1,14 @@
 // Copyright 2026 the Hird Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Erlang source emission: one IR module to one `.erl` file.
+//! Erlang source emission: one IR module to a set of `.erl` files.
 //!
-//! The output compiles with stock `erlc` and is formatted for human reading.
-//! Types are erased (no forms for type, tool, actor, or supervisor
-//! declarations — actor and supervisor behaviour modules are emitted
-//! separately); functions and extern stubs are the emitted forms, each headed
-//! by a `%% <file>:<line>` comment from its declaration span.
+//! [`emit_modules`] renders the base module — functions and extern stubs —
+//! plus one `gen_server` behaviour module per actor declaration. The output
+//! compiles with stock `erlc` and is formatted for human reading. Types are
+//! erased (no forms for type, tool, or supervisor declarations — supervisor
+//! behaviour modules are emitted separately); each form is headed by a
+//! `%% <file>:<line>` comment from its declaration span.
 //!
 //! # Calling convention
 //!
@@ -38,6 +39,19 @@
 //! `start_link`, `send` to `gen_server:cast`, `request` to `gen_server:call`
 //! with the fixed 5000 ms timeout, `reply` to `gen_server:reply`, and
 //! `crash!` to `erlang:error`.
+//!
+//! # Actor modules
+//!
+//! An actor emits a `gen_server` behaviour module exporting `start_link` (at
+//! the init arity) and the three required callbacks. Dispatch is per message
+//! constructor: a constructor whose declaration carries a `ReplyTo` field is
+//! received by a `handle_call` clause — the payload is the bare constructor
+//! atom, the reply channel binds `From` — and every other constructor by a
+//! `handle_cast` clause matching its ADT wire shape. Every clause returns
+//! `{noreply, NextState}`; replies are always explicit `gen_server:reply`
+//! calls in handler bodies. Handler maps never cross the spawn boundary:
+//! callbacks run init and handler bodies against no in-scope map, so tool
+//! calls inside actors fall back to the runtime registry.
 
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -46,23 +60,48 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ir::{
-    IrApp, IrConstructor, IrDecl, IrExpr, IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch,
-    IrModule, IrPattern, IrSpan, IrVar, LiteralValue,
+    IrActorDef, IrActorHandler, IrApp, IrConstructor, IrConstructorPat, IrDecl, IrExpr,
+    IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch, IrModule, IrPattern, IrSpan, IrVar,
+    LiteralValue,
 };
 use hird_types::{Effect, EffectRow, Type};
 
 use crate::names::{atom, erlang_module_name, snake_case, variable_base};
 
-/// Renders `module` as the text of one Erlang source file.
+/// One emitted Erlang source file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmittedModule {
+    /// The Erlang module name (also the target `.erl` file stem).
+    pub name: String,
+    /// The Erlang source text.
+    pub source: String,
+}
+
+/// Renders `module` as Erlang source files: the base module (functions and
+/// extern stubs) first, then one `gen_server` behaviour module per actor
+/// declaration, in source order.
 ///
 /// `source_path` is the Hirð source the module was lowered from; it appears
-/// in the generated-file banner and in the `%% <file>:<line>` comment above
-/// each form. The output's module name is [`erlang_module_name`] of the
-/// module's name, so the caller should write it to `<that name>.erl`.
+/// in each file's generated-file banner and `%% <file>:<line>` comments.
+/// Each output should be written to `<its name>.erl`.
 #[must_use]
-pub fn emit_module(module: &IrModule, source_path: &str) -> String {
-    let emitter = Emitter::new(module);
-    emitter.module(source_path)
+pub fn emit_modules(module: &IrModule, source_path: &str) -> Vec<EmittedModule> {
+    let mut emitter = Emitter::new(module);
+    let base = erlang_module_name(&module.name);
+    let mut out = Vec::from([EmittedModule {
+        name: base.clone(),
+        source: emitter.module(source_path),
+    }]);
+    emitter.remote = Some(base);
+    for decl in &module.declarations {
+        if let IrDecl::Actor(actor) = decl {
+            out.push(EmittedModule {
+                name: erlang_module_name(&actor.name),
+                source: emitter.actor_module(actor, source_path),
+            });
+        }
+    }
+    out
 }
 
 /// The indentation unit (four spaces).
@@ -186,6 +225,9 @@ struct Emitter<'a> {
     /// Module-level function or extern name → its function type (declared
     /// parameter and row, not a use site's instantiation).
     fns: BTreeMap<String, Type>,
+    /// The Erlang module to qualify module-level function references with;
+    /// `None` while emitting the base module itself (calls stay local).
+    remote: Option<String>,
 }
 
 impl<'a> Emitter<'a> {
@@ -217,7 +259,12 @@ impl<'a> Emitter<'a> {
                 IrDecl::Type(_) | IrDecl::Actor(_) | IrDecl::Supervisor(_) => {}
             }
         }
-        Self { module, tools, fns }
+        Self {
+            module,
+            tools,
+            fns,
+            remote: None,
+        }
     }
 
     // ── module ───────────────────────────────────────────────────
@@ -328,6 +375,136 @@ impl<'a> Emitter<'a> {
             ind(1),
             atom(&e.name)
         ));
+    }
+
+    // ── actor modules ────────────────────────────────────────────
+
+    /// One actor as a `gen_server` behaviour module: banner, span comment,
+    /// module/behaviour/export attributes, `start_link` at the init arity,
+    /// and the three required callbacks. Callback bodies run against no
+    /// in-scope handler map, so their tool calls fall back to the runtime
+    /// registry.
+    fn actor_module(&self, actor: &IrActorDef, source_path: &str) -> String {
+        let mut out = String::new();
+        out.push_str(&format!(
+            "%% Generated from {source_path} by the Hirð compiler. Do not edit.\n"
+        ));
+        Self::span_comment(actor.span, source_path, &mut out);
+        out.push_str(&format!("-module({}).\n", erlang_module_name(&actor.name)));
+        out.push_str("-behaviour(gen_server).\n");
+        out.push_str(&format!(
+            "-export([start_link/{}]).\n",
+            actor.init.params.len()
+        ));
+        out.push_str("-export([init/1, handle_call/3, handle_cast/2]).\n");
+        self.start_link_form(actor, &mut out);
+        self.init_form(actor, &mut out);
+        let (calls, casts) = split_handlers(actor);
+        self.handle_call_form(&calls, &mut out);
+        self.handle_cast_form(&casts, &mut out);
+        out
+    }
+
+    /// The `start_link` form: the init parameters at surface arity, passed to
+    /// `gen_server:start_link` packed as the single `init/1` argument.
+    fn start_link_form(&self, actor: &IrActorDef, out: &mut String) {
+        let mut cx = FnCx::default();
+        let params: Vec<String> = actor
+            .init
+            .params
+            .iter()
+            .map(|p| cx.fresh_var(&p.name))
+            .collect();
+        out.push_str(&format!(
+            "\nstart_link({}) ->\n{}gen_server:start_link(?MODULE, {}, []).\n",
+            params.join(", "),
+            ind(1),
+            init_arg(&params)
+        ));
+    }
+
+    /// The `init/1` callback: unpack the init parameters, run the Hirð init
+    /// body, and wrap the initial state in `{ok, _}`.
+    fn init_form(&self, actor: &IrActorDef, out: &mut String) {
+        let mut cx = FnCx::default();
+        let mut env = Env::default();
+        let mut params: Vec<String> = Vec::new();
+        for param in &actor.init.params {
+            let var = cx.fresh_var(&param.name);
+            env.scope.insert(
+                param.name.clone(),
+                Binding {
+                    var: var.clone(),
+                    ty: param.ty.clone(),
+                },
+            );
+            params.push(var);
+        }
+        let body = self.expr(&actor.init.body, &env, &mut cx, 1, Ctx::Expr);
+        let heads: Vec<String> = params.iter().map(|p| cx.head_var(p)).collect();
+        out.push_str(&format!(
+            "\ninit({}) ->\n{}{{ok, {body}}}.\n",
+            init_arg(&heads),
+            ind(1)
+        ));
+    }
+
+    /// The `handle_call/3` callback: one clause per call constructor — the
+    /// bare constructor atom as payload, the reply channel bound from `From`,
+    /// an explicit `{noreply, NextState}` — or a crashing fallback clause
+    /// when the actor has no call constructors.
+    fn handle_call_form(&self, clauses: &[CallClause<'_>], out: &mut String) {
+        if clauses.is_empty() {
+            out.push_str(&format!(
+                "\nhandle_call(Request, _From, _State) ->\n{}erlang:error({{unexpected_call, Request}}).\n",
+                ind(1)
+            ));
+            return;
+        }
+        out.push('\n');
+        for (i, clause) in clauses.iter().enumerate() {
+            let mut cx = FnCx::default();
+            let mut env = Env::default();
+            let tag = atom(&snake_case(&clause.ctor.name));
+            let from = clause
+                .ctor
+                .fields
+                .get(clause.reply_pos)
+                .map_or_else(|| String::from("_"), |p| self.pattern(p, &mut env, &mut cx));
+            let state = self.pattern(&clause.handler.state, &mut env, &mut cx);
+            let body = self.expr(&clause.handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let sep = if i + 1 == clauses.len() { "." } else { ";" };
+            out.push_str(&format!(
+                "handle_call({tag}, {from}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
+                ind(1)
+            ));
+        }
+    }
+
+    /// The `handle_cast/2` callback: one clause per cast constructor,
+    /// matching its ADT wire shape and returning `{noreply, NextState}`, or
+    /// a crashing fallback clause when the actor has no cast constructors.
+    fn handle_cast_form(&self, handlers: &[&IrActorHandler], out: &mut String) {
+        if handlers.is_empty() {
+            out.push_str(&format!(
+                "\nhandle_cast(Message, _State) ->\n{}erlang:error({{unexpected_cast, Message}}).\n",
+                ind(1)
+            ));
+            return;
+        }
+        out.push('\n');
+        for (i, handler) in handlers.iter().enumerate() {
+            let mut cx = FnCx::default();
+            let mut env = Env::default();
+            let message = self.pattern(&handler.message, &mut env, &mut cx);
+            let state = self.pattern(&handler.state, &mut env, &mut cx);
+            let body = self.expr(&handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let sep = if i + 1 == handlers.len() { "." } else { ";" };
+            out.push_str(&format!(
+                "handle_cast({message}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
+                ind(1)
+            ));
+        }
     }
 
     // ── expressions ──────────────────────────────────────────────
@@ -672,8 +849,9 @@ impl<'a> Emitter<'a> {
 
     /// A call of `callee` on already-rendered arguments (plus the optional
     /// trailing handler map): locals call through their variable, tools
-    /// through the dispatcher, module-level and qualified names by atom, and
-    /// any other callee expression parenthesised.
+    /// through the dispatcher, module-level and qualified names by atom
+    /// (module-level names `remote`-qualified in an actor module), and any
+    /// other callee expression parenthesised.
     fn call_on(
         &self,
         callee: &IrExpr,
@@ -706,7 +884,11 @@ impl<'a> Emitter<'a> {
                 );
             }
             if erlang_operator(&v.name).is_none() {
-                return format!("{}({})", atom(&v.name), with_map(args, map_arg).join(", "));
+                let rendered_args = with_map(args, map_arg).join(", ");
+                return match &self.remote {
+                    Some(base) => format!("{base}:{}({rendered_args})", atom(&v.name)),
+                    None => format!("{}({rendered_args})", atom(&v.name)),
+                };
             }
         }
         let rendered = self.expr(callee, env, cx, indent, Ctx::Expr);
@@ -714,8 +896,9 @@ impl<'a> Emitter<'a> {
     }
 
     /// A variable in value position: locals by their Erlang variable,
-    /// module-level functions as `fun name/arity`, qualified names as remote
-    /// fun references, and tools as a fun routing through the dispatcher.
+    /// module-level functions as `fun name/arity` (`remote`-qualified in an
+    /// actor module), qualified names as remote fun references, and tools as
+    /// a fun routing through the dispatcher.
     fn var_value(&self, v: &IrVar, env: &Env, cx: &mut FnCx) -> String {
         if let Some(binding) = env.scope.get(&v.name) {
             cx.referenced.insert(binding.var.clone());
@@ -730,7 +913,11 @@ impl<'a> Emitter<'a> {
             );
         }
         if let Some(ty) = self.fns.get(&v.name) {
-            return format!("fun {}/{}", atom(&v.name), emitted_arity(ty));
+            let arity = emitted_arity(ty);
+            return match &self.remote {
+                Some(base) => format!("fun {base}:{}/{arity}", atom(&v.name)),
+                None => format!("fun {}/{arity}", atom(&v.name)),
+            };
         }
         if let Some((module, member)) = v.name.rsplit_once('.') {
             let arity = emitted_arity(&v.ty);
@@ -824,6 +1011,59 @@ impl<'a> Emitter<'a> {
 }
 
 // ── free helpers ─────────────────────────────────────────────────
+
+/// One `handle_call` clause source: the handler, its message constructor
+/// pattern, and the `ReplyTo` field position within that constructor.
+struct CallClause<'m> {
+    /// The handler supplying the state pattern and body.
+    handler: &'m IrActorHandler,
+    /// The message constructor pattern.
+    ctor: &'m IrConstructorPat,
+    /// The `ReplyTo` field position in the constructor's declaration.
+    reply_pos: usize,
+}
+
+/// Splits an actor's handlers into call clauses (message constructor carries
+/// a `ReplyTo` field) and cast handlers, preserving declaration order.
+fn split_handlers(actor: &IrActorDef) -> (Vec<CallClause<'_>>, Vec<&IrActorHandler>) {
+    let mut calls = Vec::new();
+    let mut casts = Vec::new();
+    for handler in &actor.handlers {
+        let call = match &handler.message {
+            IrPattern::Constructor(ctor) => actor
+                .message
+                .constructors
+                .iter()
+                .find(|def| def.name == ctor.name)
+                .and_then(|def| def.fields.iter().position(is_reply_to))
+                .map(|reply_pos| CallClause {
+                    handler,
+                    ctor,
+                    reply_pos,
+                }),
+            _ => None,
+        };
+        match call {
+            Some(clause) => calls.push(clause),
+            None => casts.push(handler),
+        }
+    }
+    (calls, casts)
+}
+
+/// Whether `ty`'s head is the built-in `ReplyTo`.
+fn is_reply_to(ty: &Type) -> bool {
+    matches!(ty, Type::TyCon(name, _) if name.as_str() == "ReplyTo")
+}
+
+/// The single `init/1` argument carrying the init parameters: a lone
+/// parameter travels bare; zero or several pack into a tuple.
+fn init_arg(params: &[String]) -> String {
+    match params {
+        [single] => single.clone(),
+        many => format!("{{{}}}", many.join(", ")),
+    }
+}
 
 /// A literal's Erlang rendering: integers and floats verbatim, strings as
 /// UTF-8 binaries (the escape repertoire is shared).

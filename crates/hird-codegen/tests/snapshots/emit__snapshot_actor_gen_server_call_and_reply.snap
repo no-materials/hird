@@ -1,0 +1,25 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "actor_module(program(\"Msg\"), \"Msg\", \"hird_counter\")"
+---
+%% Generated from src/msg.hird by the Hirð compiler. Do not edit.
+%% src/msg.hird:5
+-module(hird_counter).
+-behaviour(gen_server).
+-export([start_link/1]).
+-export([init/1, handle_call/3, handle_cast/2]).
+
+start_link(S) ->
+    gen_server:start_link(?MODULE, S, []).
+
+init(S) ->
+    {ok, S}.
+
+handle_call(get, R, {st, N}) ->
+    {noreply, begin
+        Sent = gen_server:reply(R, {status, N}),
+        {st, N}
+    end}.
+
+handle_cast(inc, {st, N}) ->
+    {noreply, {st, N + 1}}.
