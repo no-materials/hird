@@ -63,7 +63,7 @@ inspectable).
 2. [x] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 3. [x] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [x] [hir-7oph](hir-7oph.md) — Erlang runtime support library
-5. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
+5. [x] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
 6. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
 Step 2 implements the mapping locked by Phase 7's design ADR (ha-8fyg).
@@ -136,3 +136,19 @@ end on BEAM: supervised actor, registry mocks, audit lines, crash-restart.
 Remaining: hir-y9jo (CLI; its `hird run` startup wiring should start
 hird_audit and register each base module's hird_tools@/0), then hir-bxdd
 (demo).
+
+**2026-07-27T10:49:01Z**
+
+Task 5 (hir-y9jo, CLI) is done: the hird binary implements check, build,
+run, emit-ast, and emit-effect-graph. build writes generated + embedded
+runtime .erl into _build/hird/ (overridable) and compiles with erlc; run
+enters through a generated hird_boot module (starts hird_audit with the
+stdout sink, registers each base module's hird_tools@/0, calls main with
+an empty handler map) and requires fn main() → () with no residual
+Tool<…> effects. The effect graph is a versioned serde projection in
+hird-ir (effect_graph → EffectGraph, schema_version 1) shared with the
+future MCP server; the CLI serializes or text-renders it. Verified on
+BEAM: mocked tool calls audit to stdout; actors spawn/request/reply.
+
+Only hir-bxdd (the v0.1 demo) remains; all of its dependencies are now
+closed.

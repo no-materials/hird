@@ -1,6 +1,6 @@
 ---
 id: hir-y9jo
-status: open
+status: closed
 deps: [hir-zp13]
 links: []
 created: 2026-05-22T21:41:40Z
@@ -96,3 +96,19 @@ additively only.
   include_str! and write them into the build dir; single self-contained
   binary.
 - Audit sink for CLI runs defaults to stdout (ADR-016 wire format).
+
+**2026-07-27T10:48:50Z**
+
+Done. hird-ir gained the versioned EffectGraph projection (schema_version 1,
+canonical + structural type rendering, per-node source lines); the CLI
+implements check/build/run/emit-ast/emit-effect-graph per the design note:
+miette-rendered diagnostics with spans, embedded runtime via include_str!,
+generated hird_boot (audit sink on stdout, hird_tools@ registration, main
+with empty handler map), fn-main validation (no params, unit return, no
+residual Tool<…> effects), module-name collision detection, and erlc/erl
+detection with install advice. 11 CLI integration tests cover every
+subcommand plus the error paths; 3 hird-ir tests pin the graph shape.
+Verified end to end on BEAM: a handle-mocked tool call runs and emits its
+audit record on stdout, and a spawn/request/reply actor round-trips.
+Arg passthrough after -- is reserved (rejected with a message) pending a
+main(args) arity.
