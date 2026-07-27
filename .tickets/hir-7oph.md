@@ -84,3 +84,35 @@ library's default registry (or crashes {unhandled_tool, ...} per
 ADR-022 §3). The registry is therefore the *only* mechanism for
 supplying handlers to actors; test harnesses (hir-bxdd) install mocks
 here. No snapshot variant of start_link needs to be supported.
+
+**2026-07-27T09:09:14Z**
+
+Implementation recommendations for the two open contract gaps:
+
+1. Caller field: amend the dispatch contract to
+   hird_tool_dispatch:call(ToolName, Caller, Handlers, Args) with
+   Caller a codegen-supplied binary literal ("Module.function", or the
+   ADR-016 provisional actor form "Planner.handle_msg/PlanRepo"). The
+   emitter statically knows the enclosing function at every dispatch
+   site, so this is a free literal argument and satisfies ADR-016's
+   injected-never-ambient rule. Rejected: stacktrace inspection
+   (fragile, slow) and process-dictionary context (hidden state,
+   contra ADR-005). Requires a small emit.rs change and an ADR-022
+   amendment in the same commit.
+
+2. Audit encoding: type-directed against a generated signature table,
+   never term-directed heuristics. Byte-exact conformance/v1
+   reproduction cannot survive guessing ctor-tuple vs plain-tuple from
+   raw terms. Codegen already holds every tool signature: emit a
+   metadata table into the base module (tool atom -> original
+   PascalCase wire name + wire type shape) that generated code
+   registers with hird_audit at startup. This also fixes the lossy
+   read_repo -> "ReadRepo" casing without reconstruction, and keeps
+   the Erlang encoder structurally parallel to the Rust oracle so the
+   goldens become a straight eunit fixture. Open sub-choice is
+   placement only (base module vs sidecar); base module preferred --
+   one artifact, no extra file plumbing in hird build.
+
+Also: hir-z9rn emitted supervisor modules with inline child specs, so
+nothing generated references hird_sup_util; keep it minimal or drop it
+from the AC.
