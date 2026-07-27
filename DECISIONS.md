@@ -1382,6 +1382,108 @@ so that promise is currently unimplementable as stated.
 
 ---
 
+## ADR-023: `install` blocks — registry-backed default handlers from Hirð
+
+**Date**: 2026-07-27
+**Status**: Accepted (gives ADR-022 §3's registry a Hirð-level surface;
+complements ADR-020 §6's no-snapshot rule)
+
+### Context
+
+Handler maps never cross the spawn boundary (ADR-020 §6 as amended): a
+spawned actor's tool calls resolve exclusively through the runtime registry,
+and ADR-022 §3 designates that registry as "where deployments and test
+harnesses install process-wide defaults" — without saying how. The only
+installation API is Erlang (`hird_handlers:install_handler/2`), so a program
+whose actors use tools is unrunnable from `hird run` alone: the first
+dispatch misses the registry and crashes with `{unhandled_tool, …}`, and the
+supervisor restart-loops. The v0.1 demo is exactly such a program, and
+requiring an Erlang sidecar module to run the flagship Hirð demo would
+undercut the pitch the demo exists to make.
+
+Every handler v0.1 actually needs — mocks, canned demo data, a unit log
+handler — is a pure Hirð function; tool implementations that genuinely
+require Erlang await FFI, which v0.1 does not have. And the machinery to
+check and emit handler bindings already exists for `handle` blocks: ADR-017's
+signature-directed arm checking and ADR-022 §1's normalisation of every arm
+to a binary `fun(Args, Handlers)`.
+
+### Decision
+
+A new expression form, syntactically symmetric with `handle`:
+
+```
+install {
+  Tool<ReadRepo> → demo_read_repo,
+  Tool<CreateTicket> → demo_create_ticket,
+} in run_demo(config)
+```
+
+1. **Arms are checked exactly like `handle` arms** — ADR-013 §1's structural
+   checks, ADR-017's signature-directed checking for `Tool<…>` arms, the
+   same error codes — with one addition: an installed handler's effect row
+   must be **closed and empty**. A registry entry is invoked later, in
+   arbitrary processes, against whatever handler map the eventual call site
+   carries; the install expression's row cannot promise anything about those
+   sites, so v0.1 admits only pure handlers. Relaxing this later is
+   additive. Non-tool arms remain legal as in `handle` blocks and carry the
+   same caveat: no emitted call site consults them in v0.1 (ADR-022).
+
+2. **`install` contributes the checker-known bare effect `Install`.** Like
+   `Spawn`/`Send`/`Await`, it is a keyword form whose effect head the
+   checker supplies; no user declaration exists or is needed. Registry
+   mutation is process-global state, and the row entry is what keeps that
+   visible, per the explicit-over-implicit tenet. The expression's row is
+   the body's row ∪ `{Install}`. `hird run`'s entry check is unchanged — it
+   forbids residual `Tool<…>` only — so a `main` that installs and then
+   spawns is accepted.
+
+3. **Dynamic-extent semantics via `with_handlers`.** The form lowers to
+   `hird_handlers:with_handlers(Entries, fun() -> Body end)`: entries are
+   installed (replacing previous entries for the same keys), visible to
+   *all* processes for the dynamic extent of the body, and restored
+   afterwards, crash included. Keys and entry normalisation reuse ADR-022
+   §1's scheme verbatim (`{tool, read_repo}`-style keys, binary funs). The
+   value of the whole expression is the body's value.
+
+   *Rejected — permanent unscoped installation.* Simpler, but it leaks
+   state across test cases and gives harnesses no hygiene, while the
+   runtime's restore machinery already exists. The restore is best-effort
+   under concurrency (the registry is global; a process racing the restore
+   window sees old entries) — accepted for v0.1, where installation happens
+   at startup and test setup.
+
+   *Rejected — a CLI flag (`hird run --handlers <mod>`) naming an
+   Erlang-authored install module.* It optimises for handlers that cannot
+   be written in Hirð — FFI-backed real tool implementations — which v0.1
+   cannot express anyway, at the cost of making the only deployment story
+   an Erlang artifact and splitting handler authoring across two languages.
+   `hird_handlers:install_handler/2` stays documented as the Erlang interop
+   path; if FFI lands, Hirð functions calling FFI install through this same
+   form.
+
+   *Rejected — implicit snapshot of the spawner's map at spawn.* Already
+   rejected by ADR-020 §6 and unchanged here: `install` is explicit,
+   deliberately global, and marked in the row — everything the snapshot
+   was not.
+
+### Consequences
+
+- The v0.1 demo and its dry-run harness are expressible entirely in Hirð:
+  the same program, the same unconditional audit stream (ADR-022 §2),
+  differing only in the installed handler set.
+- The lexer gains an `install` keyword; parser, checker, IR, lowering, and
+  emitter each gain a small form that reuses the corresponding `handle`
+  machinery rather than duplicating it.
+- The pure-handler restriction makes a capturing handler (accumulating
+  state in Hirð) inexpressible; harnesses assert on the audit log instead,
+  which unconditional dispatch recording makes sufficient.
+- An `Install` entry in a row is honest but coarse — it says "mutates the
+  global handler registry somewhere below" with no per-key granularity.
+  Acceptable at v0.1's resolution; a parametric refinement is additive.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
