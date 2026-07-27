@@ -62,7 +62,7 @@ inspectable).
 1. [x] [hir-zp13](hir-zp13.md) — Erlang source emission from IR
 2. [x] [hir-1dvq](hir-1dvq.md) — Actor codegen to Erlang gen_server
 3. [x] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
-4. [ ] [hir-7oph](hir-7oph.md) — Erlang runtime support library
+4. [x] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [ ] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
 6. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
