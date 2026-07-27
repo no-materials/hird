@@ -59,3 +59,40 @@ use asdf/nix."
 - clap-based argument parsing with --help for all subcommands.
 - At least one integration test per subcommand.
 
+
+## Notes
+
+**2026-07-27T10:13:36Z**
+
+Design decisions for this ticket (agreed with nomaterials):
+
+**`hird run` entry point — `fn main` convention, generated boot module.**
+`hird run` requires a `fn main() → ()` in the compiled module and errors if
+absent (no implicit "start all supervisors"; explicit over implicit). Arg
+passthrough after `--` is reserved for a later `main(args)` arity. The CLI
+enforces that main's residual effect row contains no unhandled `Tool<…>`
+effects (per ADR-017's signature-directed checking), so an empty handler
+map at the top level is a compile error rather than an ADR-022 runtime
+dispatch crash. The caller id for main is the call-site literal
+"Module.main" per ADR-022 as amended. Startup wiring is a small *generated
+boot module* (starts hird_audit, registers each base module's
+hird_tools@/0, calls main@ with an empty handler map) — not an `erl -eval`
+string — so the startup sequence stays in inspectable .erl and the build
+output runs on plain erl without the CLI.
+
+**Effect graph — versioned projection type in hird-ir, not ad-hoc CLI JSON.**
+Add `pub fn effect_graph(&IrModule) -> EffectGraph` (serde) to hird-ir; the
+CLI only serializes it, and hir-q0as's MCP server consumes the same Rust
+type — one schema, two frontends. Shape: top-level `schema_version` field;
+types rendered both structurally and as canonical surface-syntax strings
+(reuse the pretty-printer); source spans on every node. Schema evolves
+additively only.
+
+**Smaller calls.**
+- `<file|dir>`: a directory compiles each .hird file as an independent
+  module into one output dir (ADR-010 defers resolution); collide on
+  generated module names → error.
+- Runtime shipping: embed runtime/*.erl in the hird binary via
+  include_str! and write them into the build dir; single self-contained
+  binary.
+- Audit sink for CLI runs defaults to stdout (ADR-016 wire format).
