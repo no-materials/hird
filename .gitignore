@@ -9,3 +9,6 @@ target
 
 # Erlang build output.
 runtime/_build/
+
+# hird CLI default build output.
+/_build/

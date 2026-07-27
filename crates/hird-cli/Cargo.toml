@@ -13,15 +13,16 @@ name = "hird"
 path = "src/main.rs"
 
 [dependencies]
-hird-lex.workspace = true
-hird-parse.workspace = true
+hird-parse = { workspace = true, features = ["std"] }
 hird-ast.workspace = true
+hird-check.workspace = true
 hird-types.workspace = true
-hird-actors.workspace = true
 hird-ir.workspace = true
 hird-codegen.workspace = true
-hird-mcp.workspace = true
-hird-lsp.workspace = true
+
+clap = { version = "4", features = ["derive"] }
+miette = { version = "7", default-features = false, features = ["fancy-no-syscall"] }
+serde_json = "1"
 
 [lints]
 workspace = true
