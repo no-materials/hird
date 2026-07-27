@@ -1,6 +1,6 @@
 ---
 id: hir-shiv
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-27T12:26:53Z

@@ -64,7 +64,7 @@ inspectable).
 3. [x] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [x] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [x] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
-6. [ ] [hir-shiv](hir-shiv.md) — install blocks: dynamic-extent registry handlers from Hirð
+6. [x] [hir-shiv](hir-shiv.md) — install blocks: dynamic-extent registry handlers from Hirð
 7. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
 Step 2 implements the mapping locked by Phase 7's design ADR (ha-8fyg).
@@ -168,3 +168,17 @@ crash-loop on {unhandled_tool, …}. ADR-023 locks a Hirð-level
 handlers only, checker-known Install effect, dynamic-extent semantics
 via hird_handlers:with_handlers), keeping the demo and its harness pure
 Hirð. hir-bxdd now depends on hir-shiv.
+
+**2026-07-27T14:05:17Z**
+
+Task 6 (hir-shiv, install blocks) is done: the install keyword, handle-grammar
+arms, checking (handle's structural + signature-directed checks, plus a new
+pure-handler diagnostic C0051), the checker-known Install effect (registry
+built-in, no user declaration needed), a dedicated IR node, and emission to
+hird_handlers:with_handlers with the established keys and binary-fun entries.
+Verified on BEAM end to end: a spawned actor's tool call resolves through the
+handler main installs, the audit record appears on stdout, and the registry
+is restored after the body — crash included, through the emitted path.
+phrasebook.md documents the form next to Handle Blocks.
+
+Only hir-bxdd (the v0.1 demo) remains; all of its dependencies are closed.
