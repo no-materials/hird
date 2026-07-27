@@ -35,10 +35,16 @@
 
 extern crate alloc;
 
+mod graph;
 mod ir;
 mod lower;
 mod pretty;
 
+pub use graph::{
+    ActorNode, ChildNode, ConstructorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectGraph, EffectRef,
+    EffectRowRef, HandlerNode, InitNode, MessageNode, ParamNode, SupervisorNode, ToolNode, TypeRef,
+    TypeStructure, effect_graph,
+};
 pub use hird_types::EffectRow;
 pub use ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,

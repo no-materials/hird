@@ -1,0 +1,256 @@
+---
+source: crates/hird-ir/tests/effect_graph.rs
+expression: "graph.to_json_pretty().expect(\"graph serializes\")"
+---
+{
+  "schema_version": 1,
+  "module": "Planner",
+  "actors": [
+    {
+      "name": "Planner",
+      "line": 11,
+      "state": {
+        "display": "St",
+        "structure": {
+          "kind": "Con",
+          "name": "St",
+          "args": []
+        }
+      },
+      "message": {
+        "name": "PlannerMsg",
+        "constructors": [
+          {
+            "name": "PlanRepo",
+            "fields": [
+              {
+                "display": "Path",
+                "structure": {
+                  "kind": "Con",
+                  "name": "Path",
+                  "args": []
+                }
+              }
+            ]
+          },
+          {
+            "name": "GetStatus",
+            "fields": [
+              {
+                "display": "ReplyTo<Status>",
+                "structure": {
+                  "kind": "Con",
+                  "name": "ReplyTo",
+                  "args": [
+                    {
+                      "kind": "Con",
+                      "name": "Status",
+                      "args": []
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Shutdown",
+            "fields": []
+          }
+        ]
+      },
+      "init": {
+        "params": [
+          {
+            "name": "c",
+            "type": {
+              "display": "St",
+              "structure": {
+                "kind": "Con",
+                "name": "St",
+                "args": []
+              }
+            }
+          }
+        ],
+        "effects": {
+          "display": "{}",
+          "effects": [],
+          "open": false
+        }
+      },
+      "handlers": [
+        {
+          "message": "PlanRepo",
+          "effects": {
+            "display": "{Tool<ReadRepo>}",
+            "effects": [
+              {
+                "display": "Tool<ReadRepo>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "ReadRepo",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "ReadRepo",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        },
+        {
+          "message": "GetStatus",
+          "effects": {
+            "display": "{Send<Status>}",
+            "effects": [
+              {
+                "display": "Send<Status>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "Status",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Status",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        },
+        {
+          "message": "Shutdown",
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        }
+      ],
+      "effects": {
+        "display": "{Send<Status>, Tool<ReadRepo>}",
+        "effects": [
+          {
+            "display": "Send<Status>",
+            "head": "Send",
+            "args": [
+              {
+                "display": "Status",
+                "structure": {
+                  "kind": "Con",
+                  "name": "Status",
+                  "args": []
+                }
+              }
+            ]
+          },
+          {
+            "display": "Tool<ReadRepo>",
+            "head": "Tool",
+            "args": [
+              {
+                "display": "ReadRepo",
+                "structure": {
+                  "kind": "Con",
+                  "name": "ReadRepo",
+                  "args": []
+                }
+              }
+            ]
+          }
+        ],
+        "open": false
+      }
+    }
+  ],
+  "supervisors": [
+    {
+      "name": "PlannerSup",
+      "line": 19,
+      "strategy": "one_for_one",
+      "intensity": 5,
+      "period": 60,
+      "children": [
+        {
+          "id": "planner",
+          "actor": "Planner",
+          "restart": "permanent"
+        }
+      ],
+      "effects": {
+        "display": "{Send<Status>, Tool<ReadRepo>}",
+        "effects": [
+          {
+            "display": "Send<Status>",
+            "head": "Send",
+            "args": [
+              {
+                "display": "Status",
+                "structure": {
+                  "kind": "Con",
+                  "name": "Status",
+                  "args": []
+                }
+              }
+            ]
+          },
+          {
+            "display": "Tool<ReadRepo>",
+            "head": "Tool",
+            "args": [
+              {
+                "display": "ReadRepo",
+                "structure": {
+                  "kind": "Con",
+                  "name": "ReadRepo",
+                  "args": []
+                }
+              }
+            ]
+          }
+        ],
+        "open": false
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "ReadRepo",
+      "line": 7,
+      "params": [],
+      "input": {
+        "display": "{ path: Path }",
+        "structure": {
+          "kind": "Record",
+          "fields": {
+            "path": {
+              "kind": "Con",
+              "name": "Path",
+              "args": []
+            }
+          }
+        }
+      },
+      "output": {
+        "display": "RepoState",
+        "structure": {
+          "kind": "Con",
+          "name": "RepoState",
+          "args": []
+        }
+      },
+      "effects": {
+        "display": "{}",
+        "effects": [],
+        "open": false
+      }
+    }
+  ]
+}
