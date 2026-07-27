@@ -1,6 +1,6 @@
 ---
 id: hir-7oph
-status: open
+status: closed
 deps: [hir-zp13]
 links: []
 created: 2026-05-22T21:41:26Z
@@ -116,3 +116,41 @@ Implementation recommendations for the two open contract gaps:
 Also: hir-z9rn emitted supervisor modules with inline child specs, so
 nothing generated references hird_sup_util; keep it minimal or drop it
 from the AC.
+
+**2026-07-27T09:50:23Z**
+
+Implemented and closed. runtime/ now holds the hand-written library, each
+module <200 lines with -specs and eunit coverage (36 tests, ./test.sh):
+
+- hird_tool_dispatch: call/4 per the amended ADR-022 contract — threaded
+  map hit, hird_handlers registry fallback, {unhandled_tool, _} crash —
+  with unconditional invocation-record capture to the audit sink.
+- hird_audit: gen_server sink; canonical JSON lines to stdout or an
+  append-only file (audit logs survive restarts), ordered writes, sync/0
+  flush point, register_tools/1 for the generated signature table; log/1
+  is a silent drop when no sink runs, so unaudited dispatch still works.
+- hird_handlers: registry over persistent_term (installs are rare,
+  lookups hot); install_handler/2, lookup_handler/1, with_handlers/2
+  (restores prior entries even when the body crashes).
+- hird_types: type-directed canonical wire encoder; reproduces all four
+  conformance/v1 goldens byte-exactly as an eunit fixture, including
+  float shortest-round-trip plain notation matching the Rust oracle.
+- hird_sup_util: kept minimal per the 2026-07-27 note — just child_pid/2
+  (the hir-z9rn hand-off for reaching unregistered children); the child-
+  spec helpers in the original body are dead since supervisors inline
+  their specs.
+
+Both contract gaps closed as recommended: dispatch is call(ToolName,
+Caller, Handlers, Args) with Caller a codegen-supplied binary literal
+(Module.function / Actor.init / Actor.handle_msg/Ctor), and codegen emits
+a hird_tools@/0 signature table (tool atom -> wire name, args/result/error
+shapes, ADT ctor tables) into the base module, registered with hird_audit
+at startup; generic tool positions render as `dynamic` and fail encoding
+explicitly rather than guessing. ADR-022/ADR-016 amended accordingly;
+hir-y9jo's `hird run` owns the startup wiring that calls register_tools.
+
+Verified end to end on BEAM: a supervised planner actor resolved mocked
+ReadRepo/CreateTicket through the registry (audit lines carry the actor
+caller form), a threaded-map mock overrode the registry, and an unhandled
+tool crashed the actor into a one_for_one restart. Commits: cd29e1a
+(codegen), f76ac9a (runtime).

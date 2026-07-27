@@ -120,3 +120,19 @@ hir-y9jo (CLI); hir-bxdd (demo) needs all of them.
 **2026-07-10T13:37:43Z**
 
 Task 3 (hir-z9rn, supervisor codegen) is done: supervisor declarations emit OTP supervisor behaviour modules ({local, Module} registration, verbatim strategy, child specs starting actor modules' start_link/1 with start_args rendered by the general expression emitter), erlc-validated and smoke-tested on BEAM (child starts, one_for_one restart works). emit_modules now returns base + actor + supervisor modules. Remaining independent steps: hir-7oph (runtime library), hir-y9jo (CLI); hir-bxdd (demo) needs both.
+
+**2026-07-27T09:50:33Z**
+
+Task 4 (hir-7oph, Erlang runtime support library) is done: runtime/ holds
+hird_tool_dispatch, hird_audit, hird_handlers, hird_types, and a minimal
+hird_sup_util (child_pid/2 only — generated supervisors inline their child
+specs), each with -specs and eunit tests; the encoder reproduces the
+conformance/v1 goldens byte-exactly. The dispatch contract gained an
+injected caller id — hird_tool_dispatch:call(ToolName, Caller, Handlers,
+Args) — and base modules now emit a hird_tools@/0 signature table for the
+audit sink's type-directed encoding (ADR-022/016 amended). Verified end to
+end on BEAM: supervised actor, registry mocks, audit lines, crash-restart.
+
+Remaining: hir-y9jo (CLI; its `hird run` startup wiring should start
+hird_audit and register each base module's hird_tools@/0), then hir-bxdd
+(demo).
