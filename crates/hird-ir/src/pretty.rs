@@ -32,8 +32,8 @@ use core::fmt::{Display, Write as _};
 use hird_types::{Effect, EffectRow, RowVar, Type};
 
 use crate::ir::{
-    IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrModule, IrPattern, IrSupervisorDef,
-    IrToolDef, IrTypeDef, LiteralValue,
+    IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrHandleArm, IrModule, IrPattern,
+    IrSupervisorDef, IrToolDef, IrTypeDef, LiteralValue,
 };
 
 /// Renders `module` as canonical Hirð source.
@@ -125,7 +125,11 @@ fn expr_prec(expr: &IrExpr) -> u8 {
                 PREC_APP
             }
         }
-        IrExpr::Lambda(_) | IrExpr::Let(_) | IrExpr::Match(_) | IrExpr::Handle(_) => PREC_LOW,
+        IrExpr::Lambda(_)
+        | IrExpr::Let(_)
+        | IrExpr::Match(_)
+        | IrExpr::Handle(_)
+        | IrExpr::Install(_) => PREC_LOW,
         IrExpr::App(app) => match as_operator(app) {
             Some((_, prec, _)) => prec,
             None => PREC_APP,
@@ -389,6 +393,14 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             }
             collect_row_effects(&h.effect_row, out);
             collect_expr_effects(&h.body, out);
+        }
+        IrExpr::Install(inst) => {
+            for arm in &inst.arms {
+                collect_effect(&arm.effect, out);
+                collect_expr_effects(&arm.handler, out);
+            }
+            collect_row_effects(&inst.effect_row, out);
+            collect_expr_effects(&inst.body, out);
         }
         IrExpr::Let(le) => {
             collect_expr_effects(&le.value, out);
@@ -850,20 +862,12 @@ impl Printer {
                 self.push(" }");
             }
             IrExpr::Handle(h) => {
-                self.push("handle { ");
-                for (i, arm) in h.arms.iter().enumerate() {
-                    if i > 0 {
-                        self.push(", ");
-                    }
-                    // Concrete effect heads (`Log`, `Tool<ReadRepo>`) render
-                    // straight through; the body's effects, not the head, carry
-                    // the type variables the signature renumbers.
-                    self.push_display(&arm.effect);
-                    self.push(" \u{2192} ");
-                    self.expr(&arm.handler, PREC_LOW);
-                }
-                self.push(" } in ");
+                self.arm_block("handle", &h.arms);
                 self.expr(&h.body, PREC_LOW);
+            }
+            IrExpr::Install(inst) => {
+                self.arm_block("install", &inst.arms);
+                self.expr(&inst.body, PREC_LOW);
             }
             IrExpr::Spawn(spawn) => {
                 self.push("spawn(");
@@ -904,6 +908,25 @@ impl Printer {
                 }
             },
         }
+    }
+
+    /// Renders a handler-arm block head (`kw { Effect → handler, … } in `),
+    /// shared by `handle` and `install`.
+    fn arm_block(&mut self, kw: &str, arms: &[IrHandleArm]) {
+        self.push(kw);
+        self.push(" { ");
+        for (i, arm) in arms.iter().enumerate() {
+            if i > 0 {
+                self.push(", ");
+            }
+            // Concrete effect heads (`Log`, `Tool<ReadRepo>`) render straight
+            // through; the body's effects, not the head, carry the type
+            // variables the signature renumbers.
+            self.push_display(&arm.effect);
+            self.push(" \u{2192} ");
+            self.expr(&arm.handler, PREC_LOW);
+        }
+        self.push(" } in ");
     }
 
     /// Renders a two-argument messaging keyword form (`kw(first, second)`).

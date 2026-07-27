@@ -128,6 +128,20 @@ fn spawn_unknown_actor_rejected() {
     insta::assert_snapshot!(check_str("fn boot() = spawn(Ghost)"));
 }
 
+/// A main that installs registry defaults and then spawns is accepted: the
+/// install block leaves `Spawn<Msg>` in the row and adds `Install`, neither
+/// of which is a residual `Tool<…>`.
+#[test]
+fn install_then_spawn_accepted() {
+    let source = format!(
+        "{COUNTER}\n\
+         fn mock(args: {{ path: Path }}) -> St = St(0)\n\
+         fn main(s: St) -> Pid<PlannerMsg> ! {{Spawn<PlannerMsg>, Install}} =\n\
+           install {{ Tool<ReadRepo> -> mock }} in spawn(Planner, s)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
 /// Spawn arguments are checked against the actor's init parameters: count…
 #[test]
 fn spawn_wrong_arity_rejected() {

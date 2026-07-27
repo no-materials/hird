@@ -1115,6 +1115,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::IF_KW => self.parse_if_expr(),
             SyntaxKind::MATCH_KW => self.parse_match_expr(),
             SyntaxKind::HANDLE_KW => self.parse_handle_expr(),
+            SyntaxKind::INSTALL_KW => self.parse_install_expr(),
             SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
             SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
             SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
@@ -1288,6 +1289,22 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn parse_handle_expr(&mut self) {
         self.start_node(SyntaxKind::HANDLE_EXPR);
         self.expect(SyntaxKind::HANDLE_KW);
+        self.parse_handler_arms_in_body();
+        self.finish_node();
+    }
+
+    /// `install { Effect → handler, ... } in body` — `handle`'s arm grammar
+    /// behind the `install` keyword.
+    fn parse_install_expr(&mut self) {
+        self.start_node(SyntaxKind::INSTALL_EXPR);
+        self.expect(SyntaxKind::INSTALL_KW);
+        self.parse_handler_arms_in_body();
+        self.finish_node();
+    }
+
+    /// `{ Effect → handler, ... } in body` — the shared tail of `handle` and
+    /// `install` expressions.
+    fn parse_handler_arms_in_body(&mut self) {
         self.expect(SyntaxKind::L_BRACE);
         if !self.at(SyntaxKind::R_BRACE) {
             self.parse_handle_arm();
@@ -1301,7 +1318,6 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::R_BRACE);
         self.expect(SyntaxKind::IN_KW);
         self.parse_expr();
-        self.finish_node();
     }
 
     /// `Effect → handler`.
@@ -1528,6 +1544,7 @@ fn is_keyword(kind: SyntaxKind) -> bool {
             | SyntaxKind::EFFECT_KW
             | SyntaxKind::TOOL_KW
             | SyntaxKind::HANDLE_KW
+            | SyntaxKind::INSTALL_KW
             | SyntaxKind::SPAWN_KW
             | SyntaxKind::SEND_KW
             | SyntaxKind::REQUEST_KW

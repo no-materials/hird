@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         fn bad() -> Int ! {Install} = install { Log -> 42 } in 0\")"
+---
+bad : () → Int ! {Install}
+error[C0031] 58..60: an install arm's handler must be a function, but this has type `Int`

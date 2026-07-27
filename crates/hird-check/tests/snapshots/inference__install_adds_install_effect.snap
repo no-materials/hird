@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         fn f(run: Int -> Int ! {Log}, h: Int -> Int) -> Int ! {Log, Install} =\\n\\\n           install { Log -> h } in run(0)\")"
+---
+f : (Int → Int ! {Log}) → (Int → Int) → Int ! {Install, Log}

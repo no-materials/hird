@@ -150,6 +150,10 @@ pub enum CheckCode {
     /// A restart strategy is parsed and type-checked but not implemented in
     /// v0.1 (only `one_for_one` is); a warning, not an error.
     C0050,
+    /// An `install` arm's handler has a non-empty or open effect row; an
+    /// installed handler runs in arbitrary processes against whatever handler
+    /// map the eventual call site carries, so it must be pure.
+    C0051,
 }
 
 /// A secondary source location attached to a diagnostic.

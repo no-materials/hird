@@ -1,0 +1,45 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = install { Tool<ReadRepo> -> a, Log -> b, } in m\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    INSTALL_EXPR
+      WHITESPACE " "
+      INSTALL_KW "install"
+      WHITESPACE " "
+      L_BRACE "{"
+      HANDLE_ARM
+        APP_TYPE
+          WHITESPACE " "
+          IDENT "Tool"
+          TYPE_ARGS
+            LT "<"
+            IDENT "ReadRepo"
+            GT ">"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "a"
+      COMMA ","
+      HANDLE_ARM
+        WHITESPACE " "
+        IDENT "Log"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "b"
+      COMMA ","
+      WHITESPACE " "
+      R_BRACE "}"
+      WHITESPACE " "
+      IN_KW "in"
+      WHITESPACE " "
+      IDENT "m"

@@ -20,8 +20,8 @@ use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
-    IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam,
-    IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
+    IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule,
+    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
     IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
@@ -340,6 +340,19 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             effect_row: canon_effect_row(&h.effect_row, map),
             result_type: canon_type(&h.result_type, map),
         }),
+        IrExpr::Install(inst) => IrExpr::Install(IrInstall {
+            arms: inst
+                .arms
+                .iter()
+                .map(|arm| IrHandleArm {
+                    effect: canon_effect(&arm.effect, map),
+                    handler: canon_expr(&arm.handler, map),
+                })
+                .collect(),
+            body: Box::new(canon_expr(&inst.body, map)),
+            effect_row: canon_effect_row(&inst.effect_row, map),
+            result_type: canon_type(&inst.result_type, map),
+        }),
         IrExpr::Constructor(ctor) => IrExpr::Constructor(IrConstructor {
             name: ctor.name.clone(),
             type_name: ctor.type_name.clone(),
@@ -621,6 +634,32 @@ fn handle_effect_only_in_arm_round_trips() {
     assert_roundtrips(
         "effect Log\n\
          fn run(lh: Int -> Int) -> Int = handle { Log -> lh } in 0",
+    );
+}
+
+// ── install blocks ───────────────────────────────────────────────
+//
+// An install lowers to an `IrInstall` carrying its arms, body, and row
+// (body ∪ {Install}); the printer re-emits the surface form.
+
+#[test]
+fn install_block_round_trips() {
+    assert_roundtrips(
+        "effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
+           install { Tool<Repo> -> h } in f(0)",
+    );
+}
+
+#[test]
+fn install_multi_arm_round_trips() {
+    assert_roundtrips(
+        "effect Log\n\
+         effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn demo(f: Int -> Int ! {Log}, lh: Int -> Int, th: { x: Int } -> Int) -> Int ! {Install, Log} =\n\
+           install { Log -> lh, Tool<Repo> -> th } in f(0)",
     );
 }
 

@@ -330,6 +330,8 @@ pub enum IrExpr {
     Match(IrMatch),
     /// `handle { effect → handler, … } in body`
     Handle(IrHandle),
+    /// `install { effect → handler, … } in body`
+    Install(IrInstall),
     /// `spawn(Actor, args…)`
     Spawn(IrSpawn),
     /// `send(pid, msg)`
@@ -455,6 +457,28 @@ pub struct IrHandleArm {
     pub effect: Effect,
     /// The handler implementation (a function).
     pub handler: IrExpr,
+}
+
+/// An `install { effect → handler, … } in body` block: registry-backed
+/// default handlers with dynamic extent.
+///
+/// Each arm binds an effect to a pure handler installed in the runtime's
+/// process-independent default registry for the extent of the body (and
+/// restored afterwards); spawned actors' tool calls resolve through that
+/// registry. Nothing is handled lexically, so the body's effects all remain
+/// in the block's row. The block's value is its body's value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrInstall {
+    /// The handler arms, in order (the arm shape is `handle`'s).
+    pub arms: Vec<IrHandleArm>,
+    /// The body the handlers are installed for.
+    pub body: Box<IrExpr>,
+    /// The block's effect row: the body's effects plus `Install`.
+    #[serde(serialize_with = "serialize_effect_row")]
+    pub effect_row: EffectRow,
+    /// The block's value type (the body's type).
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
 }
 
 /// A `spawn(Actor, args…)` expression: starts an actor, returning a typed

@@ -79,8 +79,8 @@ use alloc::vec::Vec;
 
 use hird_ir::{
     IrActorDef, IrActorHandler, IrApp, IrChildSpec, IrConstructor, IrConstructorPat, IrDecl,
-    IrExpr, IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch, IrModule, IrPattern, IrSpan,
-    IrSupervisorDef, IrToolDef, IrTypeDef, IrVar, LiteralValue,
+    IrExpr, IrExternRef, IrFnDef, IrHandle, IrInstall, IrLambda, IrLet, IrMatch, IrModule,
+    IrPattern, IrSpan, IrSupervisorDef, IrToolDef, IrTypeDef, IrVar, LiteralValue,
 };
 use hird_types::{Effect, EffectRow, Type};
 
@@ -821,6 +821,7 @@ impl<'a> Emitter<'a> {
             IrExpr::App(app) => self.app(app, env, cx, indent),
             IrExpr::Match(m) => self.match_expr(m, env, cx, indent),
             IrExpr::Handle(h) => self.handle(h, env, cx, indent, ctx),
+            IrExpr::Install(inst) => self.install(inst, env, cx, indent),
             IrExpr::Spawn(spawn) => {
                 let args: Vec<String> = spawn
                     .args
@@ -1034,6 +1035,38 @@ impl<'a> Emitter<'a> {
         inner.handlers = Some(var.clone());
         let body = self.expr(&h.body, &inner, cx, inner_indent, Ctx::Body);
         sequence(&[format!("{var} = {merged},"), body], indent, ctx)
+    }
+
+    /// An `install` block: `hird_handlers:with_handlers(Entries, fun() ->
+    /// Body end)`. Entries land in the runtime's process-independent default
+    /// registry for the dynamic extent of the body (restored afterwards,
+    /// crash included) — where spawned actors' tool calls resolve. Keys and
+    /// binary-fun normalisation are the handler map's; the body itself still
+    /// runs against the unchanged in-scope map.
+    fn install(&self, inst: &IrInstall, env: &Env, cx: &mut FnCx, indent: usize) -> String {
+        let entries: Vec<String> = inst
+            .arms
+            .iter()
+            .map(|arm| {
+                let key = effect_key(&arm.effect);
+                let entry = self.handler_entry(&arm.handler, env, cx, indent + 2);
+                format!("{{{key}, {entry}}}")
+            })
+            .collect();
+        let list = format!(
+            "[\n{}{}\n{}]",
+            ind(indent + 2),
+            entries.join(&format!(",\n{}", ind(indent + 2))),
+            ind(indent + 1)
+        );
+        let body = self.expr(&inst.body, env, cx, indent + 2, Ctx::Body);
+        format!(
+            "hird_handlers:with_handlers(\n{}{list},\n{}fun() ->\n{}{body}\n{}end)",
+            ind(indent + 1),
+            ind(indent + 1),
+            ind(indent + 2),
+            ind(indent + 1),
+        )
     }
 
     /// One handler-map entry: the arm's implementation normalised to a binary
@@ -1520,6 +1553,7 @@ fn expr_type(expr: &IrExpr) -> Type {
         IrExpr::App(app) => app.result_type.clone(),
         IrExpr::Match(m) => m.result_type.clone(),
         IrExpr::Handle(h) => h.result_type.clone(),
+        IrExpr::Install(inst) => inst.result_type.clone(),
         IrExpr::Spawn(s) => s.result_type.clone(),
         IrExpr::Send(s) => s.result_type.clone(),
         IrExpr::Request(r) => r.result_type.clone(),

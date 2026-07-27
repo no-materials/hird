@@ -210,6 +210,49 @@ fn handle_non_function_tool_handler_rejected() {
     ));
 }
 
+/// An install arm over a tool is signature-checked exactly like a handle
+/// arm: a matching handler is accepted (and the tool effect stays in the
+/// row — installation handles nothing lexically).
+#[test]
+fn install_tool_handler_signature_accepted() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type RepoState = RepoState(String)\n\
+         tool ReadRepo : { path: Path } -> RepoState\n\
+         fn mock(args: { path: Path }) -> RepoState = RepoState(\"clean\")\n\
+         fn demo(p: Path) -> RepoState ! {Tool<ReadRepo>, Install} =\n\
+           install { Tool<ReadRepo> -> mock } in read_repo({ path: p })"
+    ));
+}
+
+/// A mismatched handler on an install tool arm is rejected with the same
+/// signature diagnostic as a handle arm.
+#[test]
+fn install_mismatched_tool_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Path = Path(String)\n\
+         type RepoState = RepoState(String)\n\
+         tool ReadRepo : { path: Path } -> RepoState\n\
+         fn wrong(x: Int) -> Int = x\n\
+         fn demo(p: Path) -> RepoState ! {Tool<ReadRepo>, Install} =\n\
+           install { Tool<ReadRepo> -> wrong } in read_repo({ path: p })"
+    ));
+}
+
+/// Installing `Tool<X>` where `X` is a type but not a declared tool is an
+/// error, exactly as in a handle arm.
+#[test]
+fn install_non_tool_marker_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         type Repo = MkRepo\n\
+         fn bad(f: Int -> Int ! {Tool<Repo>}, h: Int -> Int) -> Int ! {Tool<Repo>, Install} =\n\
+           install { Tool<Repo> -> h } in f(0)"
+    ));
+}
+
 // ── standard library ────────────────────────────────────────────
 
 /// The standard tools (`llm_call`, `http_get`, `http_post`, `read_file`,

@@ -32,9 +32,9 @@ use alloc::vec::Vec;
 
 use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, CrashExpr, Decl, Expr,
-    ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, LambdaExpr, LetExpr, Literal, MatchExpr,
-    Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile, SpawnExpr,
-    SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
+    ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr, Literal,
+    MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile,
+    SpawnExpr, SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -43,9 +43,10 @@ use hird_types::{Effect, EffectRow, Type};
 use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
     IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
-    IrHandle, IrHandleArm, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule,
-    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
-    IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
+    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan,
+    IrSpawn, IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat,
+    LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -357,6 +358,7 @@ impl Lowerer<'_> {
             Expr::If(ife) => self.lower_if(ife),
             Expr::Match(me) => self.lower_match(me),
             Expr::Handle(handle) => self.lower_handle(handle),
+            Expr::Install(install) => self.lower_install(install),
             Expr::Spawn(spawn) => self.lower_spawn(spawn),
             Expr::Send(send) => self.lower_send(send),
             Expr::Request(request) => self.lower_request(request),
@@ -508,6 +510,37 @@ impl Lowerer<'_> {
             body: Box::new(self.lower_expr(&body)),
             effect_row,
             result_type: self.node_type(handle.syntax()),
+        })
+    }
+
+    /// `install { effect → handler, … } in body`. The arms and the block's row
+    /// come from the same checker side-tables as a `handle` block's.
+    fn lower_install(&self, install: &InstallBlock) -> IrExpr {
+        let body = install.body().expect("install has a body");
+        let arms = install
+            .arms()
+            .filter_map(|arm| {
+                let effect = self
+                    .checked
+                    .handled_effect_at(NodeKey::of_node(arm.syntax()))?
+                    .clone();
+                let handler = arm.handler()?;
+                Some(IrHandleArm {
+                    effect,
+                    handler: self.lower_expr(&handler),
+                })
+            })
+            .collect();
+        let effect_row = self
+            .checked
+            .effect_row_at(NodeKey::of_node(install.syntax()))
+            .cloned()
+            .unwrap_or_default();
+        IrExpr::Install(IrInstall {
+            arms,
+            body: Box::new(self.lower_expr(&body)),
+            effect_row,
+            result_type: self.node_type(install.syntax()),
         })
     }
 

@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn wrong(x: Int) -> Int = x\\n\\\n         fn demo(p: Path) -> RepoState ! {Tool<ReadRepo>, Install} =\\n\\\n           install { Tool<ReadRepo> -> wrong } in read_repo({ path: p })\")"
+---
+Path : String → Path
+RepoState : String → RepoState
+demo : Path → RepoState ! {Install, Tool<ReadRepo>}
+read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
+wrong : Int → Int
+record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }
+error[C0034] 235..240: handler for tool `ReadRepo` must have type `{ path: Path } → RepoState`, but this has type `Int → Int`

@@ -23,6 +23,7 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Repo", REPO),
     ("Audited", AUDITED),
     ("Multi", MULTI),
+    ("Deploy", DEPLOY),
     ("Eta", ETA),
     ("Boot", BOOT),
     ("Msg", MSG),
@@ -85,6 +86,16 @@ const MULTI: &str = "effect Log\n\
      tool Repo : { x: Int } -> Int\n\
      fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
        handle { Log -> lh, Tool<Repo> -> th } in f(0)";
+
+const DEPLOY: &str = "effect Log\n\
+     effect Tool<t>\n\
+     type Path = Path(String)\n\
+     type St = St(Int)\n\
+     tool ReadRepo : { path: Path } -> St\n\
+     fn mock(args: { path: Path }) -> St = St(0)\n\
+     fn unit_log(msg: String) -> St = St(1)\n\
+     fn demo(run: Int -> Int ! {Tool<ReadRepo>}) -> Int ! {Install, Tool<ReadRepo>} =\n\
+       install { Tool<ReadRepo> -> mock, Log -> unit_log } in run(0)";
 
 const ETA: &str = "fn apply(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = g(x)\n\
      fn call_pure(f: Int -> Int, x: Int) -> Int = f(x)\n\
@@ -383,6 +394,11 @@ fn snapshot_handle_block_extends_handler_map() {
 #[test]
 fn snapshot_handle_multi_arm() {
     insta::assert_snapshot!(emit(program("Multi"), "Multi"));
+}
+
+#[test]
+fn snapshot_install_block_wraps_with_handlers() {
+    insta::assert_snapshot!(emit(program("Deploy"), "Deploy"));
 }
 
 #[test]

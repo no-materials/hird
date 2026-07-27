@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Log\\n\\\n         fn bad(run: Int -> Int, h: Int -> Int ! {e}) -> Int ! {Install} =\\n\\\n           install { Log -> h } in run(0)\")"
+---
+bad : ∀r. (Int → Int) → (Int → Int ! {r}) → Int ! {Install}
+error[C0051] 94..95: an installed handler must be pure (its effect row closed and empty), but this handler's row is `{r1}`

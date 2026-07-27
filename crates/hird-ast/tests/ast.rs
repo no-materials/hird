@@ -315,6 +315,19 @@ fn handle_block_parts() {
 }
 
 #[test]
+fn install_block_parts() {
+    let Expr::Install(e) = body("install { Tool<ReadRepo> -> a, Log -> b } in m") else {
+        panic!("expected install");
+    };
+    assert_eq!(e.arms().count(), 2);
+    assert!(matches!(e.body(), Some(Expr::Name(_))));
+    let arms: Vec<_> = e.arms().collect();
+    assert!(matches!(arms[0].effect(), Some(TypeExpr::App(_))));
+    assert!(matches!(arms[0].handler(), Some(Expr::Name(_))));
+    assert!(matches!(arms[1].effect(), Some(TypeExpr::Name(_))));
+}
+
+#[test]
 fn bin_op_precedence() {
     // `x + y * z` parses as `x + (y * z)`.
     let Expr::BinOp(add) = body("x + y * z") else {

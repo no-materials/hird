@@ -17,8 +17,9 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, CrashExpr, Expr, FieldExpr, HandleBlock, IfExpr, LambdaExpr,
-    LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr, SendExpr, SpawnExpr,
+    AppExpr, AstNode, BinOpExpr, CrashExpr, Expr, FieldExpr, HandleArm, HandleBlock, IfExpr,
+    InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr,
+    SendExpr, SpawnExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -98,6 +99,7 @@ impl Checker {
             Expr::If(ife) => self.infer_if(ife),
             Expr::Match(me) => self.infer_match(me),
             Expr::Handle(handle) => self.infer_handle(handle),
+            Expr::Install(install) => self.infer_install(install),
             Expr::Spawn(spawn) => self.infer_spawn(spawn),
             Expr::Send(send) => self.infer_send(send),
             Expr::Request(request) => self.infer_request(request),
@@ -255,57 +257,17 @@ impl Checker {
         let mut handled = EffectRow::empty();
         let mut handler_effects = EffectRow::empty();
         for arm in handle.arms() {
-            // A `Tool<Marker>` head makes this a tool arm: the handled tool,
-            // whose operation signature the handler is checked against below.
-            let mut tool: Option<Name> = None;
-            if let Some(effect_expr) = arm.effect() {
-                let mut scope = Scope::new();
-                if let Ok(effect) = self.elaborate_handle_effect(&effect_expr, &mut scope) {
-                    self.handled_effects
-                        .push((NodeKey::of_node(arm.syntax()), effect.clone()));
-                    if effect.head().as_str() == "Tool"
-                        && let [marker] = effect.args()
-                    {
-                        match self.subst.resolve(marker) {
-                            Type::TyCon(name, _) if self.tool_signatures.contains_key(&name) => {
-                                tool = Some(name);
-                            }
-                            other => {
-                                let span = type_expr_span(&effect_expr, self.source_id);
-                                let _ = self.error(
-                                    CheckCode::C0033,
-                                    span,
-                                    format!("`{other}` is not a declared tool"),
-                                );
-                            }
-                        }
-                    }
-                    handled.insert(effect);
-                }
+            let (effect, tool) = self.check_arm_effect(&arm);
+            if let Some(effect) = effect {
+                handled.insert(effect);
             }
-            if let Some(handler) = arm.handler() {
-                let handler_ty = self.infer_expr(&handler)?;
-                let span = expr_span(&handler, self.source_id);
-                match self.subst.resolve(&handler_ty) {
-                    Type::TyFn(_, _, row) => {
-                        // `resolve` already resolved the function type's row, so
-                        // its effects are canonical; a later arm's solving is
-                        // caught by the final resolve of `handler_effects`.
-                        for effect in row.effects() {
-                            handler_effects.insert(effect.clone());
-                        }
-                        if let Some(tool) = tool {
-                            self.check_tool_handler(&tool, &handler_ty, span);
-                        }
-                    }
-                    other => {
-                        let _ = self.error(
-                            CheckCode::C0031,
-                            span,
-                            format!(
-                                "a handle arm's handler must be a function, but this has type `{other}`"
-                            ),
-                        );
+            if let Some((handler_ty, _)) = self.check_arm_handler(&arm, tool, "a handle")? {
+                // The freshly resolved function type's row is canonical; a
+                // later arm's solving is caught by the final resolve of
+                // `handler_effects`.
+                if let Type::TyFn(_, _, row) = self.subst.resolve(&handler_ty) {
+                    for effect in row.effects() {
+                        handler_effects.insert(effect.clone());
                     }
                 }
             }
@@ -321,6 +283,129 @@ impl Checker {
             .push((NodeKey::of_node(handle.syntax()), net.clone()));
         self.add_effects(&net, handle_span);
         Ok(body_ty)
+    }
+
+    /// `install { arms } in body` — registry-backed default handlers for the
+    /// dynamic extent of the body.
+    ///
+    /// The block's value type is the body's type. Arms are checked exactly
+    /// like `handle` arms, with one addition: an installed handler is invoked
+    /// later, in arbitrary processes, against whatever handler map the
+    /// eventual call site carries, so its effect row must be closed and empty.
+    /// Nothing is subtracted from the body's row — installation supplies
+    /// registry defaults, it handles nothing lexically — and the block's row
+    /// is the body's effects plus the checker-known bare effect `Install`.
+    fn infer_install(&mut self, install: &InstallBlock) -> Checked<Type> {
+        let Some(body) = install.body() else {
+            return Err(Aborted);
+        };
+        let install_span = node_span(install.syntax(), self.source_id);
+
+        // Captured apart from the enclosing accumulator so the recorded row
+        // for the IR node is exactly body ∪ {Install}.
+        let (body_res, body_row) = self.infer_in_fresh_row(|c| c.infer_expr(&body));
+        let body_ty = body_res?;
+
+        // The purity obligation is checked after all arms, so tool-signature
+        // unification has already solved what it can of each handler's row.
+        let mut installed: Vec<(Type, Span)> = Vec::new();
+        for arm in install.arms() {
+            let (_, tool) = self.check_arm_effect(&arm);
+            if let Some(checked) = self.check_arm_handler(&arm, tool, "an install")? {
+                installed.push(checked);
+            }
+        }
+        for (handler_ty, span) in installed {
+            if let Type::TyFn(_, _, row) = self.subst.resolve(&handler_ty)
+                && !row.is_empty()
+            {
+                let _ = self.error(
+                    CheckCode::C0051,
+                    span,
+                    format!(
+                        "an installed handler must be pure (its effect row closed \
+                         and empty), but this handler's row is `{row}`"
+                    ),
+                );
+            }
+        }
+
+        let mut net = self.subst.resolve_row(&body_row);
+        net.insert(Effect::named("Install"));
+        self.effect_rows
+            .push((NodeKey::of_node(install.syntax()), net.clone()));
+        self.add_effects(&net, install_span);
+        Ok(body_ty)
+    }
+
+    /// Elaborates a handle/install arm's effect head, recording it in the
+    /// handled-effects side table. A `Tool<Marker>` head additionally resolves
+    /// the marker to a declared tool — the second component, against whose
+    /// operation signature the arm's handler is checked — reporting C0033 when
+    /// the marker is not a declared tool.
+    fn check_arm_effect(&mut self, arm: &HandleArm) -> (Option<Effect>, Option<Name>) {
+        let Some(effect_expr) = arm.effect() else {
+            return (None, None);
+        };
+        let mut scope = Scope::new();
+        let Ok(effect) = self.elaborate_handle_effect(&effect_expr, &mut scope) else {
+            return (None, None);
+        };
+        self.handled_effects
+            .push((NodeKey::of_node(arm.syntax()), effect.clone()));
+        let mut tool: Option<Name> = None;
+        if effect.head().as_str() == "Tool"
+            && let [marker] = effect.args()
+        {
+            match self.subst.resolve(marker) {
+                Type::TyCon(name, _) if self.tool_signatures.contains_key(&name) => {
+                    tool = Some(name);
+                }
+                other => {
+                    let span = type_expr_span(&effect_expr, self.source_id);
+                    let _ = self.error(
+                        CheckCode::C0033,
+                        span,
+                        format!("`{other}` is not a declared tool"),
+                    );
+                }
+            }
+        }
+        (Some(effect), tool)
+    }
+
+    /// Infers a handle/install arm's handler and applies the shared checks:
+    /// the handler must be a function (C0031), and a tool arm's handler must
+    /// match the tool's operation signature (C0034). Returns the handler's
+    /// type and span when it is a function; `form` names the block form in
+    /// the C0031 message ("a handle" / "an install").
+    fn check_arm_handler(
+        &mut self,
+        arm: &HandleArm,
+        tool: Option<Name>,
+        form: &str,
+    ) -> Checked<Option<(Type, Span)>> {
+        let Some(handler) = arm.handler() else {
+            return Ok(None);
+        };
+        let handler_ty = self.infer_expr(&handler)?;
+        let span = expr_span(&handler, self.source_id);
+        match self.subst.resolve(&handler_ty) {
+            Type::TyFn(..) => {
+                if let Some(tool) = tool {
+                    self.check_tool_handler(&tool, &handler_ty, span);
+                }
+                Ok(Some((handler_ty, span)))
+            }
+            other => {
+                let _ = self.error(
+                    CheckCode::C0031,
+                    span,
+                    format!("{form} arm's handler must be a function, but this has type `{other}`"),
+                );
+                Ok(None)
+            }
+        }
     }
 
     /// Checks a tool arm's handler against the handled tool's operation

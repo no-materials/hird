@@ -422,6 +422,44 @@ fn handle_block_json_snapshot() {
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
 
+// ── install blocks ───────────────────────────────────────────────
+
+#[test]
+fn install_block_lowers_to_install_node() {
+    let module = lower(
+        "effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
+           install { Tool<Repo> -> h } in f(0)",
+        "Install",
+    );
+    let demo = fn_named(&module, "demo");
+    let IrExpr::Install(inst) = &demo.body else {
+        panic!("body should be an install, got {:?}", demo.body);
+    };
+    // One arm installing `Tool<Repo>`, bound to the `h` handler.
+    assert_eq!(inst.arms.len(), 1);
+    assert_eq!(format!("{}", inst.arms[0].effect), "Tool<Repo>");
+    assert!(matches!(&inst.arms[0].handler, IrExpr::Var(v) if v.name == "h"));
+    // Nothing is handled away: the body's row plus `Install`.
+    assert_eq!(format!("{}", inst.effect_row), "{Install, Tool<Repo>}");
+    // The body is the call `f(0)`, and the block's value is its body's.
+    assert!(matches!(inst.body.as_ref(), IrExpr::App(_)));
+    assert_eq!(ty_str(&inst.result_type), "Int");
+}
+
+#[test]
+fn install_block_json_snapshot() {
+    let module = lower(
+        "effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
+           install { Tool<Repo> -> h } in f(0)",
+        "Install",
+    );
+    insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
+}
+
 // ── tool declarations ────────────────────────────────────────────
 
 #[test]

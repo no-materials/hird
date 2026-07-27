@@ -41,6 +41,8 @@ pub enum SyntaxKind {
     TOOL_KW,
     /// `handle`
     HANDLE_KW,
+    /// `install`
+    INSTALL_KW,
     /// `spawn`
     SPAWN_KW,
     /// `send`
@@ -229,6 +231,8 @@ pub enum SyntaxKind {
     HANDLE_EXPR,
     /// Single handle arm (`Effect → impl`).
     HANDLE_ARM,
+    /// Install expression (`install { arms } in body`).
+    INSTALL_EXPR,
     /// Spawn expression (`spawn(Actor, args)`).
     SPAWN_EXPR,
     /// Send expression (`send(pid, msg)`).
@@ -297,6 +301,7 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Effect => Self::EFFECT_KW,
             TokenKind::Tool => Self::TOOL_KW,
             TokenKind::Handle => Self::HANDLE_KW,
+            TokenKind::Install => Self::INSTALL_KW,
             TokenKind::Spawn => Self::SPAWN_KW,
             TokenKind::Send => Self::SEND_KW,
             TokenKind::Request => Self::REQUEST_KW,
@@ -388,6 +393,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::EFFECT_KW => Some("effect"),
             Self::TOOL_KW => Some("tool"),
             Self::HANDLE_KW => Some("handle"),
+            Self::INSTALL_KW => Some("install"),
             Self::SPAWN_KW => Some("spawn"),
             Self::SEND_KW => Some("send"),
             Self::REQUEST_KW => Some("request"),

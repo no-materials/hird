@@ -227,6 +227,31 @@ Use for: mocking, dry-runs, log redirection, audit interception.
 
 ---
 
+## Install Blocks (registry defaults)
+
+```
+install {
+  Tool<ReadRepo> → demo_read_repo,
+  Tool<CreateTicket> → demo_create_ticket,
+} in run_demo(config)
+```
+
+Installs default handlers in the runtime registry for the dynamic extent of
+the body, then restores the previous entries (crash included). Handler maps
+never cross `spawn`, so this is how spawned actors' tool calls resolve.
+Use for: supplying deployment/demo handlers, test-harness mocks for actors.
+
+- Arms are `handle`'s: same grammar, same checking (including tool operation
+  signatures).
+- Installed handlers must be pure — their effect row closed and empty; they
+  run later, in arbitrary processes.
+- The expression's row is the body's row plus `Install`, a checker-known bare
+  effect head (like `Tool<t>`'s special status — no user declaration needed).
+- Entries are visible to *all* processes while the body runs; the restore is
+  best-effort under concurrency.
+
+---
+
 ## Capability Discipline
 
 No ambient state. Every non-deterministic or external operation requires a

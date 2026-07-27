@@ -823,6 +823,25 @@ impl HandleBlock {
 }
 
 ast_node! {
+    /// An `install { arms } in body` expression: registry-backed default
+    /// handlers with dynamic extent. Arms share `handle`'s grammar.
+    InstallBlock => INSTALL_EXPR
+}
+
+impl InstallBlock {
+    /// The handler arms, in order.
+    pub fn arms(&self) -> impl Iterator<Item = HandleArm> + '_ {
+        children(&self.0)
+    }
+
+    /// The body the handlers are installed for (after `in`).
+    #[must_use]
+    pub fn body(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::IN_KW)
+    }
+}
+
+ast_node! {
     /// A `spawn(Actor, args…)` expression. The actor name is a namespace
     /// reference, not an expression.
     SpawnExpr => SPAWN_EXPR
@@ -1114,6 +1133,8 @@ pub enum Expr {
     Match(MatchExpr),
     /// `handle { .. } in ..`
     Handle(HandleBlock),
+    /// `install { .. } in ..`
+    Install(InstallBlock),
     /// `spawn(Actor, ..)`
     Spawn(SpawnExpr),
     /// `send(pid, msg)`
@@ -1153,6 +1174,7 @@ impl Expr {
             SyntaxKind::IF_EXPR => Self::If(IfExpr(node)),
             SyntaxKind::MATCH_EXPR => Self::Match(MatchExpr(node)),
             SyntaxKind::HANDLE_EXPR => Self::Handle(HandleBlock(node)),
+            SyntaxKind::INSTALL_EXPR => Self::Install(InstallBlock(node)),
             SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
             SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
             SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
@@ -1200,6 +1222,7 @@ impl Expr {
             Self::If(n) => Some(n.syntax()),
             Self::Match(n) => Some(n.syntax()),
             Self::Handle(n) => Some(n.syntax()),
+            Self::Install(n) => Some(n.syntax()),
             Self::Spawn(n) => Some(n.syntax()),
             Self::Send(n) => Some(n.syntax()),
             Self::Request(n) => Some(n.syntax()),

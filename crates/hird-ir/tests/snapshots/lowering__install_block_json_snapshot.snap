@@ -1,0 +1,66 @@
+---
+source: crates/hird-ir/tests/lowering.rs
+expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
+---
+{
+  "name": "Install",
+  "declarations": [
+    {
+      "kind": "Tool",
+      "name": "Repo",
+      "params": [],
+      "input": "{ x: Int }",
+      "output": "Int",
+      "effect_row": "{}"
+    },
+    {
+      "kind": "Fn",
+      "name": "demo",
+      "params": [
+        {
+          "name": "f",
+          "type": "Int → Int ! {Tool<Repo>}"
+        },
+        {
+          "name": "h",
+          "type": "{ x: Int } → Int"
+        }
+      ],
+      "return_type": "Int",
+      "effect_row": "{Install, Tool<Repo>}",
+      "body": {
+        "kind": "Install",
+        "arms": [
+          {
+            "effect": "Tool<Repo>",
+            "handler": {
+              "kind": "Var",
+              "name": "h",
+              "type": "{ x: Int } → Int"
+            }
+          }
+        ],
+        "body": {
+          "kind": "App",
+          "func": {
+            "kind": "Var",
+            "name": "f",
+            "type": "Int → Int ! {Tool<Repo>}"
+          },
+          "args": [
+            {
+              "kind": "Literal",
+              "value": {
+                "Int": "0"
+              },
+              "type": "Int"
+            }
+          ],
+          "result_type": "Int"
+        },
+        "effect_row": "{Install, Tool<Repo>}",
+        "result_type": "Int"
+      }
+    }
+  ]
+}

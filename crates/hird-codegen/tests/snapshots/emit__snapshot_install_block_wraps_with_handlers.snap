@@ -1,0 +1,37 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Deploy\"), \"Deploy\")"
+---
+%% Generated from src/deploy.hird by the Hirð compiler. Do not edit.
+-module(hird_deploy).
+-export([mock/1, unit_log/1, demo/2, hird_tools@/0]).
+
+%% src/deploy.hird:6
+mock(_Args) ->
+    {st, 0}.
+
+%% src/deploy.hird:7
+unit_log(_Msg) ->
+    {st, 1}.
+
+%% src/deploy.hird:8
+demo(Run, Handlers@) ->
+    hird_handlers:with_handlers(
+        [
+            {{tool, read_repo}, fun(Args@1, _Handlers@2) -> mock(Args@1) end},
+            {log, fun(Args@3, _Handlers@4) -> unit_log(Args@3) end}
+        ],
+        fun() ->
+            Run(0, Handlers@)
+        end).
+
+hird_tools@() ->
+    #{tools => #{
+            read_repo => #{
+                name => <<"ReadRepo"/utf8>>,
+                args => {record, [{path, {adt, path, []}}]},
+                result => {adt, st, []},
+                error => dynamic}},
+        types => #{
+            path => [{path, <<"Path"/utf8>>, [string]}],
+            st => [{st, <<"St"/utf8>>, [int]}]}}.

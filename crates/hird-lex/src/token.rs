@@ -79,6 +79,8 @@ pub enum TokenKind {
     Tool,
     /// `handle`
     Handle,
+    /// `install`
+    Install,
     /// `spawn`
     Spawn,
     /// `send`
@@ -223,6 +225,7 @@ impl TokenKind {
                 | Self::Effect
                 | Self::Tool
                 | Self::Handle
+                | Self::Install
                 | Self::Spawn
                 | Self::Send
                 | Self::Request

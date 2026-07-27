@@ -860,6 +860,67 @@ fn handle_non_function_handler_rejected() {
     ));
 }
 
+// ── install blocks ──────────────────────────────────────────────
+//
+// An `install` block's row is the body's effects plus the checker-known bare
+// effect `Install`; nothing is subtracted, and every installed handler's row
+// must be closed and empty.
+
+/// The block types as its body and its row is body ∪ {Install}; `Install`
+/// needs no user declaration, in the annotation or otherwise.
+#[test]
+fn install_adds_install_effect() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}, h: Int -> Int) -> Int ! {Log, Install} =\n\
+           install { Log -> h } in run(0)"
+    ));
+}
+
+/// Installation handles nothing lexically: the body's tool effect stays in
+/// the row alongside `Install`.
+#[test]
+fn install_keeps_body_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         tool Repo : { x: Int } -> Int\n\
+         fn f(g: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Tool<Repo>, Install} =\n\
+           install { Tool<Repo> -> h } in g(0)"
+    ));
+}
+
+/// An installed handler with a non-empty row is rejected: registry entries
+/// run in arbitrary processes, so only pure handlers install.
+#[test]
+fn install_impure_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn bad(run: Int -> Int, h: Int -> Int ! {Log}) -> Int ! {Install} =\n\
+           install { Log -> h } in run(0)"
+    ));
+}
+
+/// An installed handler with an open row is rejected too: an unsolved row
+/// promises nothing about the eventual call sites.
+#[test]
+fn install_open_row_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn bad(run: Int -> Int, h: Int -> Int ! {e}) -> Int ! {Install} =\n\
+           install { Log -> h } in run(0)"
+    ));
+}
+
+/// The structural arm checks are `handle`'s: a non-function handler is
+/// rejected, under the install spelling.
+#[test]
+fn install_non_function_handler_rejected() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn bad() -> Int ! {Install} = install { Log -> 42 } in 0"
+    ));
+}
+
 // ── crash and the error-vs-crash boundary ───────────────────────
 
 #[test]

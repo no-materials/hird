@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         tool Repo : { x: Int } -> Int\\n\\\n         fn f(g: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Tool<Repo>, Install} =\\n\\\n           install { Tool<Repo> -> h } in g(0)\")"
+---
+f : (Int → Int ! {Tool<Repo>}) → ({ x: Int } → Int) → Int ! {Install, Tool<Repo>}
+repo : { x: Int } → Int ! {Tool<Repo>}

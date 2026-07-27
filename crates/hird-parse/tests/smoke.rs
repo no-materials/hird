@@ -705,6 +705,22 @@ fn expr_handle_trailing_comma() {
     insta::assert_snapshot!(render_cst("fn f() = handle { Log -> a, } in m"));
 }
 
+// ── install expressions ─────────────────────────────────────────
+
+#[test]
+fn expr_install_basic() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = install { Tool<ReadRepo> -> demo_read } in run_demo(config)"
+    ));
+}
+
+#[test]
+fn expr_install_multi_arm() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = install { Tool<ReadRepo> -> a, Log -> b, } in m"
+    ));
+}
+
 // ── type expressions ────────────────────────────────────────────
 
 #[test]
