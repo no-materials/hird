@@ -4,7 +4,7 @@ expression: "emit(program(\"Multi\"), \"Multi\")"
 ---
 %% Generated from src/multi.hird by the Hirð compiler. Do not edit.
 -module(hird_multi).
--export([run/3]).
+-export([run/3, hird_tools@/0]).
 
 %% src/multi.hird:4
 run(F, Lh, Th) ->
@@ -13,3 +13,12 @@ run(F, Lh, Th) ->
         {tool, repo} => fun(Args@3, _Handlers@4) -> Th(Args@3) end
     },
     F(0, Handlers@5).
+
+hird_tools@() ->
+    #{tools => #{
+            repo => #{
+                name => <<"Repo"/utf8>>,
+                args => {record, [{x, int}]},
+                result => int,
+                error => dynamic}},
+        types => #{}}.

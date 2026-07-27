@@ -818,6 +818,10 @@ pure data and the future runtime is only one of its producers.
    tamper-proofing in v0.1 — content addressing, chaining, and signatures
    are the upgrade path `schema_version` exists to admit.
 
+   *Amended 2026-07-27*: the actor caller form is emitted by generated
+   actor callbacks (ADR-022 §2, as amended). `caller` is an opaque string
+   to decoders, so this needed no `schema_version` bump after all.
+
    The audit sink is itself a capability: `AuditSink` is passed in, not
    ambient, and audit emission is a handler wrapping the tool effect,
    visible in the effect row. A fixture omitting the sink parameter fails
@@ -1302,13 +1306,38 @@ so that promise is currently unimplementable as stated.
 
 2. **Every tool call site routes through the runtime dispatcher.** A call to
    a tool function emits as
-   `hird_tool_dispatch:call(read_repo, Handlers, ArgsMap)`, never as a
-   direct handler invocation. The dispatcher looks up `{tool, read_repo}` in
-   the map, invokes the entry, and wraps the invocation with the ADR-016
+   `hird_tool_dispatch:call(read_repo, Caller, Handlers, ArgsMap)`, never as
+   a direct handler invocation. The dispatcher looks up `{tool, read_repo}`
+   in the map, invokes the entry, and wraps the invocation with the ADR-016
    record (tool, args, result, timestamp, caller) sent to the audit sink.
    Auditing is therefore unconditional — a mocked tool call in a test
    harness produces the same invocation record a real one does, which is
    exactly what the dry-run harness asserts against.
+
+   *Amended 2026-07-27 — the caller id is a call-site literal.* ADR-016
+   makes `caller` injected, never ambient, and the emitter statically knows
+   the enclosing form at every dispatch site, so the dispatcher signature
+   carries a codegen-supplied binary literal: `"Module.function"` in module
+   functions, and ADR-016's actor form (`"Planner.init"`,
+   `"Planner.handle_msg/PlanRepo"`) inside generated actor callbacks —
+   actors exist now, so the provisional extension is emitted (`caller` is an
+   opaque string to decoders, so no schema bump is needed). *Rejected*:
+   stacktrace inspection (fragile, slow) and process-dictionary context
+   (hidden state, contra ADR-005).
+
+   *Amended 2026-07-27 — audit encoding is type-directed via an emitted
+   signature table.* ADR-016's wire encoding is injective per *type*, so the
+   runtime cannot reproduce the conformance bytes by inspecting raw terms
+   (a ctor tuple and a plain tuple are indistinguishable, and atoms lose
+   their PascalCase wire names). Codegen therefore emits a `hird_tools@/0`
+   function into the base module — tool atom → wire name, args/result/error
+   value shapes, plus the declared ADTs' constructor shapes — which startup
+   wiring registers with the audit sink (`hird_audit:register_tools/1`); the
+   sink's encoder walks values against these shapes. A generic tool's type
+   parameters render as `dynamic` (their instantiation is a call-site fact
+   the per-tool table cannot carry) and fail encoding explicitly rather than
+   guessing. *Rejected*: term-directed heuristics (cannot be byte-exact) and
+   a sidecar metadata file (a second artifact for `hird build` to plumb).
 
 3. **Unhandled tool calls fall back to the runtime registry, then crash.**
    On a map miss the dispatcher consults the process-independent default

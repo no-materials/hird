@@ -4,7 +4,7 @@ expression: "emit(program(\"Audited\"), \"Audited\")"
 ---
 %% Generated from src/audited.hird by the Hirð compiler. Do not edit.
 -module(hird_audited).
--export([audited/3]).
+-export([audited/3, hird_tools@/0]).
 
 %% src/audited.hird:4
 audited(F, Logh, Handlers@) ->
@@ -12,3 +12,12 @@ audited(F, Logh, Handlers@) ->
         {tool, repo} => fun(Args@1, Handlers@2) -> Logh(Args@1, Handlers@2) end
     }),
     F(0, Handlers@3).
+
+hird_tools@() ->
+    #{tools => #{
+            repo => #{
+                name => <<"Repo"/utf8>>,
+                args => {record, [{x, int}]},
+                result => int,
+                error => dynamic}},
+        types => #{}}.

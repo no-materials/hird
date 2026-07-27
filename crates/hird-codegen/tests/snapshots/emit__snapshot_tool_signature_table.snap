@@ -1,0 +1,34 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Wire\"), \"Wire\")"
+---
+%% Generated from src/wire.hird by the Hirð compiler. Do not edit.
+-module(hird_wire).
+-export([file/2, hird_tools@/0]).
+
+%% src/wire.hird:9
+file(T, Handlers@) ->
+    hird_tool_dispatch:call(create_ticket, <<"Wire.file"/utf8>>, Handlers@, #{title => T, body => <<"filed"/utf8>>}).
+
+hird_tools@() ->
+    #{tools => #{
+            create_ticket => #{
+                name => <<"CreateTicket"/utf8>>,
+                args => {record, [{body, string}, {title, string}]},
+                result => {adt, ticket_id, []},
+                error => dynamic},
+            http_get => #{
+                name => <<"HttpGet"/utf8>>,
+                args => {record, [{url, string}]},
+                result => {adt, option, [int]},
+                error => {adt, http_error, []}},
+            snapshot => #{
+                name => <<"Snapshot"/utf8>>,
+                args => {record, [{pair, {tuple, [int, bool]}}, {tags, {list, string}}]},
+                result => float,
+                error => dynamic}},
+        types => #{
+            http_error => [{http_error, <<"HttpError"/utf8>>, [int, string]}],
+            option => [{some, <<"Some"/utf8>>, [{param, 0}]},
+                {none, <<"None"/utf8>>, []}],
+            ticket_id => [{ticket_id, <<"TicketId"/utf8>>, [string]}]}}.

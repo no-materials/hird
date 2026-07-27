@@ -131,8 +131,9 @@ pub enum MetaValue {
 /// `schema_version` is not a field: the writer stamps [`SCHEMA_VERSION`]
 /// on every record and the decoder accepts only that version. `timestamp`
 /// and `caller` are injected by the recording handler — there is no
-/// ambient clock. The caller is `"Module.function"`; an actor form is a
-/// provisional extension gated on a `schema_version` bump.
+/// ambient clock. The caller is `"Module.function"`, or the actor form
+/// (`"Planner.handle_msg/PlanRepo"`) inside generated actor callbacks;
+/// decoders treat it as an opaque string.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InvocationRecord {
     /// The tool's declared name (e.g. `ReadRepo`).

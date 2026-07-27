@@ -25,8 +25,15 @@
 //!   uniformly. Map keys are `{tool, name}` for `Tool<Name>` effects and the
 //!   snake-cased head atom for bare effects.
 //! - A tool call site always emits
-//!   `hird_tool_dispatch:call(tool_name, Handlers, Args)` — never a direct
-//!   handler invocation — so audit capture is unconditional.
+//!   `hird_tool_dispatch:call(tool_name, Caller, Handlers, Args)` — never a
+//!   direct handler invocation — so audit capture is unconditional. `Caller`
+//!   is a binary literal naming the enclosing form (`"Module.function"`,
+//!   `"Actor.init"`, or `"Actor.handle_msg/Ctor"`), statically known at
+//!   every dispatch site.
+//! - A module declaring tools also emits a `hird_tools@/0` signature table —
+//!   wire names and value shapes for every tool and declared ADT — which the
+//!   audit sink's type-directed record encoder consumes. The `@` keeps the
+//!   name outside the image of the Hirð renaming.
 //!
 //! # Value mapping
 //!
@@ -73,7 +80,7 @@ use alloc::vec::Vec;
 use hird_ir::{
     IrActorDef, IrActorHandler, IrApp, IrChildSpec, IrConstructor, IrConstructorPat, IrDecl,
     IrExpr, IrExternRef, IrFnDef, IrHandle, IrLambda, IrLet, IrMatch, IrModule, IrPattern, IrSpan,
-    IrSupervisorDef, IrVar, LiteralValue,
+    IrSupervisorDef, IrToolDef, IrTypeDef, IrVar, LiteralValue,
 };
 use hird_types::{Effect, EffectRow, Type};
 
@@ -160,7 +167,8 @@ struct Binding {
     ty: Type,
 }
 
-/// The lexical environment: local bindings and the in-scope handler map.
+/// The lexical environment: local bindings, the in-scope handler map, and
+/// the enclosing form's caller id.
 #[derive(Clone, Default)]
 struct Env {
     /// Hirð name → binding, innermost shadowing outermost.
@@ -168,6 +176,10 @@ struct Env {
     /// The in-scope handler-map variable; `None` in a pure context, where a
     /// needed map falls back to `#{}`.
     handlers: Option<String>,
+    /// The caller id injected at tool dispatch sites: `Module.function` for
+    /// module functions, `Actor.init` / `Actor.handle_msg/Ctor` inside actor
+    /// callbacks. Lambdas inherit the enclosing form's id.
+    caller: String,
 }
 
 /// Per-function mutable state: variable freshness and usage.
@@ -238,6 +250,11 @@ struct Emitter<'a> {
     /// Tool function name (`read_repo`) → the tool function's type, with the
     /// implicit `Tool<Marker>` effect included in its row.
     tools: BTreeMap<String, Type>,
+    /// The tool declarations, in source order (the signature table's rows).
+    tool_defs: Vec<&'a IrToolDef>,
+    /// Declared ADT name → its definition (module types and actor message
+    /// types), for the signature table's constructor shapes.
+    type_defs: BTreeMap<&'a str, &'a IrTypeDef>,
     /// Module-level function or extern name → its function type (declared
     /// parameter and row, not a use site's instantiation).
     fns: BTreeMap<String, Type>,
@@ -250,6 +267,8 @@ impl<'a> Emitter<'a> {
     /// Builds the tool and function tables for `module`.
     fn new(module: &'a IrModule) -> Self {
         let mut tools = BTreeMap::new();
+        let mut tool_defs = Vec::new();
+        let mut type_defs = BTreeMap::new();
         let mut fns = BTreeMap::new();
         for decl in &module.declarations {
             match decl {
@@ -271,13 +290,22 @@ impl<'a> Emitter<'a> {
                         row,
                     );
                     tools.insert(snake_case(&t.name), ty);
+                    tool_defs.push(t);
                 }
-                IrDecl::Type(_) | IrDecl::Actor(_) | IrDecl::Supervisor(_) => {}
+                IrDecl::Type(t) => {
+                    type_defs.insert(t.name.as_str(), t);
+                }
+                IrDecl::Actor(a) => {
+                    type_defs.insert(a.message.name.as_str(), &a.message);
+                }
+                IrDecl::Supervisor(_) => {}
             }
         }
         Self {
             module,
             tools,
+            tool_defs,
+            type_defs,
             fns,
             remote: None,
         }
@@ -311,18 +339,24 @@ impl<'a> Emitter<'a> {
                     self.extern_form(e, source_path, &mut out);
                 }
                 // Types are erased; tools exist only as dispatcher call
-                // sites; actor and supervisor behaviour modules are emitted
-                // separately.
+                // sites and signature-table rows; actor and supervisor
+                // behaviour modules are emitted separately.
                 IrDecl::Type(_) | IrDecl::Tool(_) | IrDecl::Actor(_) | IrDecl::Supervisor(_) => {}
             }
+        }
+        if !self.tool_defs.is_empty() {
+            out.push('\n');
+            self.tool_table_form(&mut out);
         }
         out
     }
 
     /// The export list: every function and extern at its emitted arity
-    /// (surface arity plus one for the handler map when the row asks for it).
+    /// (surface arity plus one for the handler map when the row asks for it),
+    /// plus the signature table when the module declares tools.
     fn exports(&self) -> Vec<String> {
-        self.module
+        let mut out: Vec<String> = self
+            .module
             .declarations
             .iter()
             .filter_map(|decl| {
@@ -333,7 +367,11 @@ impl<'a> Emitter<'a> {
                 };
                 Some(format!("{}/{}", atom(name), emitted_arity(ty)))
             })
-            .collect()
+            .collect();
+        if !self.tool_defs.is_empty() {
+            out.push(String::from("hird_tools@/0"));
+        }
+        out
     }
 
     /// The `%% <file>:<line>` comment above a form (omitted for an unknown
@@ -348,7 +386,10 @@ impl<'a> Emitter<'a> {
     /// the trailing handler map when the declared row asks for it), body.
     fn fn_form(&self, f: &IrFnDef, source_path: &str, out: &mut String) {
         let mut cx = FnCx::default();
-        let mut env = Env::default();
+        let mut env = Env {
+            caller: format!("{}.{}", self.module.name, f.name),
+            ..Env::default()
+        };
         let mut params: Vec<String> = Vec::new();
         for param in &f.params {
             let var = cx.fresh_var(&param.name);
@@ -393,6 +434,147 @@ impl<'a> Emitter<'a> {
         ));
     }
 
+    // ── tool signature table ─────────────────────────────────────
+
+    /// The `hird_tools@/0` form: per-tool wire names and value shapes plus
+    /// the declared ADTs' constructor shapes, consumed by the audit sink's
+    /// type-directed record encoder.
+    fn tool_table_form(&self, out: &mut String) {
+        let tools: Vec<String> = self
+            .tool_defs
+            .iter()
+            .map(|t| {
+                format!(
+                    "{} => #{{\n{i}name => <<\"{}\"/utf8>>,\n{i}args => {},\n{i}result => {},\n{i}error => {}}}",
+                    atom(&snake_case(&t.name)),
+                    t.name,
+                    self.wire_shape(&t.input, &t.params, false),
+                    self.wire_shape(&t.output, &t.params, false),
+                    self.error_shape(t),
+                    i = ind(4),
+                )
+            })
+            .collect();
+        let types: Vec<String> = self
+            .type_defs
+            .values()
+            .map(|def| {
+                let ctors: Vec<String> = def
+                    .constructors
+                    .iter()
+                    .map(|ctor| {
+                        let fields: Vec<String> = ctor
+                            .fields
+                            .iter()
+                            .map(|f| self.wire_shape(f, &def.params, true))
+                            .collect();
+                        format!(
+                            "{{{}, <<\"{}\"/utf8>>, [{}]}}",
+                            atom(&snake_case(&ctor.name)),
+                            ctor.name,
+                            fields.join(", ")
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{} => [{}]",
+                    atom(&snake_case(&def.name)),
+                    ctors.join(&format!(",\n{}", ind(4)))
+                )
+            })
+            .collect();
+        let types_map = if types.is_empty() {
+            String::from("#{}")
+        } else {
+            format!("#{{\n{}{}}}", ind(3), types.join(&format!(",\n{}", ind(3))))
+        };
+        out.push_str(&format!(
+            "hird_tools@() ->\n\
+             {i}#{{tools => #{{\n\
+             {iii}{}}},\n\
+             {ii}types => {types_map}}}.\n",
+            tools.join(&format!(",\n{}", ind(3))),
+            i = ind(1),
+            ii = ind(2),
+            iii = ind(3),
+        ));
+    }
+
+    /// A type's wire shape in the signature table: `unit`, `int`, `float`,
+    /// `string`, `bool`, `{list, S}`, `{tuple, [S…]}`,
+    /// `{record, [{label, S}…]}` (sorted labels), or `{adt, name, [S…]}` for
+    /// a declared ADT. A declaration type parameter renders as `{param, N}`
+    /// inside an ADT's constructor shapes (`as_param`) and as `dynamic` in a
+    /// generic tool's signature, whose instantiation is a call-site fact the
+    /// table cannot carry; anything else non-representable is `dynamic` too.
+    fn wire_shape(&self, ty: &Type, params: &[String], as_param: bool) -> String {
+        match unquantified(ty) {
+            Type::TyTuple(elems) if elems.is_empty() => String::from("unit"),
+            Type::TyTuple(elems) => {
+                let shapes: Vec<String> = elems
+                    .iter()
+                    .map(|e| self.wire_shape(e, params, as_param))
+                    .collect();
+                format!("{{tuple, [{}]}}", shapes.join(", "))
+            }
+            Type::TyRecord(fields) => {
+                let shapes: Vec<String> = fields
+                    .iter()
+                    .map(|(label, field)| {
+                        format!(
+                            "{{{}, {}}}",
+                            atom(label.as_str()),
+                            self.wire_shape(field, params, as_param)
+                        )
+                    })
+                    .collect();
+                format!("{{record, [{}]}}", shapes.join(", "))
+            }
+            Type::TyCon(name, args) => match (name.as_str(), args.as_slice()) {
+                ("Int", []) => String::from("int"),
+                ("Float", []) => String::from("float"),
+                ("String", []) => String::from("string"),
+                ("Bool", []) => String::from("bool"),
+                ("List", [elem]) => {
+                    format!("{{list, {}}}", self.wire_shape(elem, params, as_param))
+                }
+                (n, []) if params.iter().any(|p| p == n) => {
+                    if as_param {
+                        let index = params.iter().position(|p| p == n).unwrap_or(0);
+                        format!("{{param, {index}}}")
+                    } else {
+                        String::from("dynamic")
+                    }
+                }
+                (n, args) if self.type_defs.contains_key(n) => {
+                    let shapes: Vec<String> = args
+                        .iter()
+                        .map(|a| self.wire_shape(a, params, as_param))
+                        .collect();
+                    format!("{{adt, {}, [{}]}}", atom(&snake_case(n)), shapes.join(", "))
+                }
+                _ => String::from("dynamic"),
+            },
+            Type::TyVar(_) | Type::TyFn(..) | Type::TyForall(..) => String::from("dynamic"),
+        }
+    }
+
+    /// The shape of a tool's `err` results: its trailing row's single
+    /// `Exn<E>` error type, or `dynamic` when the row carries none (no `err`
+    /// is producible) or several (the value alone cannot pick one).
+    fn error_shape(&self, tool: &IrToolDef) -> String {
+        let mut exns = tool
+            .effect_row
+            .effects()
+            .filter(|e| e.head().as_str() == "Exn");
+        match (exns.next(), exns.next()) {
+            (Some(e), None) if e.args().len() == 1 => {
+                self.wire_shape(&e.args()[0], &tool.params, false)
+            }
+            _ => String::from("dynamic"),
+        }
+    }
+
     // ── actor modules ────────────────────────────────────────────
 
     /// One actor as a `gen_server` behaviour module: banner, span comment,
@@ -416,8 +598,8 @@ impl<'a> Emitter<'a> {
         self.start_link_form(actor, &mut out);
         self.init_form(actor, &mut out);
         let (calls, casts) = split_handlers(actor);
-        self.handle_call_form(&calls, &mut out);
-        self.handle_cast_form(&casts, &mut out);
+        self.handle_call_form(&actor.name, &calls, &mut out);
+        self.handle_cast_form(&actor.name, &casts, &mut out);
         out
     }
 
@@ -443,7 +625,10 @@ impl<'a> Emitter<'a> {
     /// body, and wrap the initial state in `{ok, _}`.
     fn init_form(&self, actor: &IrActorDef, out: &mut String) {
         let mut cx = FnCx::default();
-        let mut env = Env::default();
+        let mut env = Env {
+            caller: format!("{}.init", actor.name),
+            ..Env::default()
+        };
         let mut params: Vec<String> = Vec::new();
         for param in &actor.init.params {
             let var = cx.fresh_var(&param.name);
@@ -469,7 +654,7 @@ impl<'a> Emitter<'a> {
     /// bare constructor atom as payload, the reply channel bound from `From`,
     /// an explicit `{noreply, NextState}` — or a crashing fallback clause
     /// when the actor has no call constructors.
-    fn handle_call_form(&self, clauses: &[CallClause<'_>], out: &mut String) {
+    fn handle_call_form(&self, actor: &str, clauses: &[CallClause<'_>], out: &mut String) {
         if clauses.is_empty() {
             out.push_str(&format!(
                 "\nhandle_call(Request, _From, _State) ->\n{}erlang:error({{unexpected_call, Request}}).\n",
@@ -480,7 +665,10 @@ impl<'a> Emitter<'a> {
         out.push('\n');
         for (i, clause) in clauses.iter().enumerate() {
             let mut cx = FnCx::default();
-            let mut env = Env::default();
+            let mut env = Env {
+                caller: format!("{actor}.handle_msg/{}", clause.ctor.name),
+                ..Env::default()
+            };
             let tag = atom(&snake_case(&clause.ctor.name));
             let from = clause
                 .ctor
@@ -500,7 +688,7 @@ impl<'a> Emitter<'a> {
     /// The `handle_cast/2` callback: one clause per cast constructor,
     /// matching its ADT wire shape and returning `{noreply, NextState}`, or
     /// a crashing fallback clause when the actor has no cast constructors.
-    fn handle_cast_form(&self, handlers: &[&IrActorHandler], out: &mut String) {
+    fn handle_cast_form(&self, actor: &str, handlers: &[&IrActorHandler], out: &mut String) {
         if handlers.is_empty() {
             out.push_str(&format!(
                 "\nhandle_cast(Message, _State) ->\n{}erlang:error({{unexpected_cast, Message}}).\n",
@@ -511,7 +699,15 @@ impl<'a> Emitter<'a> {
         out.push('\n');
         for (i, handler) in handlers.iter().enumerate() {
             let mut cx = FnCx::default();
-            let mut env = Env::default();
+            let mut env = Env {
+                caller: match &handler.message {
+                    IrPattern::Constructor(ctor) => {
+                        format!("{actor}.handle_msg/{}", ctor.name)
+                    }
+                    _ => format!("{actor}.handle_msg"),
+                },
+                ..Env::default()
+            };
             let message = self.pattern(&handler.message, &mut env, &mut cx);
             let state = self.pattern(&handler.state, &mut env, &mut cx);
             let body = self.expr(&handler.body, &env, &mut cx, 1, Ctx::Expr);
@@ -557,7 +753,7 @@ impl<'a> Emitter<'a> {
         let children: Vec<String> = sup
             .children
             .iter()
-            .map(|child| self.child_spec(child, &mut cx))
+            .map(|child| self.child_spec(&sup.name, child, &mut cx))
             .collect();
         let specs = if children.is_empty() {
             String::from("[]")
@@ -591,8 +787,11 @@ impl<'a> Emitter<'a> {
     /// in-scope handler map), the restart disposition, and an explicit
     /// `worker` type (`shutdown` is left to the OTP default). Children stay
     /// unregistered.
-    fn child_spec(&self, child: &IrChildSpec, cx: &mut FnCx) -> String {
-        let env = Env::default();
+    fn child_spec(&self, sup: &str, child: &IrChildSpec, cx: &mut FnCx) -> String {
+        let env = Env {
+            caller: format!("{sup}.init"),
+            ..Env::default()
+        };
         let arg = self.expr(&child.start_args, &env, cx, 3, Ctx::Expr);
         format!(
             "#{{\n\
@@ -873,8 +1072,9 @@ impl<'a> Emitter<'a> {
                 let handlers = handlers_ref(env, cx);
                 let args = self.expr(args_record, env, cx, indent, Ctx::Expr);
                 return format!(
-                    "hird_tool_dispatch:call({}, {handlers}, {args})",
-                    atom(&v.name)
+                    "hird_tool_dispatch:call({}, {}, {handlers}, {args})",
+                    atom(&v.name),
+                    caller_literal(env)
                 );
             }
         }
@@ -973,8 +1173,9 @@ impl<'a> Emitter<'a> {
             {
                 let handlers = map_arg.unwrap_or_else(|| handlers_ref(env, cx));
                 return format!(
-                    "hird_tool_dispatch:call({}, {handlers}, {args_record})",
-                    atom(&v.name)
+                    "hird_tool_dispatch:call({}, {}, {handlers}, {args_record})",
+                    atom(&v.name),
+                    caller_literal(env)
                 );
             }
             if let Some((module, member)) = v.name.rsplit_once('.') {
@@ -1010,8 +1211,9 @@ impl<'a> Emitter<'a> {
             let args = cx.fresh_internal("Args");
             let map = cx.fresh_internal("Handlers");
             return format!(
-                "fun({args}, {map}) -> hird_tool_dispatch:call({}, {map}, {args}) end",
-                atom(&v.name)
+                "fun({args}, {map}) -> hird_tool_dispatch:call({}, {}, {map}, {args}) end",
+                atom(&v.name),
+                caller_literal(env)
             );
         }
         if let Some(ty) = self.fns.get(&v.name) {
@@ -1200,6 +1402,13 @@ fn type_atom(ty: &Type) -> String {
         Type::TyCon(name, _) => atom(&snake_case(name.as_str())),
         other => atom(&snake_case(&format!("{other}"))),
     }
+}
+
+/// The caller id injected at a dispatch site, as an Erlang binary literal.
+/// Caller ids are built from Hirð identifiers, `.`, and `/`, none of which
+/// need escaping inside a string literal.
+fn caller_literal(env: &Env) -> String {
+    format!("<<\"{}\"/utf8>>", env.caller)
 }
 
 /// The in-scope handler map, or the empty map in a pure context.

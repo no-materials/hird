@@ -38,6 +38,7 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Nest", NEST),
     ("Drift", DRIFT),
     ("Idle", IDLE),
+    ("Wire", WIRE),
 ];
 
 const MATH: &str = "fn add(x: Int, y: Int) -> Int = x + y\n\
@@ -259,6 +260,17 @@ const IDLE: &str = "supervisor IdleSup {\n\
        children: []\n\
      }";
 
+const WIRE: &str = "effect Tool<t>\n\
+     effect Exn<t>\n\
+     type Option<a> = Some(a) | None\n\
+     type HttpError = HttpError(Int, String)\n\
+     type TicketId = TicketId(String)\n\
+     tool CreateTicket : { title: String, body: String } -> TicketId\n\
+     tool HttpGet : { url: String } -> Option<Int> ! {Exn<HttpError>}\n\
+     tool Snapshot : { tags: List<String>, pair: (Int, Bool) } -> Float\n\
+     fn file(t: String) -> TicketId ! {Tool<CreateTicket>} =\n\
+       create_ticket({ title: t, body: \"filed\" })";
+
 /// Parses, checks, and lowers `source`, panicking on any parse or type error.
 fn lower(source: &str, name: &str) -> IrModule {
     let parsed = hird_parse::parse(source, 0);
@@ -468,6 +480,11 @@ fn snapshot_supervisor_strategy_emitted_verbatim() {
 #[test]
 fn snapshot_supervisor_empty_children() {
     insta::assert_snapshot!(behaviour_module(program("Idle"), "Idle", "hird_idle_sup"));
+}
+
+#[test]
+fn snapshot_tool_signature_table() {
+    insta::assert_snapshot!(emit(program("Wire"), "Wire"));
 }
 
 // ── erlc validation ──────────────────────────────────────────────

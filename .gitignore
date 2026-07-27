@@ -6,3 +6,6 @@ target
 *.swp
 *.swo
 
+
+# Erlang build output.
+runtime/_build/

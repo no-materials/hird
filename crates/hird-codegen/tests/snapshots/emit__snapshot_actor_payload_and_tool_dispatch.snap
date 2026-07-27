@@ -1,6 +1,6 @@
 ---
 source: crates/hird-codegen/tests/emit.rs
-expression: "actor_module(program(\"Workshop\"), \"Workshop\", \"hird_worker\")"
+expression: "behaviour_module(program(\"Workshop\"), \"Workshop\", \"hird_worker\")"
 ---
 %% Generated from src/workshop.hird by the Hirð compiler. Do not edit.
 %% src/workshop.hird:4
@@ -21,4 +21,4 @@ handle_call(Request, _From, _State) ->
 handle_cast({set, X}, {st, _}) ->
     {noreply, {st, X}};
 handle_cast(bump, {st, N}) ->
-    {noreply, {st, hird_tool_dispatch:call(audit, #{}, #{n => N})}}.
+    {noreply, {st, hird_tool_dispatch:call(audit, <<"Worker.handle_msg/Bump"/utf8>>, #{}, #{n => N})}}.

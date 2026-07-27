@@ -173,9 +173,9 @@ Fields appear in exactly this order:
 - **`timestamp` and `caller` are injected.** There is no ambient clock;
   the recording handler supplies both. The timestamp form is exactly
   `2026-05-22T12:00:00.000Z` (millisecond precision, `Z` offset). The
-  caller is `Module.function` in v0.1; an actor form
-  (`"Planner.handle_msg/PlanRepo"`) is a *provisional* extension, absorbed
-  via a `schema_version` bump — do not emit it today.
+  caller is `Module.function`; inside generated actor callbacks it takes
+  the actor form (`"Planner.init"`, `"Planner.handle_msg/PlanRepo"`).
+  Decoders treat `caller` as an opaque string; no other form is defined.
 - **`meta` is observer-populated.** Transport metadata (`duration_ms`,
   retries, trace ids) belongs to whoever recorded the invocation, not to
   the compiler-derived record, whose five fields are `tool`, `args`,
