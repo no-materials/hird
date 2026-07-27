@@ -64,10 +64,14 @@ inspectable).
 3. [x] [hir-z9rn](hir-z9rn.md) — Supervisor codegen to Erlang
 4. [x] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [x] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
-6. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
+6. [ ] [hir-shiv](hir-shiv.md) — install blocks: dynamic-extent registry handlers from Hirð
+7. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
 Step 2 implements the mapping locked by Phase 7's design ADR (ha-8fyg).
-Steps 2–5 are independent after step 1. Step 6 requires all of them.
+Steps 2–5 are independent after step 1. Step 6 (ADR-023) gives Hirð code a
+way to install the registry defaults spawned actors resolve tools through;
+without it the demo cannot run from `hird run` alone. Step 7 requires all
+of the others.
 
 ## Out of scope
 
@@ -152,3 +156,15 @@ BEAM: mocked tool calls audit to stdout; actors spawn/request/reply.
 
 Only hir-bxdd (the v0.1 demo) remains; all of its dependencies are now
 closed.
+
+**2026-07-27T12:27:31Z**
+
+Scope addition: hir-shiv (install blocks, ADR-023) inserted as step 6
+before the demo. Rationale: handler maps never cross spawn (ADR-020 §6),
+so actors resolve tools only through the runtime registry, and the only
+installation API was Erlang — plain `hird run demo/planner.hird` would
+crash-loop on {unhandled_tool, …}. ADR-023 locks a Hirð-level
+`install { … } in e` form (arms checked like handle blocks, pure
+handlers only, checker-known Install effect, dynamic-extent semantics
+via hird_handlers:with_handlers), keeping the demo and its harness pure
+Hirð. hir-bxdd now depends on hir-shiv.
