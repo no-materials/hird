@@ -107,6 +107,7 @@ Parametric effects reference specific capabilities or message types.
 ```
 tool ReadRepo : { path: Path } → RepoState
 tool CreateTicket : { title: String, body: String } → TicketId
+tool Log : { level: String, message: String } → ()
 tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn<ParseError>}
 ```
 
@@ -138,16 +139,16 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) → PlannerState ! {Log} = initial_state(config),
+  init: fn(config: PlannerConfig) → PlannerState ! {Tool<Log>} = initial_state(config),
 
   handle PlanRepo(path), st → PlannerState
-    ! {Tool<ReadRepo>, Tool<CreateTicket>, Log} = plan_repo(path, st),
+    ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} = plan_repo(path, st),
 
   handle GetStatus(reply_to), st → PlannerState
     ! {Send<PlannerStatus>} = reply_status(reply_to, st),
 
   handle Shutdown, st → PlannerState ! {} = st,
-} ! {Tool<ReadRepo>, Tool<CreateTicket>, Log, Send<PlannerStatus>}
+} ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
 ```
 
 - Handler and `init` bodies follow the uniform bare-body rule (`= e`);
@@ -218,12 +219,15 @@ reply(reply_to, status) → () ! {Send<PlannerStatus>}
 handle {
   Tool<ReadRepo> → mock_read_repo,
   Tool<CreateTicket> → mock_create_ticket,
-  Log → capturing_log,
+  Tool<Log> → unit_log,
 } in planner_main(config)
 ```
 
 Handlers replace effect implementations within the block scope.
 Use for: mocking, dry-runs, log redirection, audit interception.
+Declare logging as a tool (`Tool<Log>`): bare effects have no
+compiler-known operation in v0.1, so a bare-effect arm type-checks and
+threads but is never invoked by emitted code.
 
 ---
 
@@ -287,7 +291,7 @@ module Planner
 use Ets.{Table, lookup}
 use Log as L
 
-pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Log} = ...
+pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Tool<Log>} = ...
 ```
 
 - `pub` for exports. Unprefixed is module-private.

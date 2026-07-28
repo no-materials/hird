@@ -1,0 +1,149 @@
+// The v0.1 supervised agent planner demo.
+//
+// A Planner actor reads repository state through Tool<ReadRepo>, analyzes
+// it (pure computation), files tickets through Tool<CreateTicket>, and
+// logs progress through Tool<Log>. PlannerSup supervises it one_for_one.
+// Every tool call is visible in the effect rows, resolvable through the
+// runtime registry (the install block in main), and recorded on the audit
+// stream — run `hird run demo/agent_planner.hird` and read stdout.
+
+module AgentPlanner
+
+effect Tool<t>
+effect Spawn<t>
+effect Send<t>
+effect Await<t>
+
+// ── domain types ─────────────────────────────────────────────────
+
+type Path = Path(String)
+type TicketId = TicketId(String)
+
+// A pending work item discovered in the repository: priority, title, body.
+type Task = Task(Int, String, String)
+
+// A cons list of tasks (v0.1 has no list patterns, so the demo carries
+// its own).
+type Backlog = Backlog(Task, Backlog) | EmptyBacklog
+
+// What Tool<ReadRepo> reports: the branch name and the raw backlog.
+type RepoState = RepoState(String, Backlog)
+
+type PlannerConfig = PlannerConfig(String)
+type PlannerState = PlannerState(Int, Int)
+type PlannerStatus = PlannerStatus(Int, Int)
+
+// ── tools ────────────────────────────────────────────────────────
+
+tool ReadRepo : { path: Path } → RepoState
+tool CreateTicket : { title: String, body: String } → TicketId
+tool Log : { level: String, message: String } → ()
+
+// ── pure analysis ────────────────────────────────────────────────
+
+// The backlog restricted to actionable tasks (positive priority).
+fn actionable(backlog: Backlog) → Backlog =
+  match backlog {
+    EmptyBacklog → EmptyBacklog,
+    Backlog(Task(priority, title, body), rest) →
+      if priority > 0
+        then Backlog(Task(priority, title, body), actionable(rest))
+        else actionable(rest),
+  }
+
+// Repository state to the tickets worth filing.
+fn analyze(repo: RepoState) → Backlog =
+  match repo { RepoState(_, backlog) → actionable(backlog) }
+
+// Files one ticket per task, logging each, and counts what it filed.
+fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
+  match backlog {
+    EmptyBacklog → 0,
+    Backlog(Task(_, title, body), rest) →
+      let ticket = create_ticket({ title: title, body: body }) in
+      let logged = log({ level: "info", message: title }) in
+      1 + file_tickets(rest),
+  }
+
+// ── the planner actor ────────────────────────────────────────────
+
+actor Planner {
+  state: PlannerState,
+
+  message: PlannerMsg =
+    | PlanRepo(Path)
+    | GetStatus(ReplyTo<PlannerStatus>)
+    | Shutdown,
+
+  init: fn(config: PlannerConfig) → PlannerState ! {} = PlannerState(0, 0),
+
+  handle PlanRepo(path), PlannerState(repos, tickets) → PlannerState
+    ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} =
+    let started = log({ level: "info", message: "planning repository" }) in
+    let repo = read_repo({ path: path }) in
+    let filed = file_tickets(analyze(repo)) in
+    let done = log({ level: "info", message: "planning complete" }) in
+    PlannerState(repos + 1, tickets + filed),
+
+  handle GetStatus(reply_to), PlannerState(repos, tickets) → PlannerState
+    ! {Send<PlannerStatus>} =
+    let sent = reply(reply_to, PlannerStatus(repos, tickets)) in
+    PlannerState(repos, tickets),
+
+  // v0.1 actor handlers only return new state (no stop path); Shutdown is
+  // a sentinel that keeps the state unchanged.
+  handle Shutdown, st → PlannerState ! {} = st,
+} ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
+
+fn default_config() → PlannerConfig = PlannerConfig("planner")
+
+// ── supervision ──────────────────────────────────────────────────
+
+supervisor PlannerSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: default_config(), restart: permanent },
+  ]
+}
+
+// ── demo handlers (registry defaults) ────────────────────────────
+
+// Canned repository state: two actionable tasks, one not worth filing.
+fn demo_read_repo(args: { path: Path }) → RepoState =
+  RepoState(
+    "main",
+    Backlog(Task(2, "Fix the lexer TODO", "The lexer carries a stale TODO comment."),
+    Backlog(Task(0, "Tidy whitespace", "Cosmetic only; not worth a ticket."),
+    Backlog(Task(1, "Fuzz the parser", "The parser has no fuzz harness."),
+    EmptyBacklog))))
+
+// "Creates" a ticket by echoing its title back as the id; the audit
+// stream is the durable record.
+fn demo_create_ticket(args: { title: String, body: String }) → TicketId =
+  TicketId(args.title)
+
+fn demo_log(args: { level: String, message: String }) → () = ()
+
+// ── entry point ──────────────────────────────────────────────────
+
+// Drives one planning round: plan a repository, confirm tickets were
+// filed, then send the Shutdown sentinel.
+fn run_demo() → () ! {Spawn<PlannerMsg>, Send<PlannerMsg>, Await<PlannerStatus>} =
+  let planner = spawn(Planner, default_config()) in
+  let plan = send(planner, PlanRepo(Path("forest-rs/hird"))) in
+  match request(planner, GetStatus) {
+    PlannerStatus(repos, tickets) →
+      let stop = send(planner, Shutdown) in
+      if tickets > 0 then () else crash!("the planner filed no tickets"),
+  }
+
+// Handler maps never cross spawn: the install block is what the spawned
+// planner's tool calls resolve through.
+fn main() → () ! {Install, Spawn<PlannerMsg>, Send<PlannerMsg>, Await<PlannerStatus>} =
+  install {
+    Tool<ReadRepo> → demo_read_repo,
+    Tool<CreateTicket> → demo_create_ticket,
+    Tool<Log> → demo_log,
+  } in run_demo()
