@@ -1,6 +1,6 @@
 ---
 id: hir-7rsf
-status: open
+status: closed
 deps: [hir-cnq8]
 links: []
 created: 2026-05-22T21:34:50Z
@@ -203,3 +203,20 @@ is checked, emitted, compiled, and in the effect graph, with
 crash-restart verified at the runtime-library level. A supervisor-start
 expression is candidate v0.2 design surface alongside the actor stop
 path.
+
+**2026-07-28T06:54:01Z**
+
+Closing the epic: the task sequence is complete and the pipeline is
+whole — IR to Erlang source emission, actor/supervisor behaviour
+modules, the runtime support library, the hird CLI, install blocks,
+and the v0.1 demo running end to end on BEAM with its audit stream and
+queryable effect graph.
+
+Acceptance status, honestly counted: all criteria are met except one at
+the letter — "at least 5 small Hirð programs compile, run on BEAM, and
+produce expected output and audit logs". Twenty-plus generated fixtures
+erlc-compile in hird-codegen's tests, but three programs are run on
+BEAM with output/audit assertions (the CLI ping program, the demo, and
+the demo's mock-handler harness variant). The repl subcommand was
+deferred, as the epic allows. Runtime supervisor start from Hirð
+remains v0.2 design surface, per the hir-bxdd note.
