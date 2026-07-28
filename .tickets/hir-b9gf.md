@@ -1,6 +1,6 @@
 ---
 id: hir-b9gf
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-05-22T21:30:33Z
@@ -63,3 +63,21 @@ of it.
 - `CONTRIBUTING.md`, `ARCHITECTURE.md`, and `DECISIONS.md` exist with substantive skeletons.
 - CI still green after workspace restructuring.
 
+
+## Notes
+
+**2026-07-28T07:21:50Z**
+
+Closing as overtaken by events: the foundation this epic exists to
+establish has been in place for nine phases. The workspace topology
+shipped via hir-8unj and then evolved past this ticket's crate list
+(hird-effects removed by ADR-014; hird-check and hird-actors added);
+runtime/ holds the real Erlang support library; DECISIONS.md contains
+all eight locked decisions named here (ADR-001 through ADR-008) and
+fifteen more; fmt/clippy/test conventions are enforced and green.
+
+The one genuinely unfinished piece is hir-jg95: CONTRIBUTING.md and
+ARCHITECTURE.md still do not exist (DECISIONS.md long exceeded its
+ask). That is an ordinary P2 documentation task, not a foundation
+blocker, so it stays open on its own rather than holding a P0 epic
+open.
