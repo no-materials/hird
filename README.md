@@ -14,9 +14,12 @@ actor receives a repository path, reads repository state through
 `Tool<CreateTicket>`, and logs progress through `Tool<Log>`; a
 `PlannerSup` supervisor declares it as a `one_for_one` child. The
 entry point installs the demo's tool handlers in the runtime registry —
-handler maps never cross `spawn`, so the `install` block is how the
-spawned planner's tool calls resolve — then drives one planning round
-end to end.
+handler maps never cross the supervision boundary, so the `install`
+block is how the supervised planner's tool calls resolve — starts the
+tree with `supervise(PlannerSup)`, reaches the running child with
+`child(PlannerSup, planner)`, and drives one planning round end to end:
+the planner it messages is a supervised OTP process, restarted by
+`PlannerSup` if it crashes.
 
 Build it (requires Erlang/OTP on `PATH`):
 

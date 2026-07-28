@@ -145,3 +145,12 @@ content). The harness re-runs the same source with mock handlers
 swapped into the install block and asserts expected mock tickets and
 log records on the audit stream. cargo fmt/clippy/test pass across the
 workspace.
+
+**2026-07-28T13:43:14Z**
+
+Deviation 2 is closed. hir-xixm added the supervisor runtime surface
+(ADR-024, implemented on hir-ugi0): supervise(PlannerSup) starts the
+tree and child(PlannerSup, planner) is the typed lookup through
+hird_sup_util:child_pid/2. hir-r4d1 moved the demo onto it — hird run
+now drives a planner that genuinely runs as PlannerSup's supervised
+child, with the same seven-record audit stream.

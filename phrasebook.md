@@ -198,6 +198,9 @@ spawn(Planner, config) → Pid<PlannerMsg> ! {Spawn<PlannerMsg>}
 send(pid, PlanRepo(path)) → () ! {Send<PlannerMsg>}
 request(pid, GetStatus) → PlannerStatus ! {Send<PlannerMsg>, Await<PlannerStatus>}
 reply(reply_to, status) → () ! {Send<PlannerStatus>}
+
+supervise(PlannerSup) → () ! {Supervise}
+child(PlannerSup, planner) → Pid<PlannerMsg> ! {}
 ```
 
 - `Pid<t>` and `ReplyTo<t>` are built-in type constructors (like `List<t>`);
@@ -210,6 +213,16 @@ reply(reply_to, status) → () ! {Send<PlannerStatus>}
   (no `Exn` in the row — crash handling belongs to supervision).
 - `Spawn<t>`, `Send<t>`, `Await<t>` are ordinary declared effect heads (see
   Effect Declarations) whose semantics the checker knows, like `Tool<t>`.
+- `supervise` starts a declared supervisor's tree: the name resolves in the
+  supervisor namespace (supervisor names are not values either). One running
+  instance per declaration — a second `supervise` of the same name crashes.
+  Its bare `Supervise` effect is checker-known (like `Install`): no
+  declaration needed.
+- `child` is typed child lookup: the id must be one of the supervisor's
+  declared children, and the result is `Pid<Msg>` for the child actor's
+  message type. Effect-free; a missing or restarting child crashes
+  (`{no_child, id}`) — tree health is supervision's concern, never a
+  caller-recoverable error.
 
 ---
 

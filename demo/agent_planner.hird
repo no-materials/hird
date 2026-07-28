@@ -2,7 +2,9 @@
 //
 // A Planner actor reads repository state through Tool<ReadRepo>, analyzes
 // it (pure computation), files tickets through Tool<CreateTicket>, and
-// logs progress through Tool<Log>. PlannerSup supervises it one_for_one.
+// logs progress through Tool<Log>. PlannerSup supervises it one_for_one:
+// main starts the tree with `supervise` and reaches the running child
+// with `child`, so the planner it drives is a supervised process.
 // Every tool call is visible in the effect rows, resolvable through the
 // runtime registry (the install block in main), and recorded on the audit
 // stream — run `hird run demo/agent_planner.hird` and read stdout.
@@ -10,7 +12,6 @@
 module AgentPlanner
 
 effect Tool<t>
-effect Spawn<t>
 effect Send<t>
 effect Await<t>
 
@@ -128,10 +129,12 @@ fn demo_log(args: { level: String, message: String }) → () = ()
 
 // ── entry point ──────────────────────────────────────────────────
 
-// Drives one planning round: plan a repository, confirm tickets were
+// Drives one planning round against the supervised planner: start the
+// tree, look up the child, plan a repository, confirm tickets were
 // filed, then send the Shutdown sentinel.
-fn run_demo() → () ! {Spawn<PlannerMsg>, Send<PlannerMsg>, Await<PlannerStatus>} =
-  let planner = spawn(Planner, default_config()) in
+fn run_demo() → () ! {Supervise, Send<PlannerMsg>, Await<PlannerStatus>} =
+  let started = supervise(PlannerSup) in
+  let planner = child(PlannerSup, planner) in
   let plan = send(planner, PlanRepo(Path("forest-rs/hird"))) in
   match request(planner, GetStatus) {
     PlannerStatus(repos, tickets) →
@@ -139,9 +142,9 @@ fn run_demo() → () ! {Spawn<PlannerMsg>, Send<PlannerMsg>, Await<PlannerStatus
       if tickets > 0 then () else crash!("the planner filed no tickets"),
   }
 
-// Handler maps never cross spawn: the install block is what the spawned
-// planner's tool calls resolve through.
-fn main() → () ! {Install, Spawn<PlannerMsg>, Send<PlannerMsg>, Await<PlannerStatus>} =
+// Handler maps never cross the supervision boundary: the install block
+// is what the supervised planner's tool calls resolve through.
+fn main() → () ! {Install, Supervise, Send<PlannerMsg>, Await<PlannerStatus>} =
   install {
     Tool<ReadRepo> → demo_read_repo,
     Tool<CreateTicket> → demo_create_ticket,
