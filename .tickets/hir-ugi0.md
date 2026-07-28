@@ -1,6 +1,6 @@
 ---
 id: hir-ugi0
-status: open
+status: closed
 deps: [hir-x5gc]
 links: []
 created: 2026-07-28T07:59:04Z
@@ -53,3 +53,26 @@ restart observation surface.
   tool-call audit records — from `hird run` alone.
 - cargo fmt, clippy -D warnings, and workspace tests pass.
 
+
+## Notes
+
+**2026-07-28T13:29:57Z**
+
+Implemented end to end in commit 5cdf117 (actors: implement supervise
+and child keyword forms). Every pipeline stage gained its small form
+beside spawn's: lexer keywords, SUPERVISE_EXPR/CHILD_EXPR grammar and
+AST wrappers, checker resolution against a pre-function-checking
+supervisor registry (C0052 unknown supervisor, C0053 unknown child id;
+supervise types (), contributes bare Supervise; child types Pid<Msg>
+with the empty row), IrSupervise/IrChild with lowering, pretty-printer
+and roundtrip coverage, and emission ({ok, _} = Sup:start_link()
+evaluating to unit; inline case over hird_sup_util:child_pid/2
+crashing with {no_child, Id}).
+
+Verified: parser/checker/lowering/codegen snapshots, erlc validation
+of the new Tree fixture, and end-to-end on BEAM from hird run alone —
+a probe program supervised PlannerSup, looked up its child, drove it
+with send/request, and streamed the child's Log and CreateTicket audit
+records. Effect graph output unchanged; Supervise renders in rows
+({Supervise} in fn signatures and C0030 messages). fmt, clippy -D
+warnings, and the full workspace test suite pass.
