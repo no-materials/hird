@@ -49,7 +49,7 @@ then implemented, then the demo moves onto it.
 
 ## Task sequence
 
-1. [ ] [hir-x5gc](hir-x5gc.md) — Lock the supervisor runtime surface ADR
+1. [x] [hir-x5gc](hir-x5gc.md) — Lock the supervisor runtime surface ADR
 2. [ ] [hir-ugi0](hir-ugi0.md) — Implement supervise and child keyword forms
 3. [ ] [hir-r4d1](hir-r4d1.md) — Run the demo planner under PlannerSup
 

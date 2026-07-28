@@ -1,6 +1,6 @@
 ---
 id: hir-x5gc
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-28T07:59:04Z
@@ -57,3 +57,11 @@ the pre-crash pid from the restarted one, so it buys no determinism).
 - Each of the four decision points above is either confirmed or
   consciously amended at review.
 
+
+## Notes
+
+**2026-07-28T08:04:40Z**
+
+Locked as ADR-024 with all four decision points confirmed at review
+unamended, including clause 4 (child is effect-free); the bare-marker
+alternative was considered and declined.
