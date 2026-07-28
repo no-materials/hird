@@ -1484,6 +1484,104 @@ install {
 
 ---
 
+## ADR-024: Supervisor runtime surface — `supervise` and typed `child` lookup
+
+**Date**: 2026-07-28
+**Status**: Accepted (builds on ADR-018/020; complements ADR-021's crash
+boundary)
+
+### Context
+
+The v0.1 demo (hir-bxdd) exposed a hole between the type-level and
+runtime supervision stories. A supervisor declaration is checked, emitted
+as a real OTP module, and projected into the effect graph — but no Hirð
+expression starts one: `spawn` resolves actor names only (ADR-018), and
+implicit start-all-supervisors at boot was rejected on hir-y9jo. Even a
+started tree would be unreachable: children stay unregistered (ADR-020),
+`send`/`request` need a `Pid<Msg>`, and nothing produces one for a
+supervised child. `hird_sup_util:child_pid/2` shipped (hir-7oph) for
+exactly this lookup and has no consumer. The demo therefore drives a
+directly spawned planner while `PlannerSup` is runtime-dead — a gap in
+the headline claim the demo exists to make.
+
+### Decision
+
+1. **`supervise(SupName)` is a keyword form that starts a declared
+   supervisor.** The name resolves in the supervisor namespace (the
+   `spawn` precedent; a dedicated error otherwise). The expression types
+   as `()` and lowers to the emitted module's `start_link/0` under an
+   `{ok, _}` match. Because emitted supervisors register
+   `{local, Module}`, each declaration names at most one running
+   instance; a second `supervise` of the same declaration crashes with
+   `{already_started, …}` — a bug surfacing as a crash (ADR-021), not a
+   silent no-op.
+
+2. **`supervise` carries the checker-known bare effect `Supervise`.**
+   The Install precedent (ADR-023): a keyword form whose effect head the
+   checker supplies, no user declaration needed. Starting a process tree
+   is global, so the row records it. `hird run`'s entry check is
+   unchanged — it forbids residual `Tool<…>` only, so a `main` that
+   installs, supervises, and drives is accepted.
+
+3. **`child(SupName, child_id)` is a keyword form for typed child
+   lookup.** The supervisor name resolves in its namespace; the child id
+   is checked against that supervisor's declared children; the result
+   type is `Pid<Msg>`, where `Msg` is the child actor's message type —
+   all read off the declaration, no new type machinery. It lowers
+   through `hird_sup_util:child_pid/2` on the registered name; a missing
+   or restarting child crashes (`{no_child, Id}`): the tree's health is
+   supervision's concern, never a caller-recoverable domain error
+   (ADR-021).
+
+   *Rejected — `Option<Pid<Msg>>`.* It forces every caller to handle a
+   state it cannot meaningfully recover from; the `None` arm could only
+   crash by hand.
+
+4. **`child` carries the empty effect row.** The lookup creates nothing
+   and communicates nothing a handler could intercept, mock, or audit —
+   rows exist for handler routing (ADR-004) and explicit side effects,
+   and a lookup has neither. Its nondeterminism (which pid you observe
+   across restarts) is the concession ADR-019 already makes: pids are
+   runtime values the type system does not track.
+
+5. **No first-class supervisor values.** No `SupRef` type; the
+   registered name is the handle, consistent with ADR-018's
+   namespaces-not-values stance. Adding a value-level handle later is
+   additive.
+
+### Alternatives considered
+
+- **Overloading `spawn` for supervisor names.** Rejected: `spawn`'s
+  result type is `Pid<Msg>` and a supervisor has no mailbox, so the
+  result would be a lie or a special case; two namespaces in one
+  keyword's first argument also muddies resolution.
+- **Implicit boot-time start of declared supervisors.** Already rejected
+  on hir-y9jo; hidden scheduling, contra the explicit-over-implicit
+  tenet.
+- **Await/retry semantics on `child`.** A retrying lookup cannot
+  distinguish the pre-crash pid from the restarted one, so it buys no
+  determinism and hides a poll loop.
+
+### Consequences
+
+- The demo's planner runs under `PlannerSup` from `hird run` alone;
+  `spawn` remains the unsupervised path.
+- Two new keywords claim identifier space; existing code using `child`
+  as a value name breaks — acceptable pre-publish.
+- `Supervise` in a row is coarse, like `Install`: "starts a supervision
+  tree somewhere below," with no per-tree granularity. A parametric
+  refinement is additive.
+- A restart is real but not deterministically observable from inside the
+  program: a probe request enqueued behind a poison message exits the
+  caller, and a fresh lookup can race the crash. Observing restarts
+  needs monitor/await surface or dispatcher-audited crash records —
+  future design, explicitly not blocked on here.
+- The runtime contract grows a consumer for `child_pid/2`; whether the
+  crash-on-`error` case is inlined by the emitter or a runtime helper is
+  emitter detail, not locked here.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
