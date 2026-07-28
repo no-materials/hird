@@ -1,6 +1,6 @@
 ---
 id: hir-r4d1
-status: open
+status: closed
 deps: [hir-ugi0]
 links: []
 created: 2026-07-28T07:59:04Z
@@ -45,3 +45,22 @@ level.
   and workspace tests pass.
 - README and phrasebook updated.
 
+
+## Notes
+
+**2026-07-28T13:44:17Z**
+
+Implemented in commit 828f5de (demo: run the planner under PlannerSup
+via supervise and child). run_demo supervises PlannerSup and obtains
+the planner via child(PlannerSup, planner); main's row swaps
+Spawn<PlannerMsg> for Supervise; the unused Spawn effect declaration is
+dropped.
+
+Acceptance verified: hird run produces the same seven-record audit
+stream (Log, ReadRepo, CreateTicket, Log, CreateTicket, Log, Log) with
+the planner running as PlannerSup's supervised child; the
+emit-effect-graph output diff against the pre-change demo is line
+numbers only (the graph has no row content from main); all five demo
+integration tests including the dry-run harness pass; README and
+phrasebook updated; hir-bxdd notes deviation 2 closed; fmt, clippy -D
+warnings, and the full workspace suite pass.

@@ -1,6 +1,6 @@
 ---
 id: hir-xixm
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-28T07:58:56Z
@@ -51,7 +51,7 @@ then implemented, then the demo moves onto it.
 
 1. [x] [hir-x5gc](hir-x5gc.md) — Lock the supervisor runtime surface ADR
 2. [x] [hir-ugi0](hir-ugi0.md) — Implement supervise and child keyword forms
-3. [ ] [hir-r4d1](hir-r4d1.md) — Run the demo planner under PlannerSup
+3. [x] [hir-r4d1](hir-r4d1.md) — Run the demo planner under PlannerSup
 
 ## Out of scope
 
@@ -75,3 +75,17 @@ then implemented, then the demo moves onto it.
 - README and phrasebook document the forms.
 - cargo fmt, clippy -D warnings, and workspace tests pass.
 
+
+## Notes
+
+**2026-07-28T13:44:38Z**
+
+All three children closed: the ADR (hir-x5gc, ADR-024), the
+implementation (hir-ugi0, commit 5cdf117), and the demo move
+(hir-r4d1, commit 828f5de). Epic acceptance verified end to end:
+supervise(PlannerSup) and child(PlannerSup, planner) check, lower, and
+emit (erlc-validated, verified on BEAM); hird run drives a planner
+running as PlannerSup's supervised child with the unchanged
+seven-record audit stream; the dry-run harness passes; README and
+phrasebook document the forms; fmt, clippy -D warnings, and the full
+workspace suite pass. The publish gate this epic guarded is lifted.
