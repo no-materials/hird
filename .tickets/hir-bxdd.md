@@ -1,6 +1,6 @@
 ---
 id: hir-bxdd
-status: open
+status: closed
 deps: [hir-7oph, hir-y9jo, hir-1dvq, hir-z9rn, hir-shiv]
 links: []
 created: 2026-05-22T21:41:57Z
@@ -109,3 +109,39 @@ Three ticket-level clarifications resolved before implementation:
    stop-return in actor codegen plus restart-policy interplay) is new design
    surface on ADR-020 and out of scope for the demo; it can be ticketed
    separately if v0.2 wants it.
+
+**2026-07-28T06:50:25Z**
+
+Implemented and verified. demo/agent_planner.hird is the demo; the
+harness and CLI coverage live in crates/hird-cli/tests/demo.rs; the
+README documents build/run/emit-effect-graph; the phrasebook's bare Log
+arms moved to Tool<Log> per clarification 1.
+
+Two deviations from the ticket text, both forced by v0.1 as shipped:
+
+1. The file is demo/agent_planner.hird, not demo/planner.hird. A
+   planner.hird base module and the Planner actor both derive the Erlang
+   module hird_planner, and `hird build` rejects the collision. The
+   actor keeps the ticketed name (it is what the effect graph and the
+   audit callers show); the file name absorbs the rename.
+
+2. `hird run` drives a directly spawned Planner rather than one running
+   under PlannerSup. v0.1 has no surface form that starts a supervisor:
+   `spawn` resolves actor names only, and hir-y9jo explicitly rejected
+   implicit start-all-supervisors. PlannerSup is fully real — checked,
+   emitted as an OTP supervisor module (hird_planner_sup.erl, compiled
+   by the build), and present in the effect graph with strategy and
+   child — and supervised crash-restart was verified on BEAM at the
+   runtime-library level (hir-7oph). A supervisor-start expression
+   (plus typed child lookup, hird_sup_util:child_pid's consumer) is new
+   design surface on ADR-018/020; ticket separately if v0.2 wants it,
+   as with the Shutdown stop path.
+
+Acceptance verified: check/build/run/emit-effect-graph all pass on the
+demo (erlc-gated tests assert the artifacts, the audit JSON stream —
+ReadRepo, two CreateTicket invocations for the actionable tasks, Log
+records, both caller forms — and the graph's actor/supervisor/tool
+content). The harness re-runs the same source with mock handlers
+swapped into the install block and asserts expected mock tickets and
+log records on the audit stream. cargo fmt/clippy/test pass across the
+workspace.

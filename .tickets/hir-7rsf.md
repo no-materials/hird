@@ -65,7 +65,7 @@ inspectable).
 4. [x] [hir-7oph](hir-7oph.md) — Erlang runtime support library
 5. [x] [hir-y9jo](hir-y9jo.md) — CLI commands: check, build, run, emit
 6. [x] [hir-shiv](hir-shiv.md) — install blocks: dynamic-extent registry handlers from Hirð
-7. [ ] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
+7. [x] [hir-bxdd](hir-bxdd.md) — v0.1 demo: supervised agent planner end-to-end
 
 Step 2 implements the mapping locked by Phase 7's design ADR (ha-8fyg).
 Steps 2–5 are independent after step 1. Step 6 (ADR-023) gives Hirð code a
@@ -182,3 +182,24 @@ is restored after the body — crash included, through the emitted path.
 phrasebook.md documents the form next to Handle Blocks.
 
 Only hir-bxdd (the v0.1 demo) remains; all of its dependencies are closed.
+
+**2026-07-28T06:50:43Z**
+
+Task 7 (hir-bxdd, the v0.1 demo) is done — the epic's task sequence is
+complete. demo/agent_planner.hird (the planner.hird name collides with
+the actor's hird_planner module; the actor kept the name) runs the
+supervised-agent-planner scenario end to end: check, build (base +
+gen_server + supervisor modules through erlc), run on BEAM with the
+full audit stream on stdout, and the queryable effect graph. The
+dry-run harness in hird-cli/tests/demo.rs re-runs the same source with
+mock handlers swapped into the install block and asserts on the audit
+JSON lines. README documents the demo; the phrasebook's bare Log arms
+moved to Tool<Log>.
+
+One v0.1 boundary noted on hir-bxdd: no surface form starts a
+supervisor (spawn is actor-only, and implicit start was rejected on
+hir-y9jo), so `hird run` drives a directly spawned Planner; PlannerSup
+is checked, emitted, compiled, and in the effect graph, with
+crash-restart verified at the runtime-library level. A supervisor-start
+expression is candidate v0.2 design surface alongside the actor stop
+path.
