@@ -17,9 +17,9 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, CrashExpr, Expr, FieldExpr, HandleArm, HandleBlock, IfExpr,
-    InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr, RequestExpr,
-    SendExpr, SpawnExpr,
+    AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Expr, FieldExpr, HandleArm, HandleBlock,
+    IfExpr, InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr,
+    RequestExpr, SendExpr, SpawnExpr, SuperviseExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -101,6 +101,8 @@ impl Checker {
             Expr::Handle(handle) => self.infer_handle(handle),
             Expr::Install(install) => self.infer_install(install),
             Expr::Spawn(spawn) => self.infer_spawn(spawn),
+            Expr::Supervise(supervise) => self.infer_supervise(supervise),
+            Expr::Child(child) => self.infer_child(child),
             Expr::Send(send) => self.infer_send(send),
             Expr::Request(request) => self.infer_request(request),
             Expr::Reply(reply) => self.infer_reply(reply),
@@ -482,6 +484,77 @@ impl Checker {
         }
         let row = EffectRow::closed([Effect::parametric("Spawn", Vec::from([message.clone()]))]);
         self.add_effects(&row, span);
+        Ok(Type::con("Pid", Vec::from([message])))
+    }
+
+    /// `supervise(SupName)` — starts a declared supervisor's tree.
+    ///
+    /// The supervisor name resolves in the supervisor namespace. The
+    /// expression is unit and carries the checker-known bare effect
+    /// `Supervise` (the `Install` precedent): starting a process tree is
+    /// global state, so the row records it. Each declaration names at most
+    /// one running instance; a second supervise of the same name crashes at
+    /// runtime rather than silently no-oping.
+    fn infer_supervise(&mut self, supervise: &SuperviseExpr) -> Checked<Type> {
+        let span = node_span(supervise.syntax(), self.source_id);
+        let Some(name) = supervise.supervisor_name() else {
+            return Err(Aborted);
+        };
+        if !self.supervisors.contains_key(name) {
+            let at = supervise
+                .supervisor_token()
+                .map_or(span, |t| token_span(t, self.source_id));
+            return Err(self.error(
+                CheckCode::C0052,
+                at,
+                format!("`{name}` is not a declared supervisor"),
+            ));
+        }
+        let row = EffectRow::closed([Effect::named("Supervise")]);
+        self.add_effects(&row, span);
+        Ok(Type::tuple(Vec::new()))
+    }
+
+    /// `child(SupName, child_id)` — typed lookup of a supervised child's pid.
+    ///
+    /// The supervisor name resolves in its namespace and the child id against
+    /// that supervisor's declared children; the result is `Pid<Msg>` for the
+    /// child actor's message type, read off the declarations. The lookup
+    /// creates and communicates nothing a handler could intercept, so its
+    /// effect row is empty; a missing or restarting child crashes at runtime,
+    /// never surfacing as a caller-recoverable error.
+    fn infer_child(&mut self, child: &ChildExpr) -> Checked<Type> {
+        let span = node_span(child.syntax(), self.source_id);
+        let (Some(sup), Some(id)) = (child.supervisor_name(), child.child_id()) else {
+            return Err(Aborted);
+        };
+        let Some(info) = self.supervisors.get(sup) else {
+            let at = child
+                .supervisor_token()
+                .map_or(span, |t| token_span(t, self.source_id));
+            return Err(self.error(
+                CheckCode::C0052,
+                at,
+                format!("`{sup}` is not a declared supervisor"),
+            ));
+        };
+        let Some((_, actor)) = info.children.iter().find(|(cid, _)| cid == id) else {
+            let at = child
+                .child_token()
+                .map_or(span, |t| token_span(t, self.source_id));
+            return Err(self.error(
+                CheckCode::C0053,
+                at,
+                format!("supervisor `{sup}` declares no child with id `{id}`"),
+            ));
+        };
+        let Some(actor_info) = self.actors.get(actor) else {
+            // The child's actor does not resolve; supervisor checking reports
+            // C0047 against the declaration after function checking, so abort
+            // without a second diagnostic here.
+            return Err(Aborted);
+        };
+        let message = Type::con(actor_info.message.as_str(), Vec::new());
         Ok(Type::con("Pid", Vec::from([message])))
     }
 

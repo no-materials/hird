@@ -836,6 +836,30 @@ impl<'a> Emitter<'a> {
                 );
                 sequence(&[start, pid], indent, ctx)
             }
+            IrExpr::Supervise(supervise) => {
+                let start = format!(
+                    "{{ok, _}} = {}:start_link(),",
+                    erlang_module_name(&supervise.supervisor)
+                );
+                sequence(&[start, String::from("ok")], indent, ctx)
+            }
+            IrExpr::Child(child) => {
+                // The runtime lookup yields `{ok, Pid} | error`; the miss is a
+                // crash (a missing or restarting child is supervision's
+                // concern), rendered inline as a case.
+                let pid = cx.fresh_internal("Pid");
+                let id = atom(&child.child_id);
+                format!(
+                    "case hird_sup_util:child_pid({}, {id}) of\
+                     \n{}{{ok, {pid}}} -> {pid};\
+                     \n{}error -> erlang:error({{no_child, {id}}})\
+                     \n{}end",
+                    erlang_module_name(&child.supervisor),
+                    ind(indent + 1),
+                    ind(indent + 1),
+                    ind(indent)
+                )
+            }
             IrExpr::Send(send) => {
                 let pid = self.expr(&send.pid, env, cx, indent, Ctx::Expr);
                 let msg = self.expr(&send.message, env, cx, indent, Ctx::Expr);
@@ -1555,6 +1579,8 @@ fn expr_type(expr: &IrExpr) -> Type {
         IrExpr::Handle(h) => h.result_type.clone(),
         IrExpr::Install(inst) => inst.result_type.clone(),
         IrExpr::Spawn(s) => s.result_type.clone(),
+        IrExpr::Supervise(s) => s.result_type.clone(),
+        IrExpr::Child(c) => c.result_type.clone(),
         IrExpr::Send(s) => s.result_type.clone(),
         IrExpr::Request(r) => r.result_type.clone(),
         IrExpr::Reply(r) => r.result_type.clone(),

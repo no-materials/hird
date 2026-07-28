@@ -324,6 +324,18 @@ fn spawn_no_args() {
     insta::assert_snapshot!(render_cst("fn go() = spawn(Worker)"));
 }
 
+// ── supervision expressions ─────────────────────────────────────
+
+#[test]
+fn supervise_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = supervise(PlannerSup)"));
+}
+
+#[test]
+fn child_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = child(PlannerSup, planner)"));
+}
+
 // ── messaging expressions ───────────────────────────────────────
 
 #[test]

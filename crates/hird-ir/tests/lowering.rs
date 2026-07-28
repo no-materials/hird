@@ -703,6 +703,45 @@ fn supervisor_json_snapshot() {
     insta::assert_snapshot!(module.to_json_pretty().expect("serialization succeeds"));
 }
 
+// ── supervise and child expressions ──────────────────────────────
+
+/// The supervised fixture plus the runtime-surface consumers.
+fn supervised_with_consumers() -> String {
+    format!(
+        "{SUPERVISED}\n\
+         fn boot() ! {{Supervise}} = supervise(PlannerSup)\n\
+         fn planner() -> Pid<Msg> ! {{}} = child(PlannerSup, planner)"
+    )
+}
+
+#[test]
+fn supervise_lowers_to_supervise_node() {
+    let module = lower(&supervised_with_consumers(), "Sup");
+    let boot = fn_named(&module, "boot");
+    let IrExpr::Supervise(supervise) = &boot.body else {
+        panic!("body should be a supervise, got {:?}", boot.body);
+    };
+    assert_eq!(supervise.supervisor, "PlannerSup");
+    assert_eq!(ty_str(&supervise.result_type), "()");
+    // The booter's declared row carries the bare supervise effect.
+    assert_eq!(format!("{}", boot.effect_row), "{Supervise}");
+}
+
+#[test]
+fn child_lowers_to_child_node() {
+    let module = lower(&supervised_with_consumers(), "Sup");
+    let planner = fn_named(&module, "planner");
+    let IrExpr::Child(child) = &planner.body else {
+        panic!("body should be a child lookup, got {:?}", planner.body);
+    };
+    assert_eq!(child.supervisor, "PlannerSup");
+    assert_eq!(child.child_id, "planner");
+    // The typed reference: `Pid<Msg>` for the child actor's message type.
+    assert_eq!(ty_str(&child.result_type), "Pid<Msg>");
+    // The lookup is effect-free.
+    assert!(planner.effect_row.is_empty());
+}
+
 // ── crash primitive ──────────────────────────────────────────────
 
 #[test]

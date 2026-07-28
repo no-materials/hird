@@ -1,0 +1,22 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Tree\"), \"Tree\")"
+---
+%% Generated from src/tree.hird by the Hirð compiler. Do not edit.
+-module(hird_tree).
+-export([default_config/0, boot/1]).
+
+%% src/tree.hird:3
+default_config() ->
+    {st, 0}.
+
+%% src/tree.hird:18
+boot(_Handlers@) ->
+    U = begin
+        {ok, _} = hird_planner_sup:start_link(),
+        ok
+    end,
+    gen_server:cast(case hird_sup_util:child_pid(hird_planner_sup, planner) of
+        {ok, Pid@1} -> Pid@1;
+        error -> erlang:error({no_child, planner})
+    end, nop).

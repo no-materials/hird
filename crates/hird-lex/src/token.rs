@@ -83,6 +83,10 @@ pub enum TokenKind {
     Install,
     /// `spawn`
     Spawn,
+    /// `supervise`
+    Supervise,
+    /// `child`
+    Child,
     /// `send`
     Send,
     /// `request`
@@ -227,6 +231,8 @@ impl TokenKind {
                 | Self::Handle
                 | Self::Install
                 | Self::Spawn
+                | Self::Supervise
+                | Self::Child
                 | Self::Send
                 | Self::Request
                 | Self::Reply

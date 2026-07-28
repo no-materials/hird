@@ -154,6 +154,12 @@ pub enum CheckCode {
     /// installed handler runs in arbitrary processes against whatever handler
     /// map the eventual call site carries, so it must be pure.
     C0051,
+    /// A `supervise` or `child` expression names a supervisor that is not
+    /// declared.
+    C0052,
+    /// A `child` expression names a child id the named supervisor does not
+    /// declare.
+    C0053,
 }
 
 /// A secondary source location attached to a diagnostic.

@@ -1106,8 +1106,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
-    /// one of the keyword forms (`spawn`, `send`, `request`, `reply`,
-    /// `crash!`/`panic!`), otherwise an atom.
+    /// one of the keyword forms (`spawn`, `supervise`, `child`, `send`,
+    /// `request`, `reply`, `crash!`/`panic!`), otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1117,6 +1117,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::HANDLE_KW => self.parse_handle_expr(),
             SyntaxKind::INSTALL_KW => self.parse_install_expr(),
             SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
+            SyntaxKind::SUPERVISE_KW => self.parse_supervise_expr(),
+            SyntaxKind::CHILD_KW => self.parse_child_expr(),
             SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
             SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
             SyntaxKind::REPLY_KW => self.parse_message_expr(SyntaxKind::REPLY_EXPR),
@@ -1255,6 +1257,31 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             }
             self.parse_expr();
         }
+        self.expect(SyntaxKind::R_PAREN);
+        self.finish_node();
+    }
+
+    /// `supervise(SupName)` — a keyword form. The argument is a supervisor
+    /// name resolved in the supervisor namespace, not an expression.
+    fn parse_supervise_expr(&mut self) {
+        self.start_node(SyntaxKind::SUPERVISE_EXPR);
+        self.expect(SyntaxKind::SUPERVISE_KW);
+        self.expect(SyntaxKind::L_PAREN);
+        self.expect(SyntaxKind::IDENT);
+        self.expect(SyntaxKind::R_PAREN);
+        self.finish_node();
+    }
+
+    /// `child(SupName, child_id)` — a keyword form. The first argument is a
+    /// supervisor name resolved in the supervisor namespace, the second one
+    /// of its declared child ids; neither is an expression.
+    fn parse_child_expr(&mut self) {
+        self.start_node(SyntaxKind::CHILD_EXPR);
+        self.expect(SyntaxKind::CHILD_KW);
+        self.expect(SyntaxKind::L_PAREN);
+        self.expect(SyntaxKind::IDENT);
+        self.expect(SyntaxKind::COMMA);
+        self.expect(SyntaxKind::IDENT);
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
     }

@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(&format!(\"{PLANNER_SUP}fn boot() ! {{Supervise}} = supervise(PlannerSup)\")))"
+---
+supervisor PlannerSup ! {Tool<ReadRepo>}

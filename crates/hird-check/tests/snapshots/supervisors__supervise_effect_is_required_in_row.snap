@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(&format!(\"{PLANNER_SUP}fn boot() ! {{}} = supervise(PlannerSup)\")))"
+---
+error[C0030] 1129..1151: declared {} but body performs {Supervise}
+supervisor PlannerSup ! {Tool<ReadRepo>}

@@ -35,6 +35,7 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Duo", DUO),
     ("Echo", ECHO),
     ("Solo", SOLO),
+    ("Tree", TREE),
     ("Fleet", FLEET),
     ("Nest", NEST),
     ("Drift", DRIFT),
@@ -193,6 +194,27 @@ const SOLO: &str = "type St = St(Int)\n\
          { id: planner, actor: Planner, start_args: default_config(), restart: permanent },\n\
        ]\n\
      }";
+
+const TREE: &str = "effect Send<t>\n\
+     type St = St(Int)\n\
+     fn default_config() -> St = St(0)\n\
+     actor Planner {\n\
+       state: St,\n\
+       message: PlannerMsg = | Nop,\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Nop, st -> St ! {} = st,\n\
+     }\n\
+     supervisor PlannerSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: planner, actor: Planner, start_args: default_config(), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn boot() ! {Supervise, Send<PlannerMsg>} =\n\
+       let u = supervise(PlannerSup) in\n\
+       send(child(PlannerSup, planner), Nop)";
 
 const FLEET: &str = "type St = St(Int)\n\
      fn planner_config() -> St = St(0)\n\
@@ -472,6 +494,11 @@ fn snapshot_supervisor_single_child() {
         "Solo",
         "hird_planner_sup"
     ));
+}
+
+#[test]
+fn snapshot_supervise_and_child_lookup() {
+    insta::assert_snapshot!(emit(program("Tree"), "Tree"));
 }
 
 #[test]

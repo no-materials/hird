@@ -31,22 +31,23 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_ast::{
-    ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, CrashExpr, Decl, Expr,
-    ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr, Literal,
-    MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr, SourceFile,
-    SpawnExpr, SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
+    ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Decl,
+    Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr,
+    Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr,
+    SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField, ToolDecl, TupleLit,
+    TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
 use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
-    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
-    IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
-    IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
-    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan,
-    IrSpawn, IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat,
-    LiteralValue,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
+    IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef,
+    IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral,
+    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply,
+    IrRequest, IrSend, IrSpan, IrSpawn, IrSupervise, IrSupervisorDef, IrToolDef, IrTuple,
+    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -360,6 +361,8 @@ impl Lowerer<'_> {
             Expr::Handle(handle) => self.lower_handle(handle),
             Expr::Install(install) => self.lower_install(install),
             Expr::Spawn(spawn) => self.lower_spawn(spawn),
+            Expr::Supervise(supervise) => self.lower_supervise(supervise),
+            Expr::Child(child) => self.lower_child_lookup(child),
             Expr::Send(send) => self.lower_send(send),
             Expr::Request(request) => self.lower_request(request),
             Expr::Reply(reply) => self.lower_reply(reply),
@@ -552,6 +555,27 @@ impl Lowerer<'_> {
             actor: String::from(spawn.actor_name().unwrap_or("")),
             args: spawn.args().map(|a| self.lower_expr(&a)).collect(),
             result_type: self.node_type(spawn.syntax()),
+        })
+    }
+
+    /// `supervise(SupName)`. The supervisor name is carried as a string — it
+    /// is a namespace reference, not an expression — and the recorded type is
+    /// unit.
+    fn lower_supervise(&self, supervise: &SuperviseExpr) -> IrExpr {
+        IrExpr::Supervise(IrSupervise {
+            supervisor: String::from(supervise.supervisor_name().unwrap_or("")),
+            result_type: self.node_type(supervise.syntax()),
+        })
+    }
+
+    /// `child(SupName, child_id)`. Both names are carried as strings — they
+    /// are namespace references, not expressions — and the recorded type is
+    /// the typed `Pid<Msg>` reference.
+    fn lower_child_lookup(&self, child: &ChildExpr) -> IrExpr {
+        IrExpr::Child(IrChild {
+            supervisor: String::from(child.supervisor_name().unwrap_or("")),
+            child_id: String::from(child.child_id().unwrap_or("")),
+            result_type: self.node_type(child.syntax()),
         })
     }
 

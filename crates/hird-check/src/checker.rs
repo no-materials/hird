@@ -79,6 +79,10 @@ pub(crate) struct Checker {
     /// Declared actors by name — the actor namespace. `spawn` resolves its
     /// actor argument here; actor names are not values.
     pub(crate) actors: BTreeMap<String, crate::actors::ActorInfo>,
+    /// Declared supervisors by name — the supervisor namespace. `supervise`
+    /// and `child` resolve their supervisor argument here; supervisor names
+    /// are not values.
+    pub(crate) supervisors: BTreeMap<String, crate::supervisors::SupervisorInfo>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -138,6 +142,7 @@ impl Checker {
             invocation_records: Vec::new(),
             tool_signatures: BTreeMap::new(),
             actors: BTreeMap::new(),
+            supervisors: BTreeMap::new(),
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),
@@ -231,6 +236,13 @@ impl Checker {
         // messages; actor bodies are checked after the functions they call.
         for decl in &actor_decls {
             let _ = self.register_actor(decl);
+        }
+        // Supervisor interfaces (name and child-id/actor pairs) are skimmed
+        // before function checking so any body may `supervise` a declared
+        // tree and look up its children; the declarations' full checking
+        // still runs last.
+        for decl in &supervisor_decls {
+            self.register_supervisor(decl);
         }
         for decl in &extern_decls {
             let _ = self.declare_extern(decl);

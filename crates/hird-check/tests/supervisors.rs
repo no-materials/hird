@@ -337,3 +337,84 @@ supervisor Sup {
 }"
     )));
 }
+
+// ── supervise and child expressions ──────────────────────────────
+
+/// The valid supervisor the runtime-surface tests resolve against.
+const PLANNER_SUP: &str = "\
+supervisor PlannerSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },
+  ]
+}
+";
+
+/// `supervise` on a declared supervisor types as unit and contributes the
+/// checker-known bare `Supervise` effect.
+#[test]
+fn supervise_declared_supervisor() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}fn boot() ! {{Supervise}} = supervise(PlannerSup)"
+    ))));
+}
+
+/// A `supervise` whose row omits `Supervise` fails the declared-vs-inferred
+/// row check, proving the effect is contributed.
+#[test]
+fn supervise_effect_is_required_in_row() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}fn boot() ! {{}} = supervise(PlannerSup)"
+    ))));
+}
+
+/// `supervise` on an undeclared name is a dedicated diagnostic.
+#[test]
+fn supervise_unknown_supervisor() {
+    insta::assert_snapshot!(check_str(&with_prelude(
+        "fn boot() ! {Supervise} = supervise(GhostSup)"
+    )));
+}
+
+/// `child` on a declared pair types as the child actor's `Pid<Msg>` with the
+/// empty effect row.
+#[test]
+fn child_types_as_actor_pid() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}fn planner() -> Pid<PlannerMsg> ! {{}} = child(PlannerSup, planner)"
+    ))));
+}
+
+/// `child` on an undeclared supervisor is the same dedicated diagnostic as
+/// `supervise`'s.
+#[test]
+fn child_unknown_supervisor() {
+    insta::assert_snapshot!(check_str(&with_prelude(
+        "fn planner() -> Pid<PlannerMsg> ! {} = child(GhostSup, planner)"
+    )));
+}
+
+/// `child` with an id the supervisor does not declare is a dedicated
+/// diagnostic.
+#[test]
+fn child_unknown_id() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}fn planner() -> Pid<PlannerMsg> ! {{}} = child(PlannerSup, ghost)"
+    ))));
+}
+
+/// A `main` that installs, supervises, looks up the child, and messages it
+/// checks clean: the runtime surface composes end to end.
+#[test]
+fn install_supervise_lookup_composes() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}effect Send<t>
+fn planner_mock(args: {{ path: Path }}) -> St = St(9)
+fn main() ! {{Install, Supervise, Send<PlannerMsg>}} =
+  install {{ Tool<ReadRepo> -> planner_mock }} in
+  let u = supervise(PlannerSup) in
+  send(child(PlannerSup, planner), Stop)"
+    ))));
+}

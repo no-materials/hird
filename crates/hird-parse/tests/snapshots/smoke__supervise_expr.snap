@@ -1,0 +1,19 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = supervise(PlannerSup)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    SUPERVISE_EXPR
+      WHITESPACE " "
+      SUPERVISE_KW "supervise"
+      L_PAREN "("
+      IDENT "PlannerSup"
+      R_PAREN ")"

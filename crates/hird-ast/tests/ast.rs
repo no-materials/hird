@@ -887,6 +887,23 @@ fn spawn_expr_no_args() {
 }
 
 #[test]
+fn supervise_expr_projection() {
+    let Expr::Supervise(supervise) = body("supervise(PlannerSup)") else {
+        panic!("expected a supervise expression");
+    };
+    assert_eq!(supervise.supervisor_name(), Some("PlannerSup"));
+}
+
+#[test]
+fn child_expr_projection() {
+    let Expr::Child(child) = body("child(PlannerSup, planner)") else {
+        panic!("expected a child expression");
+    };
+    assert_eq!(child.supervisor_name(), Some("PlannerSup"));
+    assert_eq!(child.child_id(), Some("planner"));
+}
+
+#[test]
 fn send_expr_projection() {
     let Expr::Send(send) = body("send(p, Stop)") else {
         panic!("expected a send expression");

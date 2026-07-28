@@ -45,6 +45,10 @@ pub enum SyntaxKind {
     INSTALL_KW,
     /// `spawn`
     SPAWN_KW,
+    /// `supervise`
+    SUPERVISE_KW,
+    /// `child`
+    CHILD_KW,
     /// `send`
     SEND_KW,
     /// `request`
@@ -235,6 +239,10 @@ pub enum SyntaxKind {
     INSTALL_EXPR,
     /// Spawn expression (`spawn(Actor, args)`).
     SPAWN_EXPR,
+    /// Supervise expression (`supervise(SupName)`).
+    SUPERVISE_EXPR,
+    /// Child-lookup expression (`child(SupName, child_id)`).
+    CHILD_EXPR,
     /// Send expression (`send(pid, msg)`).
     SEND_EXPR,
     /// Request expression (`request(pid, ctor)`).
@@ -303,6 +311,8 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Handle => Self::HANDLE_KW,
             TokenKind::Install => Self::INSTALL_KW,
             TokenKind::Spawn => Self::SPAWN_KW,
+            TokenKind::Supervise => Self::SUPERVISE_KW,
+            TokenKind::Child => Self::CHILD_KW,
             TokenKind::Send => Self::SEND_KW,
             TokenKind::Request => Self::REQUEST_KW,
             TokenKind::Reply => Self::REPLY_KW,
@@ -395,6 +405,8 @@ impl cstree::Syntax for SyntaxKind {
             Self::HANDLE_KW => Some("handle"),
             Self::INSTALL_KW => Some("install"),
             Self::SPAWN_KW => Some("spawn"),
+            Self::SUPERVISE_KW => Some("supervise"),
+            Self::CHILD_KW => Some("child"),
             Self::SEND_KW => Some("send"),
             Self::REQUEST_KW => Some("request"),
             Self::REPLY_KW => Some("reply"),

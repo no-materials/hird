@@ -116,7 +116,12 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         IrExpr::Field(_) => PREC_POSTFIX,
         // The keyword call forms (`spawn(…)`, `send(…)`, `crash!(…)`, …) are
         // self-delimiting.
-        IrExpr::Spawn(_) | IrExpr::Send(_) | IrExpr::Request(_) | IrExpr::Reply(_) => PREC_ATOM,
+        IrExpr::Spawn(_)
+        | IrExpr::Supervise(_)
+        | IrExpr::Child(_)
+        | IrExpr::Send(_)
+        | IrExpr::Request(_)
+        | IrExpr::Reply(_) => PREC_ATOM,
         IrExpr::Crash(_) => PREC_ATOM,
         IrExpr::Constructor(ctor) => {
             if ctor.args.is_empty() {
@@ -449,6 +454,13 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             }
             collect_type_effects(&spawn.result_type, out);
         }
+        // The supervise's own bare `Supervise` effect; checker-known, but the
+        // printed source declares every effect it names.
+        IrExpr::Supervise(_) => {
+            out.insert(String::from("Supervise"), 0);
+        }
+        // A child lookup is effect-free.
+        IrExpr::Child(_) => {}
         IrExpr::Send(send) => {
             out.insert(String::from("Send"), 1);
             collect_expr_effects(&send.pid, out);
@@ -876,6 +888,18 @@ impl Printer {
                     self.push(", ");
                     self.expr(arg, PREC_LOW);
                 }
+                self.push(")");
+            }
+            IrExpr::Supervise(supervise) => {
+                self.push("supervise(");
+                self.push(&supervise.supervisor);
+                self.push(")");
+            }
+            IrExpr::Child(child) => {
+                self.push("child(");
+                self.push(&child.supervisor);
+                self.push(", ");
+                self.push(&child.child_id);
                 self.push(")");
             }
             IrExpr::Send(send) => self.message_form("send", &send.pid, &send.message),

@@ -17,6 +17,7 @@
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use hird_ast::{AstNode, Expr, RecordField, RecordLit, SupervisorDecl, SupervisorField};
 use hird_lex::Span;
@@ -34,7 +35,51 @@ const STRATEGIES: [&str; 3] = ["one_for_one", "one_for_all", "rest_for_one"];
 /// The restart dispositions a child spec accepts.
 const RESTARTS: [&str; 3] = ["permanent", "temporary", "transient"];
 
+/// A registered supervisor: the interface `supervise` and `child` resolve
+/// against.
+#[derive(Debug, Clone)]
+pub(crate) struct SupervisorInfo {
+    /// Declared children as `(id, actor name)` pairs, in source order.
+    pub(crate) children: Vec<(String, String)>,
+}
+
 impl Checker {
+    /// Registers a supervisor's interface — its name and `(child id, actor)`
+    /// pairs — before function checking, so any body may `supervise` it and
+    /// look up its children. Skims the declaration structurally: malformed
+    /// fields are skipped here and reported by [`Checker::check_supervisor`],
+    /// which runs after function checking.
+    pub(crate) fn register_supervisor(&mut self, decl: &SupervisorDecl) {
+        let Some(name) = decl.name() else {
+            return;
+        };
+        let mut children = Vec::new();
+        let specs = decl
+            .fields()
+            .find(|f| f.name() == Some("children"))
+            .and_then(|f| f.value());
+        if let Some(Expr::List(list)) = specs {
+            for elem in list.elements() {
+                let Expr::Record(spec) = elem else {
+                    continue;
+                };
+                let field = |name: &str| {
+                    spec.fields()
+                        .find(|f| f.name() == Some(name))
+                        .and_then(|f| match f.value() {
+                            Some(Expr::Name(n)) => Some(String::from(n.text())),
+                            _ => None,
+                        })
+                };
+                if let (Some(id), Some(actor)) = (field("id"), field("actor")) {
+                    children.push((id, actor));
+                }
+            }
+        }
+        self.supervisors
+            .insert(String::from(name), SupervisorInfo { children });
+    }
+
     /// Checks a supervisor declaration: validates the closed field set, each
     /// child spec, and records the derived effect row for the IR. Runs after
     /// function and actor checking, so `start_args` sees final schemes and

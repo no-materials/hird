@@ -18,11 +18,12 @@
 
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
-    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChildSpec, IrConstructor,
-    IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef, IrHandle,
-    IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch, IrModule,
-    IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan, IrSpawn,
-    IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
+    IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
+    IrConstructor, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
+    IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
+    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan,
+    IrSpawn, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
+    pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -388,6 +389,15 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
             args: spawn.args.iter().map(|a| canon_expr(a, map)).collect(),
             result_type: canon_type(&spawn.result_type, map),
         }),
+        IrExpr::Supervise(supervise) => IrExpr::Supervise(IrSupervise {
+            supervisor: supervise.supervisor.clone(),
+            result_type: canon_type(&supervise.result_type, map),
+        }),
+        IrExpr::Child(child) => IrExpr::Child(IrChild {
+            supervisor: child.supervisor.clone(),
+            child_id: child.child_id.clone(),
+            result_type: canon_type(&child.result_type, map),
+        }),
         IrExpr::Send(send) => IrExpr::Send(IrSend {
             pid: Box::new(canon_expr(&send.pid, map)),
             message: Box::new(canon_expr(&send.message, map)),
@@ -740,6 +750,30 @@ fn spawn_round_trips() {
            handle Inc, St(n) -> St ! {} = St(n + 1),\n\
          }\n\
          fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)",
+    );
+}
+
+#[test]
+fn supervision_round_trips() {
+    assert_roundtrips(
+        "type St = St(Int)\n\
+         fn config() -> St = St(0)\n\
+         actor Counter {\n\
+           state: St,\n\
+           message: Msg = | Inc,\n\
+           init: fn(s: St) -> St ! {} = s,\n\
+           handle Inc, St(n) -> St ! {} = St(n + 1),\n\
+         }\n\
+         supervisor CounterSup {\n\
+           strategy: one_for_one,\n\
+           intensity: 5,\n\
+           period: 60,\n\
+           children: [\n\
+             { id: counter, actor: Counter, start_args: config(), restart: permanent },\n\
+           ]\n\
+         }\n\
+         fn boot() ! {Supervise} = supervise(CounterSup)\n\
+         fn counter() -> Pid<Msg> ! {} = child(CounterSup, counter)",
     );
 }
 

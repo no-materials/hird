@@ -1,0 +1,22 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = child(PlannerSup, planner)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    CHILD_EXPR
+      WHITESPACE " "
+      CHILD_KW "child"
+      L_PAREN "("
+      IDENT "PlannerSup"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "planner"
+      R_PAREN ")"

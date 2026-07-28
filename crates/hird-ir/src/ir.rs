@@ -334,6 +334,10 @@ pub enum IrExpr {
     Install(IrInstall),
     /// `spawn(Actor, args…)`
     Spawn(IrSpawn),
+    /// `supervise(SupName)`
+    Supervise(IrSupervise),
+    /// `child(SupName, child_id)`
+    Child(IrChild),
     /// `send(pid, msg)`
     Send(IrSend),
     /// `request(pid, ctor)`
@@ -491,6 +495,33 @@ pub struct IrSpawn {
     /// The init arguments, in order.
     pub args: Vec<IrExpr>,
     /// The expression's type: `Pid<Msg>` for the actor's message type.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `supervise(SupName)` expression: starts a declared supervisor's tree,
+/// unit-valued with a bare `Supervise` effect. The supervisor is a namespace
+/// reference, not an expression.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSupervise {
+    /// The supervised supervisor's name.
+    pub supervisor: String,
+    /// The expression's type: unit.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `child(SupName, child_id)` expression: typed lookup of a supervised
+/// child's pid, effect-free. Both arguments are namespace references, not
+/// expressions; a missing or restarting child crashes rather than returning
+/// an option.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrChild {
+    /// The supervisor's name.
+    pub supervisor: String,
+    /// The looked-up child's id.
+    pub child_id: String,
+    /// The expression's type: `Pid<Msg>` for the child actor's message type.
     #[serde(serialize_with = "serialize_type")]
     pub result_type: Type,
 }

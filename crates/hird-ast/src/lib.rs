@@ -870,6 +870,62 @@ impl SpawnExpr {
 }
 
 ast_node! {
+    /// A `supervise(SupName)` expression: starts a declared supervisor. The
+    /// supervisor name is a namespace reference, not an expression.
+    SuperviseExpr => SUPERVISE_EXPR
+}
+
+impl SuperviseExpr {
+    /// The supervisor's name token, for span-bearing diagnostics.
+    #[must_use]
+    pub fn supervisor_token(&self) -> Option<&SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// The supervisor's name.
+    #[must_use]
+    pub fn supervisor_name(&self) -> Option<&str> {
+        self.supervisor_token().map(|t| t.text())
+    }
+}
+
+ast_node! {
+    /// A `child(SupName, child_id)` expression: typed lookup of a supervised
+    /// child's pid. Both arguments are namespace references, not expressions.
+    ChildExpr => CHILD_EXPR
+}
+
+impl ChildExpr {
+    /// The supervisor's name token, for span-bearing diagnostics.
+    #[must_use]
+    pub fn supervisor_token(&self) -> Option<&SyntaxToken> {
+        token(&self.0, SyntaxKind::IDENT)
+    }
+
+    /// The supervisor's name.
+    #[must_use]
+    pub fn supervisor_name(&self) -> Option<&str> {
+        self.supervisor_token().map(|t| t.text())
+    }
+
+    /// The child id token (after the comma), for span-bearing diagnostics.
+    #[must_use]
+    pub fn child_token(&self) -> Option<&SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .skip_while(|e| element_kind(*e) != SyntaxKind::COMMA)
+            .filter_map(|e| e.into_token())
+            .find(|t| t.kind() == SyntaxKind::IDENT)
+    }
+
+    /// The child id.
+    #[must_use]
+    pub fn child_id(&self) -> Option<&str> {
+        self.child_token().map(|t| t.text())
+    }
+}
+
+ast_node! {
     /// A `send(pid, msg)` expression: fire-and-forget message delivery.
     SendExpr => SEND_EXPR
 }
@@ -1137,6 +1193,10 @@ pub enum Expr {
     Install(InstallBlock),
     /// `spawn(Actor, ..)`
     Spawn(SpawnExpr),
+    /// `supervise(SupName)`
+    Supervise(SuperviseExpr),
+    /// `child(SupName, child_id)`
+    Child(ChildExpr),
     /// `send(pid, msg)`
     Send(SendExpr),
     /// `request(pid, ctor)`
@@ -1176,6 +1236,8 @@ impl Expr {
             SyntaxKind::HANDLE_EXPR => Self::Handle(HandleBlock(node)),
             SyntaxKind::INSTALL_EXPR => Self::Install(InstallBlock(node)),
             SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
+            SyntaxKind::SUPERVISE_EXPR => Self::Supervise(SuperviseExpr(node)),
+            SyntaxKind::CHILD_EXPR => Self::Child(ChildExpr(node)),
             SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
             SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
             SyntaxKind::REPLY_EXPR => Self::Reply(ReplyExpr(node)),
@@ -1224,6 +1286,8 @@ impl Expr {
             Self::Handle(n) => Some(n.syntax()),
             Self::Install(n) => Some(n.syntax()),
             Self::Spawn(n) => Some(n.syntax()),
+            Self::Supervise(n) => Some(n.syntax()),
+            Self::Child(n) => Some(n.syntax()),
             Self::Send(n) => Some(n.syntax()),
             Self::Request(n) => Some(n.syntax()),
             Self::Reply(n) => Some(n.syntax()),
