@@ -2,7 +2,6 @@
 
 > Dense reference for inclusion in LLM context windows.
 > Each section shows the canonical pattern, not a tutorial explanation.
-> Target: under 4000 tokens when finalized.
 
 ---
 
@@ -11,11 +10,14 @@
 ```
 snake_case    — values, functions, parameters, local bindings
 PascalCase    — types, actors, supervisors, effects, modules, constructors
-a, b, r       — type variables (single lowercase letter)
-SCREAMING     — (not used; reserved)
+a, b, r       — type and row variables (any snake_case name in type
+                position; single letters by convention)
 ```
 
-Violations are compile errors, not warnings.
+The lexer enforces canonical case: a lowercase-initial name may not
+contain an uppercase letter, an uppercase-initial name may not contain
+`_` (so `SCREAMING_CASE` is rejected). Violations are compile errors
+(surfacing as parse errors), not warnings.
 
 ---
 
@@ -99,6 +101,11 @@ effect Spawn<t>
 ```
 
 Parametric effects reference specific capabilities or message types.
+
+Only `Install` and `Supervise` are pre-declared. Every other head a row
+names — including `Tool`, `Send`, `Await`, `Spawn`, `Exn` — needs an
+`effect` declaration like the above, even though the checker knows the
+keyword forms' semantics.
 
 ---
 
@@ -263,7 +270,9 @@ Use for: supplying deployment/demo handlers, test-harness mocks for actors.
 - Installed handlers must be pure — their effect row closed and empty; they
   run later, in arbitrary processes.
 - The expression's row is the body's row plus `Install`, a checker-known bare
-  effect head (like `Tool<t>`'s special status — no user declaration needed).
+  effect head (pre-declared, like `Supervise` — no user declaration needed).
+- Unlike `handle`, `install` does not discharge the body's `Tool<…>` effects
+  from the row — the handlers run later, in whatever process dispatches them.
 - Entries are visible to *all* processes while the body runs; the restore is
   best-effort under concurrency.
 
@@ -296,6 +305,37 @@ fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 
 ---
 
+## Common Pitfalls
+
+- **Non-exhaustive match** (C0015): cover every constructor or add a `_`
+  arm. Arms are comma-separated; omitting the comma is a parse error.
+- **Effect rows check for equality** (C0030), not subset: an omitted row is
+  `! {}`, so an effectful body with no annotation fails — and so does
+  declaring an effect the body never performs. Effect-polymorphic code
+  names a row tail (`! {Log, r}`) instead of relying on subsumption.
+- **Opaque types outside their module**: constructing (C0022) or
+  destructuring (C0021) an opaque type outside its declaring module is a
+  compile error — that is the capability discipline doing its job.
+- **Undeclared effect heads** (C0027): only `Install` and `Supervise` are
+  built in; declare `effect Tool<t>`, `effect Send<t>`, … before a row
+  names them.
+- **Tool arms**: `Tool<X>` requires `X` to be a declared tool (C0033); the
+  handler must match the tool's operation signature (C0034); `install`
+  handlers must be pure — closed empty row (C0051).
+- **Tool signatures must be wire-representable** (C0032): no function
+  types, no opaque capability types in args or result.
+- **Record arguments need parens**: `f({ title: t })`, never `f { title: t }`
+  (a `{` never starts an application argument).
+- **Relational operators do not chain**: `a == b == c` is a parse error
+  (P0005); write `(a == b) == c`.
+- **`Some`/`None`, `Cons`/`Nil` are not predefined**: `Option` and `List`
+  exist as built-in type names but carry no constructors until you declare
+  `type Option<a> = Some(a) | None` yourself.
+- **Handler maps never cross `spawn`/`supervise`**: a `handle` block around
+  a spawn does nothing for the spawned actor's tool calls — use `install`.
+
+---
+
 ## Modules
 
 ```
@@ -307,6 +347,10 @@ use Log as L
 pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Tool<Log>} = ...
 ```
 
-- `pub` for exports. Unprefixed is module-private.
-- Qualified names: `Ets.lookup`.
-- One module per file.
+- `pub` for exports; `pub opaque type` exports the name but keeps
+  constructors module-private. Unprefixed is module-private.
+- `use Mod` and `use Mod as M` bind a qualifier for `Mod.member` / `M.member`.
+  `use Mod.{a, b}` binds `a` and `b` unqualified — and only that: it does not
+  also bind the `Mod` qualifier.
+- One module per file; the module name is derived from the file path, and a
+  `module` declaration must match it.
