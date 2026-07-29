@@ -614,8 +614,13 @@ dependencies = [
 name = "hird-mcp"
 version = "0.1.0"
 dependencies = [
+ "cstree",
+ "hird-ast",
+ "hird-check",
  "hird-ir",
+ "hird-parse",
  "hird-types",
+ "serde_json",
 ]
 
 [[package]]
