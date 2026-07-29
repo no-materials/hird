@@ -83,8 +83,10 @@ span) and the codes are stable; the table below maps the common ones.
 ### MCP server (`hird-mcp`)
 
 The MCP server exposes the same compiler pipeline as structured tools
-for agent frameworks (stdio transport). Until it ships, the CLI above
-covers the same ground.
+for agent frameworks. The `hird-mcp` binary speaks MCP over stdio
+(newline-delimited JSON-RPC); point your MCP client at it with no
+arguments. Errors (missing file, undefined name, parse or type errors)
+come back as structured `isError` results carrying diagnostics.
 
 | Tool | Returns |
 |---|---|
