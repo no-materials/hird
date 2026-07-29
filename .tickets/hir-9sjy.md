@@ -1,6 +1,6 @@
 ---
 id: hir-9sjy
-status: open
+status: closed
 deps: [hir-0rzf, hir-7rsf]
 links: []
 created: 2026-05-22T21:35:14Z
