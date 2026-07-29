@@ -1,6 +1,6 @@
 ---
 id: hir-q0as
-status: open
+status: closed
 deps: [hir-bxdd]
 links: []
 created: 2026-05-22T21:42:14Z
