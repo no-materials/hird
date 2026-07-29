@@ -115,6 +115,35 @@
           };
       in {
         formatter = pkgs.nixfmt-rfc-style;
+
+        packages = {
+          default = self'.packages.hird-lsp;
+
+          # The LSP server as an installable package, built with the pinned
+          # toolchain. Consumers (editor configs) take this flake as an input
+          # and reference `packages.<system>.hird-lsp`.
+          hird-lsp = let
+            rustPlatform = pkgs.makeRustPlatform {
+              cargo = nxRust;
+              rustc = nxRust;
+            };
+          in
+            rustPlatform.buildRustPackage {
+              pname = "hird-lsp";
+              version = "0.1.0";
+              src = ./.;
+              cargoLock.lockFile = ./Cargo.lock;
+              cargoBuildFlags = ["-p" "hird-lsp"];
+              # The workspace test suite runs in CI; the package just ships
+              # the binary.
+              doCheck = false;
+              meta = {
+                description = "LSP server for Hirð";
+                mainProgram = "hird-lsp";
+              };
+            };
+        };
+
         devShells.default = self'.devShells.rust-nx;
         devShells = {
           rust-nx = mkPersonalShell {
