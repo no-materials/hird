@@ -41,10 +41,19 @@ top_item     ::= use_decl
 ## Use Declarations
 
 ```
-use_decl     ::= 'use' path ( 'as' IDENT )?
+use_decl     ::= 'use' path ( use_group | 'as' IDENT )?
 
-path         ::= IDENT ( '::' IDENT )*
+path         ::= IDENT ( '.' IDENT )*
+
+use_group    ::= '.' '{' IDENT ( ',' IDENT )* ','? '}'
 ```
+
+`use Mod` binds the trailing path segment as a qualifier for
+`Mod.member` access; `use Mod as M` binds `M` instead. `use Mod.{a, b}`
+binds the listed members unqualified — and only those; it does not also
+bind the qualifier. A selective import cannot also be aliased. `as` is
+a contextual keyword (an ordinary identifier elsewhere), not a reserved
+word.
 
 ## Function Declarations
 
@@ -68,7 +77,7 @@ effect_list  ::= type_expr ( ',' type_expr )* ','?
 ## Type Declarations (ADTs)
 
 ```
-type_decl    ::= visibility? 'type' IDENT type_params? '=' constructors
+type_decl    ::= ( 'pub' 'opaque'? )? 'type' IDENT type_params? '=' constructors
 
 type_params  ::= '<' IDENT ( ',' IDENT )* ','? '>'
 
@@ -78,6 +87,9 @@ constructor  ::= IDENT ( '(' field_list ')' )?
 
 field_list   ::= type_expr ( ',' type_expr )* ','?
 ```
+
+`opaque` is legal only in the `pub opaque type` form: the type's name is
+exported while its constructors stay module-private.
 
 ## Actor Declarations
 
@@ -101,9 +113,7 @@ A handler binds the message pattern, then the current state as a trailing
 comma-separated pattern. Handler and `init` bodies follow the uniform
 bare-body rule (`= e`); braces never wrap a body.
 
-## Supervisor Declarations (syntax only)
-
-Semantic validation deferred to Phase 8.
+## Supervisor Declarations
 
 ```
 supervisor_decl  ::= visibility? 'supervisor' IDENT '{' supervisor_body? '}'
@@ -113,21 +123,22 @@ supervisor_body  ::= supervisor_field ( ',' supervisor_field )* ','?
 supervisor_field ::= IDENT ':' expr
 ```
 
-## Effect Declarations (syntax only)
-
-Semantic validation deferred to Phase 5.
+## Effect Declarations
 
 ```
 effect_decl  ::= visibility? 'effect' IDENT type_params?
 ```
 
-## Tool Declarations (syntax only)
-
-Semantic validation deferred to Phase 6.
+## Tool Declarations
 
 ```
-tool_decl    ::= visibility? 'tool' IDENT ':' type_expr '→' type_expr
+tool_decl    ::= visibility? 'tool' IDENT type_params? ':' app_type '→'
+                  type_expr effect_ann?
 ```
+
+The argument position takes an `app_type` (in practice a record type or
+a named type), not a full function type; the optional trailing row
+unions into the generated function's row.
 
 ## Extern Declarations
 
@@ -143,7 +154,13 @@ expr         ::= let_expr
                | match_expr
                | if_expr
                | handle_expr
+               | install_expr
                | spawn_expr
+               | supervise_expr
+               | child_expr
+               | send_expr
+               | request_expr
+               | reply_expr
                | crash_expr
                | infix_expr
 
@@ -151,23 +168,47 @@ let_expr     ::= 'let' IDENT ( ':' type_expr )? '=' expr 'in' expr
 
 lambda_expr  ::= 'λ' IDENT+ '→' expr
 
-match_expr   ::= 'match' expr '{' match_arm* '}'
+match_expr   ::= 'match' expr '{' ( match_arm ( ',' match_arm )* ','? )? '}'
 
-match_arm    ::= pattern '→' expr ','?
+match_arm    ::= pattern '→' expr
 
 if_expr      ::= 'if' expr 'then' expr 'else' expr
 
-handle_expr  ::= 'handle' '{' handle_arm* '}' 'in' expr
+handle_expr  ::= 'handle' handler_arms 'in' expr
 
-handle_arm   ::= app_type '→' expr ','?
+install_expr ::= 'install' handler_arms 'in' expr
 
-spawn_expr   ::= 'spawn' '(' IDENT ( ',' expr )* ')'
+handler_arms ::= '{' ( handle_arm ( ',' handle_arm )* ','? )? '}'
+
+handle_arm   ::= app_type '→' expr
+
+spawn_expr   ::= 'spawn' '(' IDENT ( ',' expr )* ','? ')'
+
+supervise_expr ::= 'supervise' '(' IDENT ')'
+
+child_expr   ::= 'child' '(' IDENT ',' IDENT ')'
+
+send_expr    ::= 'send' '(' expr ',' expr ')'
+
+request_expr ::= 'request' '(' expr ',' expr ')'
+
+reply_expr   ::= 'reply' '(' expr ',' expr ')'
 
 crash_expr   ::= ( 'crash' | 'panic' ) '!' '(' expr ')'
 ```
 
-`spawn`'s first argument is an actor name, resolved in the actor namespace;
-actor names are not first-class values.
+`match`, `handle`, and `install` arms are comma-separated (trailing
+comma optional); a missing comma between arms is a parse error.
+
+`spawn`'s first argument is an actor name, resolved in the actor
+namespace; `supervise`'s argument and `child`'s first argument are
+supervisor names, resolved in the supervisor namespace; `child`'s
+second argument is one of that supervisor's declared child ids. None of
+these are expressions — actor and supervisor names are not first-class
+values.
+
+`send`, `request`, and `reply` are keyword forms taking exactly two
+expression arguments.
 
 `crash!` (and its alias `panic!`) is the divergent primitive: it takes a
 single `String` message, never returns, and propagates as a process exit to
@@ -212,11 +253,13 @@ atom_expr    ::= IDENT
                | INT
                | FLOAT
                | STR
+               | unit_lit
                | '(' expr ')'
                | tuple_lit
                | list_lit
                | record_lit
-               | path
+
+unit_lit     ::= '(' ')'
 
 tuple_lit    ::= '(' expr ',' expr ( ',' expr )* ','? ')'
 
@@ -231,6 +274,11 @@ field_name   ::= IDENT | keyword
 
 A `field_name` may be a keyword spelling (e.g. `actor: Planner` in a supervisor
 child spec); the `name :` shape leaves no ambiguity.
+
+A `{` never begins an application argument: record-literal arguments
+must be parenthesised (`f({ x: 1 })`, not `f { x: 1 }`). Qualified
+access (`Mod.member`) has no dedicated production — it parses as field
+access on a `PascalCase` receiver and is resolved in the checker.
 
 ## Patterns
 
@@ -268,19 +316,31 @@ app_type     ::= atom_type ( '<' type_args '>' )?
 type_args    ::= type_expr ( ',' type_expr )* ','?
 
 atom_type    ::= IDENT
+               | record_type
+               | unit_type
                | '(' type_expr ')'
                | tuple_type
 
+record_type  ::= '{' ( record_type_field ( ',' record_type_field )* ','? )? '}'
+
+record_type_field ::= field_name ':' type_expr
+
+unit_type    ::= '(' ')'
+
 tuple_type   ::= '(' type_expr ',' type_expr ( ',' type_expr )* ','? ')'
 ```
+
+A `{` where a type is expected always begins a record type; braces
+never delimit anything else in type position.
 
 ## Lexical Grammar (reference)
 
 See `hird-lex` crate for the authoritative implementation. Summary:
 
 - **Keywords**: `let`, `fn`, `match`, `type`, `actor`, `supervisor`, `effect`,
-  `tool`, `handle`, `spawn`, `send`, `request`, `use`, `module`, `pub`,
-  `extern`, `if`, `then`, `else`, `in`
+  `tool`, `handle`, `install`, `spawn`, `supervise`, `child`, `send`,
+  `request`, `reply`, `crash`, `panic`, `use`, `module`, `pub`, `opaque`,
+  `extern`, `if`, `then`, `else`, `in`. (`as` is contextual, not reserved.)
 - **Identifiers**: ASCII alphanumeric + underscore, canonical naming enforced
   (snake_case for values, PascalCase for types)
 - **Literals**: integers, floats, double-quoted strings with escape sequences
