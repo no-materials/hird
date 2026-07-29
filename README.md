@@ -65,10 +65,38 @@ block and asserts on the audit JSON lines — the same program, the same
 unconditional audit stream, differing only in the installed handler
 set.
 
+## Editor support (LSP)
+
+`hird-lsp` is a Language Server Protocol server over the compiler front
+end, speaking stdio. Point any LSP client at the binary:
+
+```sh
+cargo build -p hird-lsp   # target/debug/hird-lsp
+```
+
+v0.1 capabilities:
+
+- **Diagnostics** on file open and save: parse errors, then type errors
+  and warnings, with source spans.
+- **Hover**: the inferred type of the identifier or expression under the
+  cursor, including the effect row for functions
+  (`read_file : Path → String ! {Tool<ReadFile>}`).
+- **Go-to-definition** for top-level declarations: functions, types and
+  their constructors, effects, tools (by marker or generated function
+  name), actors and their message types, and supervisors.
+
+Known limitations (real, by design for v0.1):
+
+- No completion, rename/refactor, or code actions.
+- No workspace-wide analysis: each file is compiled alone, so `use`
+  imports of other modules report as unresolved and definitions resolve
+  only within the current file.
+- No incremental compilation: every change recompiles the whole file.
+
 ## Repository layout
 
 - `crates/` — the Rust compiler workspace (lexer, parser, checker, IR,
-  codegen, CLI).
+  codegen, CLI, LSP server).
 - `runtime/` — the hand-written Erlang runtime support library (tool
   dispatch, audit sink, handler registry).
 - `demo/` — the v0.1 demo program.
