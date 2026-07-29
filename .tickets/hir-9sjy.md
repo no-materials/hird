@@ -58,7 +58,7 @@ the phrasebook, and the MCP tools available.
 ## Task sequence
 
 1. [x] [hir-126o](hir-126o.md) — Phrasebook and split documentation
-2. [ ] [hir-milo](hir-milo.md) — LSP scaffold with tower-lsp
+2. [x] [hir-milo](hir-milo.md) — LSP scaffold with tower-lsp
 3. [ ] [hir-q0as](hir-q0as.md) — MCP server for compiler introspection
 
 Steps 1 and 2 have no internal deps. Step 3 requires the v0.1 demo
