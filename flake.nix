@@ -142,6 +142,30 @@
                 mainProgram = "hird-lsp";
               };
             };
+
+          # The MCP server as an installable package. Consumers (LLM agent
+          # frameworks, MCP client configs) take this flake as an input and
+          # reference `packages.<system>.hird-mcp`.
+          hird-mcp = let
+            rustPlatform = pkgs.makeRustPlatform {
+              cargo = nxRust;
+              rustc = nxRust;
+            };
+          in
+            rustPlatform.buildRustPackage {
+              pname = "hird-mcp";
+              version = "0.1.0";
+              src = ./.;
+              cargoLock.lockFile = ./Cargo.lock;
+              cargoBuildFlags = ["-p" "hird-mcp"];
+              # The workspace test suite runs in CI; the package just ships
+              # the binary.
+              doCheck = false;
+              meta = {
+                description = "MCP server for Hirð compiler introspection";
+                mainProgram = "hird-mcp";
+              };
+            };
         };
 
         devShells.default = self'.devShells.rust-nx;
