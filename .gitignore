@@ -12,3 +12,7 @@ runtime/_build/
 
 # hird CLI default build output.
 /_build/
+
+# Nix build result symlinks.
+result
+result-*
