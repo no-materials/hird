@@ -65,6 +65,44 @@ block and asserts on the audit JSON lines — the same program, the same
 unconditional audit stream, differing only in the installed handler
 set.
 
+## LLM tooling (MCP)
+
+`hird-mcp` is a Model Context Protocol server over the same compiler
+pipeline, speaking stdio. It gives LLM agents structured compiler
+queries instead of source-reading guesswork: `infer_type`,
+`lookup_definition`, `explain_effect_row`, `render_ir_fragment`,
+`explain_actor_protocol`, `emit_actor_effect_graph`,
+`get_context_for_symbol` (token-budget-aware symbol summaries), and
+`get_context_budget`. Errors come back structured — undefined names
+list the available ones, parse and type errors carry coded
+diagnostics — so agents can self-correct from tool output alone.
+
+The repository ships a project-scoped `.mcp.json`, so Claude Code
+sessions started here pick the server up automatically (it launches
+`nix run .#hird-mcp`; run `nix build .#hird-mcp` once so the first
+session start doesn't wait on a cold build). Any other MCP client can
+point at the binary directly:
+
+```sh
+cargo build -p hird-mcp   # target/debug/hird-mcp
+```
+
+Things worth asking an agent wired to it:
+
+- "What does the Planner actor in demo/agent_planner.hird do? Ask the
+  compiler instead of reading the source."
+- "If the Planner crashes mid-plan, who restarts it, and what's the
+  restart budget?"
+- "Give me a 50-token summary of the Planner actor. Now 400 tokens.
+  What got dropped?"
+- "Write a new Hirð module with a supervised actor, and iterate with
+  the hird tools until they confirm it's clean."
+
+`demo/counter_demo.hird` is that last prompt's output: a supervised
+counter written by an LLM agent that verified itself against the MCP
+tools alone — it type-checks and runs on BEAM unmodified.
+`docs/writing-hird-llm.md` is the agent-facing guide.
+
 ## Editor support (LSP)
 
 `hird-lsp` is a Language Server Protocol server over the compiler front
@@ -96,10 +134,10 @@ Known limitations (real, by design for v0.1):
 ## Repository layout
 
 - `crates/` — the Rust compiler workspace (lexer, parser, checker, IR,
-  codegen, CLI, LSP server).
+  codegen, CLI, LSP and MCP servers).
 - `runtime/` — the hand-written Erlang runtime support library (tool
   dispatch, audit sink, handler registry).
-- `demo/` — the v0.1 demo program.
+- `demo/` — the v0.1 demo programs.
 - `docs/` — normative specifications (grammar, error model, tool
   effects wire format).
 - `phrasebook.md` — dense surface-syntax reference.
