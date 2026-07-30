@@ -6,6 +6,12 @@ Python agent frameworks hide side effects in coroutine soup; Hirð makes
 every tool call, every actor message, and every supervisor boundary
 visible in the types and queryable by tooling.
 
+**Status**: pre-1.0 and experimental. The v0.1 compiler pipeline works
+end to end (the demos below type-check, compile to Erlang, and run on
+BEAM), but the language surface is unstable, nothing is published to
+crates.io, and breaking changes land without deprecation cycles. The
+roadmap lives in `.tickets/`.
+
 ## The v0.1 demo: a supervised agent planner
 
 `demo/agent_planner.hird` is the flagship v0.1 program. A `Planner`
@@ -138,14 +144,16 @@ Known limitations (real, by design for v0.1):
 - `runtime/` — the hand-written Erlang runtime support library (tool
   dispatch, audit sink, handler registry).
 - `demo/` — the v0.1 demo programs.
+- `conformance/` — golden files for the audit-log wire format.
 - `docs/` — normative specifications (grammar, error model, tool
   effects wire format).
 - `phrasebook.md` — dense surface-syntax reference.
 - `DECISIONS.md` — architecture decision records.
+- `.tickets/` — the issue tracker and roadmap, as plain markdown.
 
 ## Development
 
-MSRV is Rust 1.92 (edition 2024). Before sending changes:
+MSRV is Rust 1.97 (edition 2024). Before sending changes:
 
 ```sh
 cargo fmt --all
@@ -154,3 +162,19 @@ cargo test --workspace --all-features
 ```
 
 BEAM-dependent tests skip themselves when `erlc` is not on `PATH`.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  <http://opensource.org/licenses/MIT>)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the
+Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.

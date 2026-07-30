@@ -203,7 +203,7 @@ ambiguity for both human and LLM readers.
 The Hirð lexer normalizes at lex time: `->` normalizes to `→`, `=>` to `⇒`,
 `\` to `λ`. Both forms produce identical token streams. The canonical form is
 the Unicode version. This is a save-time normalization inherited from
-a sibling project.
+that project.
 
 ### Consequences
 
@@ -215,26 +215,30 @@ a sibling project.
 
 ---
 
-## ADR-008: MSRV 1.92, edition 2024
+## ADR-008: MSRV tracks recent stable, edition 2024
 
-**Date**: 2026-05-22
+**Date**: 2026-05-22 (amended 2026-07-30)
 **Status**: Accepted
 
 ### Context
 
-The workspace was scaffolded with Rust edition 2024 and MSRV 1.92. CI tests
-against stable 1.93.
+The workspace was scaffolded with Rust edition 2024 and MSRV 1.92. Pre-1.0,
+nothing is published and no downstream user depends on an old toolchain, so
+the MSRV has since been bumped alongside the pinned stable toolchain (1.97
+as of the amendment).
 
 ### Decision
 
-Maintain these versions. MSRV bumps require updating `Cargo.toml`, CI, and
-README files in lockstep.
+The MSRV is whatever the workspace `Cargo.toml` `rust-version` says; treat
+bumps as routine. A bump updates `Cargo.toml`, `rust-toolchain.toml`, CI's
+`RUST_MIN_VER`/`RUST_STABLE_VER`, README.md, and AGENTS.md in lockstep.
 
 ### Consequences
 
 - Access to edition 2024 features (e.g., `use<>` in return-position `impl Trait`).
-- MSRV lag is minimal (one version behind stable).
-- Contributors need Rust 1.92+.
+- Contributors need a recent stable toolchain; `rust-toolchain.toml` pins the
+  exact version so toolchain drift is not a contributor-facing problem.
+- A real (conservative) MSRV policy is deferred until crates are published.
 
 ---
 
@@ -289,8 +293,8 @@ unambiguously a record literal. Sequencing within a body uses nested
 Hirð needs a module system: a unit of namespacing, a visibility boundary, and
 the mechanism behind the opaque-capability discipline (ADR-006). The design
 space spans first-class modules and functors (ML), path-based modules with
-`use` imports (Rust, Gleam), and header/implementation splits (C). The sibling
-a sibling project project already commits to `use`/export conventions, and parity
+`use` imports (Rust, Gleam), and header/implementation splits (C). A sibling
+project already commits to the same `use`/export conventions, and parity
 keeps the two languages legible to the same readers and tools.
 
 ### Decision

@@ -28,7 +28,7 @@ errors) lands in hir-i0u7.
 
 ## Design
 
-Follow the Gleam three-level model (consistent with the Gleam-style
+Follow the Gleam three-level model (consistent with the
 conventions locked in OD6 / hir-0s3s):
 
   type Foo = ...             private: name + constructors module-only

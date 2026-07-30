@@ -12,7 +12,7 @@ If you are an LLM agent rather than a human, read
 
 ## Getting started
 
-You need Rust (1.92+) to build the compiler and Erlang/OTP on `PATH`
+You need Rust (1.97+) to build the compiler and Erlang/OTP on `PATH`
 to build and run programs (`hird check` alone works without Erlang).
 
 ```sh
@@ -285,6 +285,6 @@ effects (`Install`, `Supervise`, `Send`, `Await`, …) may remain on
 `main`.
 
 Diagnostics carry stable codes: `P####` for parse errors (catalogued
-in [`errors.md`](errors.md)) and `C####` for check errors. The wire
+in [`parser-diagnostics.md`](parser-diagnostics.md)) and `C####` for check errors. The wire
 format of the audit stream is specified in
 [`tool-effects.md`](tool-effects.md).

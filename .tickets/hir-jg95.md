@@ -30,7 +30,7 @@ Locked decisions to document:
 5. Per-process effect semantics (not transitive across messages).
 6. Opaque-capability discipline for stateful resources.
 7. Unicode canonicalization at the lexer.
-8. MSRV 1.92, edition 2024.
+8. MSRV tracks recent stable (see ADR-008), edition 2024.
 
 ## Acceptance Criteria
 

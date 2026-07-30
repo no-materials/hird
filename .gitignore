@@ -2,6 +2,15 @@ target
 
 .envrc
 
+# direnv cache.
+.direnv/
+
+# Claude Code local state.
+.claude/
+
+# Internal notes, kept out of the public tree.
+/positioning.md
+
 # Editor swap files.
 *.swp
 *.swo

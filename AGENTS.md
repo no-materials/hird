@@ -55,7 +55,7 @@ Before writing any code, read these files in order:
 
 ## Rust workspace expectations
 
-- MSRV is set in `Cargo.toml` (`rust-version = "1.92"`); keep it compatible.
+- MSRV is set in `Cargo.toml` (`rust-version`, currently 1.97); keep it compatible.
 - Follow workspace lint policy (notably: `unsafe_code = "deny"` and `missing_docs = "warn"`).
 
 ## `no_std` policy (core crates)
@@ -78,7 +78,9 @@ Before writing any code, read these files in order:
 
 ## Tickets / Issue Tracking / Plans
 
-This project uses a CLI ticket system for task management. Run `tk help` when you need to use it.
+This project uses a CLI ticket system for task management; tickets live in
+`.tickets/` as plain markdown. The `tk` CLI ships in the nix devshell (it is
+the `wedow/ticket` flake input). Run `tk help` when you need to use it.
 When creating a new issue, run `tk` from within the crate directory that the issue is for so that it can get a better prefix.
 
 ## Additional behavioral guidelines
