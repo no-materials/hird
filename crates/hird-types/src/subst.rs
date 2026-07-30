@@ -66,10 +66,8 @@ enum RowSlot {
 /// Type variables and row variables are separate union-finds — distinct slot
 /// vectors indexed by distinct newtypes — so a type variable can never be bound
 /// to a row, nor a row variable to a type (the kind separation is a compile-time
-/// property, not a runtime check). They share the single binding [`level`] so
+/// property, not a runtime check). They share the single binding `level` so
 /// generalisation quantifies both kinds against one scope counter.
-///
-/// [`level`]: Subst::level
 #[derive(Debug)]
 pub struct Subst {
     /// One slot per allocated type variable, indexed by variable id.

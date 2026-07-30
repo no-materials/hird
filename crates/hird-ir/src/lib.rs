@@ -10,9 +10,9 @@
 //! downstream consumer (codegen, LLM tooling, effect-graph analysis).
 //!
 //! [`lower_module`] turns a checked module into an [`IrModule`]; [`pretty_print`]
-//! renders an [`IrModule`] back to canonical Hirð source. The IR node kinds are
-//! in [`mod@ir`]. The schema and round-trip property are documented in
-//! `docs/ir.md`.
+//! renders an [`IrModule`] back to canonical Hirð source. The IR node kinds
+//! are re-exported at the crate root. The schema and round-trip property are
+//! documented in `docs/ir.md`.
 //!
 //! # Quick start
 //!

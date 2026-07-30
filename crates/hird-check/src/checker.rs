@@ -58,7 +58,8 @@ pub(crate) struct Checker {
     pub(crate) registry: Registry,
     /// Diagnostics accumulated across the whole file.
     pub(crate) diags: Vec<CheckDiagnostic>,
-    /// Per-node types, recorded raw and resolved in [`Checker::finish`].
+    /// Per-node types, recorded raw and resolved in
+    /// [`Checker::finish_with_interface`].
     pub(crate) types: Vec<(NodeKey, Type)>,
     /// Each function node's elaborated effect row and each `handle` block's
     /// computed row, recorded raw and resolved in

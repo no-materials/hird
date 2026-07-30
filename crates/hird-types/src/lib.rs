@@ -5,7 +5,7 @@
 //!
 //! This crate is the type-system core: the [`Type`] representation, a
 //! union-find [`Subst`]itution table with level-tracked generalisation and
-//! instantiation, and [`unify`]ation with an occurs check. It is pure data
+//! instantiation, and [`unify`](fn@unify)ation with an occurs check. It is pure data
 //! and algorithms — lowering from the AST and expression inference live in
 //! `hird-check`.
 //!

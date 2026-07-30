@@ -13,7 +13,7 @@
 //! - `if c then a else b` becomes `match c { True → a, False → b }`.
 //! - Binary operators become application of a primitive operator reference.
 //! - Parentheses are dropped (they carry no semantics).
-//! - `handle { … } in body` lowers to an [`IrHandle`](crate::ir::IrHandle)
+//! - `handle { … } in body` lowers to an [`IrHandle`]
 //!   carrying the handler arms, the body, and the block's computed effect row;
 //!   the checker resolves the handled effect of each arm and the row.
 //!
