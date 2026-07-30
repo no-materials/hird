@@ -19,6 +19,77 @@ BEAM), but the language surface is unstable, nothing is published to
 crates.io, and breaking changes land without deprecation cycles. The
 roadmap lives in `.tickets/`.
 
+## Install
+
+Prebuilt binaries for Linux, macOS, and Windows are attached to every
+[release](https://github.com/no-materials/hird/releases): extract the
+archive for your platform and put `hird` (the compiler), `hird-lsp`, and
+`hird-mcp` on your `PATH`.
+
+From source, with Rust 1.97 or newer:
+
+```sh
+cargo install --git https://github.com/no-materials/hird hird-cli
+cargo install --git https://github.com/no-materials/hird hird-lsp  # optional
+cargo install --git https://github.com/no-materials/hird hird-mcp  # optional
+```
+
+With Nix, the same three binaries are flake outputs
+(`nix run github:no-materials/hird#hird-mcp`).
+
+Compiling and running programs needs **Erlang/OTP** on `PATH`
+(`apt install erlang`, `brew install erlang`, …); `hird check` works
+without it.
+
+## Quick start
+
+Hirð has no ambient `print`. Anything a program tells the outside world
+goes through a *tool* — a declared, typed, audited external operation —
+so the smallest observable program is a tool call. Save this as
+`hello.hird`:
+
+```
+module Hello
+
+effect Tool<t>
+
+tool Say : { message: String } → ()
+
+fn quiet_say(args: { message: String }) → () = ()
+
+fn main() → () ! {} =
+  handle {
+    Tool<Say> → quiet_say,
+  } in say({ message: "hello, world" })
+```
+
+```sh
+hird run hello.hird
+```
+
+```json
+{"schema_version":1,"tool":"Say","args":{"message":"hello, world"},"result":{"ok":null},"timestamp":"…","caller":"Hello.main"}
+```
+
+Three things happened. Declaring `tool Say` created the effect
+`Tool<Say>` and a callable `say`. The `handle` block supplied an
+implementation and discharged that effect, so `main` is honestly `! {}`.
+And the call was recorded on the audit stream — unconditionally, because
+mocked and real tool calls audit identically. ASCII operator spellings
+(`->`) normalise to their Unicode forms (`→`) at lex time, so either is
+legal input.
+
+| Command | What it does |
+|---|---|
+| `hird check <file-or-dir>` | type- and effect-check; coded diagnostics |
+| `hird build <file>` | emit readable Erlang, compile it to `.beam` |
+| `hird run <file>` | build, then execute `fn main` on BEAM |
+| `hird emit-ast <file> --json` | the typed IR of every definition |
+| `hird emit-effect-graph <file> --json` | actors, mailboxes, handler rows, supervisors, tools |
+
+[`docs/writing-hird-human.md`](docs/writing-hird-human.md) is the guided
+tour, and [`phrasebook.md`](phrasebook.md) the dense syntax reference.
+
 ## The v0.1 demo: a supervised agent planner
 
 `demo/agent_planner.hird` is the flagship v0.1 program. A `Planner`
@@ -37,7 +108,7 @@ the planner it messages is a supervised OTP process, restarted by
 Build it (requires Erlang/OTP on `PATH`):
 
 ```sh
-cargo run -p hird-cli -- build demo/agent_planner.hird
+hird build demo/agent_planner.hird
 ```
 
 This type-checks the program, emits human-readable Erlang source
@@ -48,7 +119,7 @@ plus the hand-written runtime), and compiles it all with `erlc` into
 Run it on BEAM:
 
 ```sh
-cargo run -p hird-cli -- run demo/agent_planner.hird
+hird run demo/agent_planner.hird
 ```
 
 Every tool invocation — mocked or real — is recorded unconditionally on
@@ -61,16 +132,13 @@ the audit stream, one canonical JSON line per call:
 Query the actor/effect graph as JSON (or drop `--json` for text):
 
 ```sh
-cargo run -p hird-cli -- emit-effect-graph demo/agent_planner.hird --json
+hird emit-effect-graph demo/agent_planner.hird --json
 ```
 
 The graph shows the `Planner` actor with its full effect summary, its
 mailbox sum type (`PlanRepo | GetStatus | Shutdown`), the `PlannerSup`
 supervisor with its strategy and children, and each tool declaration
 with structured argument and return types.
-
-Other subcommands: `check` (type-check only), `emit-ast` (typed AST as
-text or JSON).
 
 The dry-run test harness lives in `crates/hird-cli/tests/demo.rs`: it
 re-runs the same demo with mock handlers swapped into the `install`
@@ -94,11 +162,7 @@ The repository ships a project-scoped `.mcp.json`, so Claude Code
 sessions started here pick the server up automatically (it launches
 `nix run .#hird-mcp`; run `nix build .#hird-mcp` once so the first
 session start doesn't wait on a cold build). Any other MCP client can
-point at the binary directly:
-
-```sh
-cargo build -p hird-mcp   # target/debug/hird-mcp
-```
+launch the `hird-mcp` binary directly, with no arguments.
 
 Things worth asking an agent wired to it:
 
@@ -119,11 +183,8 @@ tools alone — it type-checks and runs on BEAM unmodified.
 ## Editor support (LSP)
 
 `hird-lsp` is a Language Server Protocol server over the compiler front
-end, speaking stdio. Point any LSP client at the binary:
-
-```sh
-cargo build -p hird-lsp   # target/debug/hird-lsp
-```
+end, speaking stdio. Point any LSP client at the `hird-lsp` binary, with
+no arguments.
 
 v0.1 capabilities:
 
