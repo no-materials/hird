@@ -1,0 +1,88 @@
+env:
+  # Keep in sync with RUST_STABLE_VER in ci.yml.
+  RUST_STABLE_VER: "1.97"
+
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  create-release:
+    name: create release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<'EOF'
+          ## Install
+
+          Download the archive for your platform below and extract it; each one
+          carries three binaries:
+
+          - `hird` — the compiler CLI (`check`, `build`, `run`, `emit-ast`, `emit-effect-graph`)
+          - `hird-lsp` — the language server (diagnostics, hover, go-to-definition)
+          - `hird-mcp` — the MCP server exposing compiler introspection to LLM agents
+
+          Or build from source with Rust 1.97+:
+
+          ```sh
+          cargo install --git https://github.com/no-materials/hird hird-cli
+          ```
+
+          Compiling and running Hirð programs (`hird build`, `hird run`) needs
+          Erlang/OTP on `PATH`; `hird check` works without it.
+
+          See [the README](https://github.com/no-materials/hird#readme) to get started.
+          EOF
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md
+
+  upload-assets:
+    name: upload (${{ matrix.target }})
+    needs: create-release
+    strategy:
+      # One failing target must not cancel the archives that already built.
+      fail-fast: false
+      matrix:
+        include:
+          # Built on the oldest supported runner so the binaries link against
+          # an older glibc and run on most current distributions.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+          targets: ${{ matrix.target }}
+
+      - name: build and upload binaries
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: hird,hird-lsp,hird-mcp
+          archive: hird-$tag-$target
+          target: ${{ matrix.target }}
+          checksum: sha256
+          locked: true
+          token: ${{ secrets.GITHUB_TOKEN }}
