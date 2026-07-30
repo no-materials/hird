@@ -8,14 +8,20 @@
 
 # General dictionary behavior
 [default]
-# Ignore ticket IDs like exe-23ot/cam-gvmz in .tickets files and paths.
-extend-ignore-re = ["\\b[a-z]{3}-[0-9a-z]{4}\\b"]
+# Ignore ticket IDs like exe-23ot/cam-gvmz in .tickets files and paths,
+# and "café" when its é is written as an escape sequence in tests.
+extend-ignore-re = ["\\b[a-z]{3}-[0-9a-z]{4}\\b", "caf\\\\+u\\{00e9\\}"]
 
 # Match Identifier - Case Sensitive
 [default.extend-identifiers]
+# A test module name, short for "literals".
+Lits = "Lits"
 
 # Match Inside a Word - Case Insensitive
 [default.extend-words]
+# Valid English that typos miscorrects.
+alls = "alls"
+unparseable = "unparseable"
 
 [files]
 # Include .github, .cargo, etc.
