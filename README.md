@@ -1,5 +1,12 @@
 # Hirð
 
+![The king's hirð wading a river, drawn by Erik Werenskiold](img/hero.jpg)
+
+*A hirð is a Norse king's household guard: sworn retainers, each with a
+named duty, answerable to one lord. Illustration by Erik Werenskiold for
+Magnús Erlingsson's saga in Snorri's Heimskringla (public domain, via
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Magnus_Erlingssons_saga-Over_aaa-Werenskiold.jpg)).*
+
 A typed language for long-running agent systems on BEAM: effect-row
 tracking, auditable tool effects, typed actors, and OTP supervision.
 Python agent frameworks hide side effects in coroutine soup; Hirð makes
