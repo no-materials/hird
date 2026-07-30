@@ -13,9 +13,9 @@ cstree.workspace = true
 hird-lex.workspace = true
 # Graphical diagnostic rendering. `fancy-no-syscall` pulls the report handler
 # without any terminal/tty syscalls, so rendering stays deterministic.
-miette = { version = "7", default-features = false, features = [
+miette = { default-features = false, features = [
     "fancy-no-syscall",
-], optional = true }
+], optional = true, version = "7" }
 
 [dev-dependencies]
 insta = "1"

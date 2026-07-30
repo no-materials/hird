@@ -1,26 +1,24 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/hird-lex",
-    "crates/hird-parse",
-    "crates/hird-ast",
-    "crates/hird-types",
-    "crates/hird-check",
     "crates/hird-actors",
-    "crates/hird-ir",
-    "crates/hird-codegen",
+    "crates/hird-ast",
+    "crates/hird-check",
     "crates/hird-cli",
-    "crates/hird-mcp",
+    "crates/hird-codegen",
+    "crates/hird-ir",
+    "crates/hird-lex",
     "crates/hird-lsp",
-    "examples",
-    "wind_tunnel",
+    "crates/hird-mcp",
+    "crates/hird-parse",
+    "crates/hird-types",
 ]
 
 [workspace.package]
 edition = "2024"
-# Keep in sync with RUST_MIN_VER in .github/workflows/ci.yml, with the relevant README.md files
-# and with the MSRV in the `Unreleased` section of CHANGELOG.md.
-rust-version = "1.97.1"
+# Keep in sync with RUST_MIN_VER in .github/workflows/ci.yml, the toolchain in
+# rust-toolchain.toml, and the MSRV stated in README.md and AGENTS.md.
+rust-version = "1.97"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/no-materials/hird"
 
@@ -83,15 +81,15 @@ clippy.allow_attributes = "warn"
 clippy.missing_docs_in_private_items = "warn"
 
 [workspace.dependencies]
-cstree = { version = "0.14", default-features = false }
+cstree = { default-features = false, version = "0.14" }
 
-hird-lex = { path = "crates/hird-lex" }
-hird-parse = { path = "crates/hird-parse" }
-hird-ast = { path = "crates/hird-ast" }
-hird-types = { path = "crates/hird-types" }
-hird-check = { path = "crates/hird-check" }
 hird-actors = { path = "crates/hird-actors" }
-hird-ir = { path = "crates/hird-ir" }
+hird-ast = { path = "crates/hird-ast" }
+hird-check = { path = "crates/hird-check" }
 hird-codegen = { path = "crates/hird-codegen" }
-hird-mcp = { path = "crates/hird-mcp" }
+hird-ir = { path = "crates/hird-ir" }
+hird-lex = { path = "crates/hird-lex" }
 hird-lsp = { path = "crates/hird-lsp" }
+hird-mcp = { path = "crates/hird-mcp" }
+hird-parse = { path = "crates/hird-parse" }
+hird-types = { path = "crates/hird-types" }

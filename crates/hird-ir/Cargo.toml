@@ -10,11 +10,11 @@ publish = false
 
 [dependencies]
 hird-ast.workspace = true
+hird-check.workspace = true
 hird-parse.workspace = true
 hird-types.workspace = true
-hird-check.workspace = true
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }
+serde = { default-features = false, features = ["alloc", "derive"], version = "1" }
+serde_json = { default-features = false, features = ["alloc"], version = "1" }
 
 [dev-dependencies]
 insta = "1"
