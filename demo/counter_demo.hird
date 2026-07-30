@@ -1,0 +1,63 @@
+// A minimal supervised counter.
+//
+// Counter holds a single Int, bumps it on Increment, and answers GetCount
+// over a typed reply channel. CounterSup supervises it one_for_one; main
+// starts the tree, reaches the running child with `child`, and drives one
+// round. No tools, so the only effects are message passing.
+
+module CounterDemo
+
+effect Send<t>
+effect Await<t>
+
+// ── domain types ─────────────────────────────────────────────────
+
+type CounterConfig = CounterConfig(Int)
+type CounterState = CounterState(Int)
+
+// ── the counter actor ────────────────────────────────────────────
+
+actor Counter {
+  state: CounterState,
+
+  message: CounterMsg =
+    | Increment(Int)
+    | GetCount(ReplyTo<Int>),
+
+  init: fn(config: CounterConfig) → CounterState ! {} =
+    match config { CounterConfig(start) → CounterState(start) },
+
+  handle Increment(by), CounterState(n) → CounterState ! {} =
+    CounterState(n + by),
+
+  handle GetCount(reply_to), CounterState(n) → CounterState ! {Send<Int>} =
+    let sent = reply(reply_to, n) in
+    CounterState(n),
+} ! {Send<Int>}
+
+// Counters start at zero.
+fn initial_config() → CounterConfig = CounterConfig(0)
+
+// ── supervision ──────────────────────────────────────────────────
+
+supervisor CounterSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: counter, actor: Counter, start_args: initial_config(), restart: permanent },
+  ]
+}
+
+// ── entry point ──────────────────────────────────────────────────
+
+// Two increments against the supervised counter, then confirm the total.
+fn main() → () ! {Supervise, Send<CounterMsg>, Await<Int>} =
+  let started = supervise(CounterSup) in
+  let counter = child(CounterSup, counter) in
+  let first = send(counter, Increment(2)) in
+  let second = send(counter, Increment(3)) in
+  match request(counter, GetCount) {
+    total →
+      if total == 5 then () else crash!("the counter lost an increment"),
+  }
