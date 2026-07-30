@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hird": {
+      "type": "stdio",
+      "command": "nix",
+      "args": ["run", ".#hird-mcp"],
+      "env": {}
+    }
+  }
+}
