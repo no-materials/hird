@@ -94,6 +94,18 @@
 
         nightlyPkgs = [];
 
+        # Package versions are read from the manifests that own them rather
+        # than restated here, so a release bumps one number per artefact.
+        workspaceVersion =
+          (builtins.fromTOML (builtins.readFile ./Cargo.toml))
+          .workspace
+          .package
+          .version;
+        grammarVersion =
+          (builtins.fromJSON (builtins.readFile ./tree-sitter-hird/tree-sitter.json))
+          .metadata
+          .version;
+
         # Every `.hird` source the repository ships. The tree-sitter grammar
         # is checked against all of them.
         hirdSources = pkgs.lib.fileset.toSource {
@@ -145,7 +157,7 @@
           in
             rustPlatform.buildRustPackage {
               pname = "hird-lsp";
-              version = "0.1.0";
+              version = workspaceVersion;
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
               cargoBuildFlags = ["-p" "hird-lsp"];
@@ -169,7 +181,7 @@
           in
             rustPlatform.buildRustPackage {
               pname = "hird-mcp";
-              version = "0.1.0";
+              version = workspaceVersion;
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
               cargoBuildFlags = ["-p" "hird-mcp"];
@@ -188,7 +200,7 @@
           # `packages.<system>.tree-sitter-hird`.
           tree-sitter-hird = pkgs.tree-sitter.buildGrammar {
             language = "hird";
-            version = "0.1.0";
+            version = grammarVersion;
             src = ./tree-sitter-hird;
             # `src/parser.c` is generated, not committed.
             generate = true;
