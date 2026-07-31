@@ -1,0 +1,151 @@
+Both spellings of every canonicalised operator must produce the same tree:
+the expected trees in each pair below are identical.
+
+==================
+Unicode operator spellings
+==================
+
+fn f(g: a → b ! {r}) → b ! {r} = λ x → g x
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (function_type
+          (type_variable)
+          (type_variable)
+          effects: (effect_annotation effect: (type_variable)))))
+    return_type: (return_type (type_variable))
+    effects: (effect_annotation effect: (type_variable))
+    body: (lambda_expression
+      parameter: (identifier)
+      body: (application function: (identifier) argument: (identifier)))))
+
+==================
+ASCII operator spellings
+==================
+
+fn f(g: a -> b ! {r}) -> b ! {r} = \x -> g x
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (function_type
+          (type_variable)
+          (type_variable)
+          effects: (effect_annotation effect: (type_variable)))))
+    return_type: (return_type (type_variable))
+    effects: (effect_annotation effect: (type_variable))
+    body: (lambda_expression
+      parameter: (identifier)
+      body: (application function: (identifier) argument: (identifier)))))
+
+==================
+Unicode logical operators
+==================
+
+fn f(a: Bool, b: Bool) → Bool = a ∨ b ∧ a
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (binary_expression
+      left: (identifier)
+      right: (binary_expression left: (identifier) right: (identifier)))))
+
+==================
+ASCII logical operators
+==================
+
+fn f(a: Bool, b: Bool) -> Bool = a || b && a
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (binary_expression
+      left: (identifier)
+      right: (binary_expression left: (identifier) right: (identifier)))))
+
+==================
+Unicode match arms
+==================
+
+fn f(x: Int) → Int = match x { _ → 0 }
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm pattern: (wildcard_pattern) body: (integer)))))
+
+==================
+ASCII match arms
+==================
+
+fn f(x: Int) -> Int = match x { _ -> 0 }
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm pattern: (wildcard_pattern) body: (integer)))))
+
+==================
+Precedence: || < && < relational < additive < multiplicative
+==================
+
+fn f(a: Int, b: Int) → Bool = a + b * 2 - 1 / 3 == 4 && a < b || a >= b
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (binary_expression
+      left: (binary_expression
+        left: (binary_expression
+          left: (binary_expression
+            left: (binary_expression
+              left: (identifier)
+              right: (binary_expression left: (identifier) right: (integer)))
+            right: (binary_expression left: (integer) right: (integer)))
+          right: (integer))
+        right: (binary_expression left: (identifier) right: (identifier)))
+      right: (binary_expression left: (identifier) right: (identifier)))))

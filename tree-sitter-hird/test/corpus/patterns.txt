@@ -1,0 +1,77 @@
+==================
+PascalCase is a constructor, snake_case a binding
+==================
+
+fn f(x: Int) → Int = match x {
+  Shutdown → 0,
+  shutdown → 1,
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm
+        pattern: (constructor_pattern name: (type_identifier))
+        body: (integer))
+      (match_arm
+        pattern: (bind_pattern)
+        body: (integer)))))
+
+==================
+Literal, wildcard, tuple and grouped patterns
+==================
+
+fn f(x: Int) → Int = match x {
+  1 → 0,
+  1.5 → 0,
+  "s" → 0,
+  _ → 0,
+  () → 0,
+  (a, _) → 0,
+  (b) → 0,
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm pattern: (integer) body: (integer))
+      (match_arm pattern: (float) body: (integer))
+      (match_arm pattern: (string) body: (integer))
+      (match_arm pattern: (wildcard_pattern) body: (integer))
+      (match_arm pattern: (tuple_pattern) body: (integer))
+      (match_arm
+        pattern: (tuple_pattern (bind_pattern) (wildcard_pattern))
+        body: (integer))
+      (match_arm pattern: (bind_pattern) body: (integer)))))
+
+==================
+An all-underscore name binds; only a bare underscore is a wildcard
+==================
+
+fn f(x: Int) → Int = match x { __ → 0 }
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm pattern: (bind_pattern) body: (integer)))))

@@ -1,0 +1,216 @@
+==================
+Let, lambda and if
+==================
+
+fn f() → Int =
+  let x: Int = 1 in
+  if x > 0 then λ a b → a else 0
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (let_expression
+      name: (identifier)
+      type: (type_identifier)
+      value: (integer)
+      body: (if_expression
+        condition: (binary_expression left: (identifier) right: (integer))
+        consequence: (lambda_expression
+          parameter: (identifier)
+          parameter: (identifier)
+          body: (identifier))
+        alternative: (integer)))))
+
+==================
+Match
+==================
+
+fn f(x: Backlog) → Int =
+  match x {
+    EmptyBacklog → 0,
+    Backlog(Task(p, _, _), rest) → p,
+  }
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm
+        pattern: (constructor_pattern name: (type_identifier))
+        body: (integer))
+      (match_arm
+        pattern: (constructor_pattern
+          name: (type_identifier)
+          (constructor_pattern
+            name: (type_identifier)
+            (bind_pattern)
+            (wildcard_pattern)
+            (wildcard_pattern))
+          (bind_pattern))
+        body: (identifier)))))
+
+==================
+Handle and install
+==================
+
+fn f() → Int =
+  handle {
+    Tool<ReadRepo> → mock_read_repo,
+  } in install { Tool<Log> → demo_log } in run()
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (handle_expression
+      (handle_arm
+        effect: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_identifier)))
+        handler: (identifier))
+      body: (install_expression
+        (handle_arm
+          effect: (generic_type
+            name: (type_identifier)
+            arguments: (type_arguments (type_identifier)))
+          handler: (identifier))
+        body: (application function: (identifier) argument: (unit))))))
+
+==================
+Process keyword forms
+==================
+
+fn f() → () =
+  let p = spawn(Planner, config) in
+  let s = supervise(PlannerSup) in
+  let c = child(PlannerSup, planner) in
+  let a = send(p, Shutdown) in
+  let b = request(p, GetStatus) in
+  let d = reply(p, 1) in
+  crash!("no")
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (unit_type))
+    body: (let_expression
+      name: (identifier)
+      value: (spawn_expression
+        actor: (type_identifier)
+        argument: (identifier))
+      body: (let_expression
+        name: (identifier)
+        value: (supervise_expression supervisor: (type_identifier))
+        body: (let_expression
+          name: (identifier)
+          value: (child_expression
+            supervisor: (type_identifier)
+            id: (identifier))
+          body: (let_expression
+            name: (identifier)
+            value: (send_expression
+              target: (identifier)
+              message: (type_identifier))
+            body: (let_expression
+              name: (identifier)
+              value: (request_expression
+                target: (identifier)
+                message: (type_identifier))
+              body: (let_expression
+                name: (identifier)
+                value: (reply_expression
+                  target: (identifier)
+                  value: (integer))
+                body: (crash_expression message: (string))))))))))
+
+==================
+panic! is an alias of crash!
+==================
+
+fn f() → Int = panic!("no")
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (crash_expression message: (string))))
+
+==================
+Literals
+==================
+
+fn f() → () = [(), (1, 2), [1], { path: p }, 1.5, "s"]
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (unit_type))
+    body: (list
+      (unit)
+      (tuple (integer) (integer))
+      (list (integer))
+      (record (record_field name: (identifier) value: (identifier)))
+      (float)
+      (string))))
+
+==================
+Application binds tighter than infix, field access tighter still
+==================
+
+fn f() → Int = g x.y z + 1
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (binary_expression
+      left: (application
+        function: (application
+          function: (identifier)
+          argument: (field_expression
+            value: (identifier)
+            field: (identifier)))
+        argument: (identifier))
+      right: (integer))))
+
+==================
+Qualified access is field access on a PascalCase receiver
+==================
+
+fn f() → Int = Log.info
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (field_expression
+      value: (type_identifier)
+      field: (identifier))))

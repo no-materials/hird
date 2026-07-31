@@ -1,0 +1,81 @@
+==================
+Atom, record, unit, tuple and parenthesised types
+==================
+
+extern fn f(
+  a: Int,
+  b: { path: Path, body: String },
+  c: (),
+  d: (Int, String),
+  e: (Int),
+  g: r
+) → ()
+
+---
+
+(source_file
+  (extern_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter
+        name: (identifier)
+        type: (record_type
+          (record_type_field name: (identifier) type: (type_identifier))
+          (record_type_field name: (identifier) type: (type_identifier))))
+      (parameter name: (identifier) type: (unit_type))
+      (parameter
+        name: (identifier)
+        type: (tuple_type (type_identifier) (type_identifier)))
+      (parameter
+        name: (identifier)
+        type: (parenthesized_type (type_identifier)))
+      (parameter name: (identifier) type: (type_variable)))
+    return_type: (return_type (unit_type))))
+
+==================
+Nested type application closes on consecutive angle brackets
+==================
+
+extern fn f(x: List<List<Option<a>>>) → ()
+
+---
+
+(source_file
+  (extern_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments
+            (generic_type
+              name: (type_identifier)
+              arguments: (type_arguments
+                (generic_type
+                  name: (type_identifier)
+                  arguments: (type_arguments (type_variable)))))))))
+    return_type: (return_type (unit_type))))
+
+==================
+Curried function type with a row on each arrow
+==================
+
+extern fn f(g: a → b ! {Log} → c ! {r}) → ()
+
+---
+
+(source_file
+  (extern_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (function_type
+          (type_variable)
+          (type_variable)
+          effects: (effect_annotation effect: (type_identifier))
+          (type_variable)
+          effects: (effect_annotation effect: (type_variable)))))
+    return_type: (return_type (unit_type))))

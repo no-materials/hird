@@ -180,7 +180,9 @@ counter written by an LLM agent that verified itself against the MCP
 tools alone — it type-checks and runs on BEAM unmodified.
 `docs/writing-hird-llm.md` is the agent-facing guide.
 
-## Editor support (LSP)
+## Editor support
+
+### Language server
 
 `hird-lsp` is a Language Server Protocol server over the compiler front
 end, speaking stdio. Point any LSP client at the `hird-lsp` binary, with
@@ -205,10 +207,52 @@ Known limitations (real, by design for v0.1):
   only within the current file.
 - No incremental compilation: every change recompiles the whole file.
 
+### Syntax highlighting
+
+`tree-sitter-hird/` is a tree-sitter grammar for the v0.1 surface, with
+`highlights.scm`, `indents.scm` and `folds.scm` under `queries/`. Both
+operator spellings parse identically, so `→` and `->` highlight the same.
+The flake builds it as a package output, next to `hird-lsp`:
+
+```sh
+nix build github:no-materials/hird#tree-sitter-hird
+```
+
+The result holds the compiled `parser` and a copy of `queries/`. A
+flake-based Neovim configuration takes this repository as an input and
+hands the grammar to nvim-treesitter, which wants the parser and the
+queries under the names it looks them up by:
+
+```nix
+# inputs.hird.url = "github:no-materials/hird";
+{
+  plugins = [
+    (pkgs.neovimUtils.grammarToPlugin
+      inputs.hird.packages.${pkgs.system}.tree-sitter-hird)
+  ];
+}
+```
+
+Neovim needs the file type registered too, since `.hird` is not one it
+knows:
+
+```lua
+vim.filetype.add({ extension = { hird = "hird" } })
+```
+
+Working on the grammar itself needs no global tree-sitter CLI — the dev
+shell ships one, and `nix flake check` runs the corpus tests and parses
+every `.hird` source in the repository:
+
+```sh
+cd tree-sitter-hird && tree-sitter generate && tree-sitter test
+```
+
 ## Repository layout
 
 - `crates/` — the Rust compiler workspace (lexer, parser, checker, IR,
   codegen, CLI, LSP and MCP servers).
+- `tree-sitter-hird/` — the tree-sitter grammar and editor queries.
 - `runtime/` — the hand-written Erlang runtime support library (tool
   dispatch, audit sink, handler registry).
 - `demo/` — the v0.1 demo programs.

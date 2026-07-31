@@ -218,6 +218,28 @@ jobs:
         env:
           RUSTDOCFLAGS: '--cfg docsrs -D warnings'
 
+  flake:
+    name: nix flake check
+    # NOTE: The tree-sitter grammar is generated, built and tested through the
+    #       flake, so this is where it gets checked: `checks.tree-sitter-hird`
+    #       runs its corpus tests, parses every `.hird` source in the
+    #       repository, and runs every query file against them. Linux only —
+    #       the flake's outputs are not platform specific.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: nix flake check
+        run: nix flake check --print-build-logs
+
+      # The grammar package is what editor configs consume, so build it too:
+      # `flake check` only evaluates package outputs.
+      - name: build the tree-sitter grammar
+        run: nix build --no-link --print-build-logs .#tree-sitter-hird
+
   # If this fails, consider changing your text or adding something to .typos.toml.
   typos:
     runs-on: ubuntu-latest

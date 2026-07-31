@@ -1,0 +1,23 @@
+{
+  "grammars": [
+    {
+      "name": "hird",
+      "camelcase": "Hird",
+      "scope": "source.hird",
+      "path": ".",
+      "file-types": ["hird"],
+      "highlights": ["queries/highlights.scm"],
+      "injection-regex": "^hird$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "Apache-2.0 OR MIT",
+    "description": "Tree-sitter grammar for the Hirð language",
+    "authors": [
+      {
+        "name": "the Hird Authors"
+      }
+    ]
+  }
+}

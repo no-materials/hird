@@ -85,9 +85,24 @@
 
           # BEAM toolchain: erlc/erl/escript/dialyzer for Erlang codegen tests
           erlang
+
+          # Tree-sitter grammar work: `tree-sitter generate` needs node to
+          # evaluate grammar.js.
+          tree-sitter
+          nodejs
         ];
 
         nightlyPkgs = [];
+
+        # Every `.hird` source the repository ships. The tree-sitter grammar
+        # is checked against all of them.
+        hirdSources = pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = pkgs.lib.fileset.unions [
+            (pkgs.lib.fileset.fileFilter (file: file.hasExt "hird") ./demo)
+            (pkgs.lib.fileset.fileFilter (file: file.hasExt "hird") ./crates)
+          ];
+        };
 
         mkName = name: name + "-dev-shell";
         mkPersonalShell = {
@@ -166,6 +181,47 @@
                 mainProgram = "hird-mcp";
               };
             };
+
+          # The tree-sitter grammar as an installable parser, with its query
+          # files under `$out/queries`. Editor configs (nvim-treesitter, nvf)
+          # take this flake as an input and reference
+          # `packages.<system>.tree-sitter-hird`.
+          tree-sitter-hird = pkgs.tree-sitter.buildGrammar {
+            language = "hird";
+            version = "0.1.0";
+            src = ./tree-sitter-hird;
+            # `src/parser.c` is generated, not committed.
+            generate = true;
+            meta = {
+              description = "Tree-sitter grammar and highlight queries for Hirð";
+            };
+          };
+        };
+
+        checks = {
+          # The grammar's corpus tests, then a zero-ERROR parse of every
+          # `.hird` source the repository ships, then every query file run
+          # against them so a stale node name cannot ship silently.
+          tree-sitter-hird =
+            pkgs.runCommandCC "tree-sitter-hird-check" {
+              nativeBuildInputs = [pkgs.tree-sitter pkgs.nodejs];
+            } ''
+              cp -r ${./tree-sitter-hird} grammar
+              chmod -R u+w grammar
+              cd grammar
+              export HOME=$PWD/.home
+
+              tree-sitter generate
+              tree-sitter test
+
+              sources=$(find ${hirdSources} -name '*.hird')
+              tree-sitter parse --quiet $sources
+              for query in queries/*.scm; do
+                tree-sitter query --quiet "$query" $sources
+              done
+
+              touch $out
+            '';
         };
 
         devShells.default = self'.devShells.rust-nx;

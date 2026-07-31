@@ -1,6 +1,6 @@
 ---
 id: hir-s36a
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-29T13:42:23Z
@@ -57,3 +57,38 @@ Scope:
 - Building the grammar and running its tests is reproducible via nix
   (no global tree-sitter CLI assumed).
 
+
+## Notes
+
+**2026-07-31T08:40:35Z**
+
+Placement: in-repo, at `tree-sitter-hird/`. Nothing forced a split — the
+grammar tracks `docs/grammar.md` and the reference parser, so keeping it
+in the same tree is what stops it drifting. Upstreaming to
+nvim-treesitter would need its own repo; revisit only then.
+
+`src/parser.c` and friends are generated, not committed: the flake package
+uses `buildGrammar { generate = true; }`, so nix regenerates from
+`grammar.js`. Only the hand-written `src/scanner.c` (nested block
+comments, which no regular token can express) is tracked.
+
+Note on scope: `=>` / `⇒` (FatArrow) is a lexer token with no production
+anywhere in the v0.1 grammar, so there is nothing for either spelling to
+parse into and no token was added for it. `->`/`→`, `\`/`λ`, `&&`/`∧` and
+`||`/`∨` all parse identically, with corpus tests asserting the trees
+match.
+
+Not wired into `.github/workflows/ci.yml` — CI has no nix step today, and
+adding one is a separate call. `nix flake check` runs the grammar checks
+locally.
+
+**2026-07-31T09:29:28Z**
+
+Correction to the note above: it is wired into CI after all. `.github/
+workflows/ci.yml` gained a `flake` job that installs nix and runs
+`nix flake check` (which runs `checks.tree-sitter-hird`) plus
+`nix build .#tree-sitter-hird` — `flake check` only evaluates package
+outputs, so the package the editor configs consume is built explicitly.
+
+First nix job in this CI; Linux only, since none of the flake's outputs
+are platform specific.

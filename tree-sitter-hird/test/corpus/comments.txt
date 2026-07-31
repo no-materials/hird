@@ -1,0 +1,51 @@
+==================
+Line comments
+==================
+
+// leading
+fn f() → Int = 1 // trailing
+
+---
+
+(source_file
+  (line_comment)
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (integer))
+  (line_comment))
+
+==================
+Block comments nest
+==================
+
+/* outer /* inner */ still outer */
+fn f() → Int = 1
+
+---
+
+(source_file
+  (block_comment)
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (return_type (type_identifier))
+    body: (integer)))
+
+==================
+A comment is not a division
+==================
+
+fn f(a: Int, b: Int) → Int = a / b
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (binary_expression left: (identifier) right: (identifier))))

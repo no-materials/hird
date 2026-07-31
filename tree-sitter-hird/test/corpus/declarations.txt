@@ -1,0 +1,252 @@
+==================
+Module header
+==================
+
+module AgentPlanner
+
+---
+
+(source_file
+  (module_declaration
+    name: (type_identifier)))
+
+==================
+Use declarations
+==================
+
+use Ets
+use Log as L
+use Ets.{Table, lookup}
+use A.B.C
+
+---
+
+(source_file
+  (use_declaration
+    path: (path (type_identifier)))
+  (use_declaration
+    path: (path (type_identifier))
+    alias: (type_identifier))
+  (use_declaration
+    path: (path (type_identifier))
+    (use_group (type_identifier) (identifier)))
+  (use_declaration
+    path: (path (type_identifier) (type_identifier) (type_identifier))))
+
+==================
+Function declarations
+==================
+
+fn add(x: Int, y: Int) → Int ! {} = x + y
+
+pub fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = go f xs
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    effects: (effect_annotation)
+    body: (binary_expression
+      left: (identifier)
+      right: (identifier)))
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (function_type
+          (type_variable)
+          (type_variable)
+          effects: (effect_annotation effect: (type_variable))))
+      (parameter
+        name: (identifier)
+        type: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_variable)))))
+    return_type: (return_type
+      (generic_type
+        name: (type_identifier)
+        arguments: (type_arguments (type_variable))))
+    effects: (effect_annotation effect: (type_variable))
+    body: (application
+      function: (application
+        function: (identifier)
+        argument: (identifier))
+      argument: (identifier))))
+
+==================
+Type declarations
+==================
+
+type Option<a> = Some(a) | None
+
+pub opaque type Handle = Handle(Int)
+
+type PlannerMsg =
+  | PlanRepo(Path)
+  | Shutdown
+
+---
+
+(source_file
+  (type_declaration
+    name: (type_identifier)
+    type_parameters: (type_parameters (type_variable))
+    (constructor name: (type_identifier) (type_variable))
+    (constructor name: (type_identifier)))
+  (type_declaration
+    name: (type_identifier)
+    (constructor name: (type_identifier) (type_identifier)))
+  (type_declaration
+    name: (type_identifier)
+    (constructor name: (type_identifier) (type_identifier))
+    (constructor name: (type_identifier))))
+
+==================
+Effect and tool declarations
+==================
+
+effect Log
+pub effect Tool<t>
+tool ReadRepo : { path: Path } → RepoState
+tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn<ParseError>}
+
+---
+
+(source_file
+  (effect_declaration name: (type_identifier))
+  (effect_declaration
+    name: (type_identifier)
+    type_parameters: (type_parameters (type_variable)))
+  (tool_declaration
+    name: (type_identifier)
+    input: (record_type
+      (record_type_field name: (identifier) type: (type_identifier)))
+    output: (type_identifier))
+  (tool_declaration
+    name: (type_identifier)
+    type_parameters: (type_parameters (type_variable))
+    input: (record_type
+      (record_type_field name: (identifier) type: (type_identifier))
+      (record_type_field
+        name: (identifier)
+        type: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_variable)))))
+    output: (type_variable)
+    effects: (effect_annotation
+      effect: (generic_type
+        name: (type_identifier)
+        arguments: (type_arguments (type_identifier))))))
+
+==================
+Extern declaration
+==================
+
+extern fn now(clock: Clock) → Timestamp
+
+---
+
+(source_file
+  (extern_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))))
+
+==================
+Actor declaration
+==================
+
+actor Counter {
+  state: CounterState,
+
+  message: CounterMsg =
+    | Increment(Int)
+    | GetCount(ReplyTo<Int>),
+
+  init: fn(config: CounterConfig) → CounterState ! {} = CounterState(0),
+
+  handle Increment(by), CounterState(n) → CounterState ! {} =
+    CounterState(n + by),
+} ! {Send<Int>}
+
+---
+
+(source_file
+  (actor_declaration
+    name: (type_identifier)
+    (actor_field name: (identifier) type: (type_identifier))
+    (actor_field
+      name: (identifier)
+      type: (type_identifier)
+      (constructor name: (type_identifier) (type_identifier))
+      (constructor
+        name: (type_identifier)
+        (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_identifier)))))
+    (actor_field
+      name: (identifier)
+      signature: (function_signature
+        parameters: (parameter_list
+          (parameter name: (identifier) type: (type_identifier)))
+        return_type: (return_type (type_identifier))
+        effects: (effect_annotation))
+      body: (application
+        function: (type_identifier)
+        argument: (parenthesized_expression (integer))))
+    (actor_handler
+      message: (constructor_pattern
+        name: (type_identifier)
+        (bind_pattern))
+      state: (constructor_pattern
+        name: (type_identifier)
+        (bind_pattern))
+      return_type: (return_type (type_identifier))
+      effects: (effect_annotation)
+      body: (application
+        function: (type_identifier)
+        argument: (parenthesized_expression
+          (binary_expression left: (identifier) right: (identifier)))))
+    effects: (effect_annotation
+      effect: (generic_type
+        name: (type_identifier)
+        arguments: (type_arguments (type_identifier))))))
+
+==================
+Supervisor declaration
+==================
+
+supervisor CounterSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: counter, actor: Counter, start_args: initial_config(), restart: permanent },
+  ]
+}
+
+---
+
+(source_file
+  (supervisor_declaration
+    name: (type_identifier)
+    (supervisor_field name: (identifier) value: (identifier))
+    (supervisor_field name: (identifier) value: (integer))
+    (supervisor_field name: (identifier) value: (integer))
+    (supervisor_field
+      name: (identifier)
+      value: (list
+        (record
+          (record_field name: (identifier) value: (identifier))
+          (record_field name: (identifier) value: (type_identifier))
+          (record_field
+            name: (identifier)
+            value: (application function: (identifier) argument: (unit)))
+          (record_field name: (identifier) value: (identifier)))))))
