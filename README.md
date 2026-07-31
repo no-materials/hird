@@ -233,12 +233,44 @@ queries under the names it looks them up by:
 }
 ```
 
-Neovim needs the file type registered too, since `.hird` is not one it
-knows:
+Neovim needs the file type registered too, whichever route below you
+take, since `.hird` is not one it knows:
 
 ```lua
 vim.filetype.add({ extension = { hird = "hird" } })
 ```
+
+Without nix, nvim-treesitter builds the grammar itself, given the
+tree-sitter CLI on `PATH` (`npm i -g tree-sitter-cli`). `src/parser.c`
+is generated rather than committed — `grammar.js` is the only source —
+so `requires_generate_from_grammar` is the part that matters: it makes
+`:TSInstall hird` generate the parser before compiling it.
+
+```lua
+require('nvim-treesitter.parsers').get_parser_configs().hird = {
+  install_info = {
+    url = "https://github.com/no-materials/hird",
+    location = "tree-sitter-hird",
+    files = { "src/parser.c", "src/scanner.c" },
+    requires_generate_from_grammar = true,
+  },
+  filetype = "hird",
+}
+```
+
+That installs the parser but not the queries: nvim-treesitter ships
+those only for the languages it supports, so copy this grammar's onto
+the runtime path by hand. It is the one step the nix package does for
+you.
+
+```sh
+mkdir -p ~/.config/nvim/queries/hird
+cp tree-sitter-hird/queries/*.scm ~/.config/nvim/queries/hird/
+```
+
+With no plugin at all, build the parser straight onto the runtime path
+next to those queries (`tree-sitter build -o ~/.config/nvim/parser/hird.so`)
+and call `vim.treesitter.start()` from a `FileType hird` autocommand.
 
 Working on the grammar itself needs no global tree-sitter CLI — the dev
 shell ships one, and `nix flake check` runs the corpus tests and parses
