@@ -9,9 +9,6 @@
     };
 
     rust-overlay.url = "github:oxalica/rust-overlay";
-
-    ticket.url = "github:wedow/ticket";
-    ticket.flake = false;
   };
 
   outputs = inputs @ {
@@ -49,16 +46,27 @@
         # A nightly rust toolchain provided as an alternative.
         nightlyRust = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {});
 
-        ticket = pkgs.stdenv.mkDerivation {
-          pname = "ticket";
-          version = inputs.ticket.rev;
-          src = inputs.ticket;
-          dontBuild = true;
-          installPhase = ''
-            mkdir -p $out/bin
-            cp ticket $out/bin/tk
-            chmod +x $out/bin/tk
-          '';
+        # `bd` drives the in-repo issue tracker; see `.beads/README.md`.
+        # nixpkgs is still on 1.0.3, which refuses to open the tracker
+        # database ("wisps table has unknown fields"), so bump the nixpkgs
+        # package to a release that can read it. Drop this override once
+        # nixpkgs catches up.
+        beadsVersion = "1.1.2";
+        beads = pkgs.beads.overrideAttrs {
+          version = beadsVersion;
+
+          src = pkgs.fetchFromGitHub {
+            owner = "gastownhall";
+            repo = "beads";
+            tag = "v${beadsVersion}";
+            hash = "sha256-5oDI2MunHrOKx1m5mC0ZaIqZ9+f1YBQotMBUj6U5H1I=";
+          };
+
+          vendorHash = "sha256-WWEwGpCwMPD7jaz02zN745RQQqYTQttehbcT3J9hayM=";
+
+          # The upstream suite is pinned to the packaged version's
+          # expectations; `versionCheckHook` still guards the binary.
+          doCheck = false;
         };
 
         # Rust packages - included in all shells.
@@ -76,8 +84,8 @@
           patchelf
           cargo-generate
 
-          # In-repo ticket system
-          ticket
+          # In-repo issue tracker (the pinned override above, not `pkgs.beads`)
+          beads
 
           # New: tools for wasm C compilation
           clangWasm

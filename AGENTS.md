@@ -34,7 +34,7 @@ cargo test --workspace --all-features
 
 Before writing any code, read these files in order:
 
-1. The assigned ticket (`tk show <id>`).
+1. The assigned issue (`bd show <id>`).
 2. `DECISIONS.md` — locked architecture constraints you must not violate.
 3. `phrasebook.md` — canonical surface syntax conventions.
 4. The parent epic ticket if one exists (for broader context and out-of-scope boundaries).
@@ -64,10 +64,20 @@ Before writing any code, read these files in order:
 
 ## Tickets / Issue Tracking / Plans
 
-This project uses a CLI ticket system for task management; tickets live in
-`.tickets/` as plain markdown. The `tk` CLI ships in the nix devshell (it is
-the `wedow/ticket` flake input). Run `tk help` when you need to use it.
-When creating a new issue, run `tk` from within the crate directory that the issue is for so that it can get a better prefix.
+This repository uses [Beads](https://github.com/gastownhall/beads) (`bd`) for
+in-repo issue tracking; the `bd` CLI ships in the nix devshell. See
+`.beads/README.md` for the full workflow.
+
+- After a fresh clone, run `bd bootstrap`.
+- At the start of a work session, run `bd prime` and `bd dolt pull`.
+- Use `bd ready`, `bd show`, `bd create`, `bd update`, and `bd close` to
+  manage work.
+- At the end of a work session, run `bd dolt push` explicitly. Do not enable
+  automatic pushes.
+
+New issues use the `hir-*` prefix. Issues migrated from the previous
+`.tickets/` system keep their original ids, so a handful of `ha-*`/`hc-*`/
+`hi-*`/`hl-*` ids exist alongside `hir-*`.
 
 ## Additional behavioral guidelines
 

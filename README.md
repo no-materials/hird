@@ -17,7 +17,7 @@ visible in the types and queryable by tooling.
 end to end (the demos below type-check, compile to Erlang, and run on
 BEAM), but the language surface is unstable, nothing is published to
 crates.io, and breaking changes land without deprecation cycles. The
-roadmap lives in `.tickets/`.
+roadmap lives in the in-repo issue tracker (see `.beads/README.md`).
 
 ## Install
 
@@ -293,7 +293,7 @@ cd tree-sitter-hird && tree-sitter generate && tree-sitter test
   effects wire format).
 - `phrasebook.md` — dense surface-syntax reference.
 - `DECISIONS.md` — architecture decision records.
-- `.tickets/` — the issue tracker and roadmap, as plain markdown.
+- `.beads/README.md` — the issue tracker and roadmap, driven by `bd`.
 
 ## Development
 
