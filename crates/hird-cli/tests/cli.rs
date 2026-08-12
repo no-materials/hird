@@ -92,6 +92,21 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
+/// Blanks every `"timestamp":"…"` value, which differs across runs.
+fn strip_timestamps(log: &str) -> String {
+    let key = "\"timestamp\":\"";
+    let mut out = String::new();
+    let mut rest = log;
+    while let Some(i) = rest.find(key) {
+        let start = i + key.len();
+        out.push_str(&rest[..start]);
+        let end = start + rest[start..].find('"').expect("unterminated timestamp");
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 #[test]
 fn check_passes_a_valid_program() {
     let dir = scratch("check_ok");
@@ -185,6 +200,43 @@ fn run_executes_on_beam_and_audits_tool_calls() {
         "stdout: {out}"
     );
     assert!(out.contains("\"caller\":\"Main.main\""), "stdout: {out}");
+}
+
+#[test]
+fn run_audit_file_redirects_the_audit_stream() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_audit_file");
+    let file = write(&dir, "main.hird", PING);
+
+    let plain_out = dir.join("out_plain");
+    let plain = hird(&["run", &file, "-o", &plain_out.display().to_string()]);
+    assert!(plain.status.success(), "stderr: {}", stderr(&plain));
+
+    let audit = dir.join("audit.jsonl");
+    let flagged_out = dir.join("out_flagged");
+    let flagged = hird(&[
+        "run",
+        &file,
+        "-o",
+        &flagged_out.display().to_string(),
+        "--audit-file",
+        &audit.display().to_string(),
+    ]);
+    assert!(flagged.status.success(), "stderr: {}", stderr(&flagged));
+    assert_eq!(
+        stdout(&flagged),
+        "",
+        "no audit lines may reach stdout with --audit-file"
+    );
+    let logged = fs::read_to_string(&audit).expect("read the audit file");
+    assert_eq!(
+        strip_timestamps(&logged),
+        strip_timestamps(&stdout(&plain)),
+        "the audit file must carry the stream an unflagged run prints"
+    );
 }
 
 #[test]

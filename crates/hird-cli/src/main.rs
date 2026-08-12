@@ -53,6 +53,9 @@ enum Command {
         /// The build output directory.
         #[arg(short, long, default_value = "_build/hird")]
         out_dir: PathBuf,
+        /// Append the audit stream to this file instead of stdout.
+        #[arg(long)]
+        audit_file: Option<PathBuf>,
     },
     /// Build, then run on BEAM (requires a module defining `fn main`).
     Run {
@@ -61,6 +64,9 @@ enum Command {
         /// The build output directory.
         #[arg(short, long, default_value = "_build/hird")]
         out_dir: PathBuf,
+        /// Append the audit stream to this file instead of stdout.
+        #[arg(long)]
+        audit_file: Option<PathBuf>,
         /// Arguments for `main` (reserved; not supported in v0.1).
         #[arg(last = true)]
         args: Vec<String>,
@@ -102,13 +108,18 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             eprintln!("checked {} module(s)", modules.len());
             Ok(ExitCode::SUCCESS)
         }
-        Command::Build { input, out_dir } => {
-            build_input(&input, &out_dir)?;
+        Command::Build {
+            input,
+            out_dir,
+            audit_file,
+        } => {
+            build_input(&input, &out_dir, audit_file.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
             input,
             out_dir,
+            audit_file,
             args,
         } => {
             if !args.is_empty() {
@@ -116,7 +127,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
                     "arguments to `main` are reserved and not supported in v0.1"
                 ));
             }
-            let output = build_input(&input, &out_dir)?;
+            let output = build_input(&input, &out_dir, audit_file.as_deref())?;
             let status = build::run(&output)?;
             Ok(u8::try_from(status).map_or(ExitCode::FAILURE, ExitCode::from))
         }
@@ -163,12 +174,17 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
     }
 }
 
-/// Checks `input` and builds it into `out_dir`.
-fn build_input(input: &Path, out_dir: &Path) -> Result<build::BuildOutput, Failure> {
+/// Checks `input` and builds it into `out_dir`; the audit stream goes to
+/// `audit_file` when given, stdout otherwise.
+fn build_input(
+    input: &Path,
+    out_dir: &Path,
+    audit_file: Option<&Path>,
+) -> Result<build::BuildOutput, Failure> {
     let modules = pipeline::parse_and_check(pipeline::load(input)?)?;
     let lowered: Vec<(PathBuf, hird_ir::IrModule)> = modules
         .iter()
         .map(|m| (m.path.clone(), m.lower()))
         .collect();
-    build::build(&lowered, out_dir)
+    build::build(&lowered, out_dir, audit_file)
 }
