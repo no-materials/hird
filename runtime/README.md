@@ -15,7 +15,10 @@ dispatcher.
   handler is `{tool, ToolName}` in the threaded map, falling back to the
   default registry, and a miss in both crashes with
   `{unhandled_tool, ToolName}`. Every invocation — mocked or real — is
-  captured as an invocation record and sent to the audit sink.
+  captured as an invocation record and sent to the audit sink. A handler
+  signals a domain failure by throwing `{hird_exn, Error}`: the dispatcher
+  records an `{err, Error}` result and rethrows; any other exception is a
+  crash, propagated untouched and unrecorded.
 - `hird_audit.erl` — the audit log sink: a `gen_server` writing canonical
   JSON lines (the wire format of `docs/tool-effects.md`) to stdout or an
   append-only file, in arrival order. Encoding is type-directed against

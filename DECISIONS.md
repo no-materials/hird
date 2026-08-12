@@ -1343,6 +1343,21 @@ so that promise is currently unimplementable as stated.
    guessing. *Rejected*: term-directed heuristics (cannot be byte-exact) and
    a sidecar metadata file (a second artifact for `hird build` to plumb).
 
+   *Amended 2026-08-12 — a handler signals a domain failure by throwing
+   `{hird_exn, Error}`.* ADR-016 tags results `{"ok":…}`/`{"err":…}`, so
+   the dispatcher must observe failures as well as successes. A domain
+   error (an `Exn<E>` value per ADR-021) leaves a handler as an Erlang
+   `throw` of `{hird_exn, Error}`; the dispatcher records the invocation
+   with an `{err, Error}` result and rethrows with the original
+   stacktrace, so audit capture stays observational. Any other exception
+   class is a crash in ADR-021's sense, propagated untouched and
+   unrecorded. *Rejected*: an in-band tagged return (`{error, V}` is
+   indistinguishable from a two-field ADT constructor value) and the
+   `error` class (reserved for crashes — `crash!` lowers to
+   `erlang:error`). The throw tag joins the frozen contract of this
+   section: a future surface form for raising domain errors must lower
+   to exactly this throw.
+
 3. **Unhandled tool calls fall back to the runtime registry, then crash.**
    On a map miss the dispatcher consults the process-independent default
    registry (the runtime library's handler-installation machinery); if that

@@ -18,18 +18,35 @@
 %% the audit sink (hird_audit); the record is dropped there when no sink is
 %% running. `Caller` is the codegen-supplied caller id
 %% (`<<"Module.function">>` or the actor form).
+%%
+%% A handler signals a domain failure by throwing `{hird_exn, Error}`,
+%% where `Error` is a value of the tool's declared error type. The
+%% dispatcher records the invocation with an `{err, Error}` result and
+%% rethrows, so the failure propagates exactly as it would unaudited. Any
+%% other exception is a crash, not a domain error: it propagates untouched
+%% and unrecorded.
 -spec call(atom(), binary(), #{term() => fun()}, term()) -> term().
 call(ToolName, Caller, Handlers, Args) ->
     Handler = resolve(ToolName, Handlers),
-    Result = Handler(Args, Handlers),
+    try Handler(Args, Handlers) of
+        Result ->
+            audit(ToolName, Caller, Args, {ok, Result}),
+            Result
+    catch
+        throw:{hird_exn, Error}:Stacktrace ->
+            audit(ToolName, Caller, Args, {err, Error}),
+            erlang:raise(throw, {hird_exn, Error}, Stacktrace)
+    end.
+
+%% Sends one invocation record to the audit sink.
+audit(ToolName, Caller, Args, Result) ->
     hird_audit:log(#{
         tool => ToolName,
         args => Args,
-        result => {ok, Result},
+        result => Result,
         timestamp => erlang:system_time(millisecond),
         caller => Caller
-    }),
-    Result.
+    }).
 
 %% The handler for `ToolName`: threaded map first, then the registry.
 resolve(ToolName, Handlers) ->

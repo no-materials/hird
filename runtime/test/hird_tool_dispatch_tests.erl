@@ -28,6 +28,14 @@ unhandled_tool_crashes_test() ->
     ?assertError({unhandled_tool, ghost},
                  hird_tool_dispatch:call(ghost, <<"M.f">>, #{}, ok)).
 
+%% A domain failure — `throw({hird_exn, Error})` — is rethrown to the
+%% caller unchanged; audit capture is observational.
+exn_throw_propagates_to_the_caller_test() ->
+    Handlers = #{{tool, failing} =>
+                     fun(_Args, _Handlers) -> throw({hird_exn, bad_input}) end},
+    ?assertThrow({hird_exn, bad_input},
+                 hird_tool_dispatch:call(failing, <<"M.f">>, Handlers, ok)).
+
 dispatch_works_without_an_audit_sink_test() ->
     ?assertEqual(undefined, whereis(hird_audit)),
     Handlers = #{{tool, quiet} => fun(_Args, _Handlers) -> ok end},
@@ -56,3 +64,53 @@ audit_captures_mocked_invocations_test() ->
                           "\"args\":\\{\"n\":3\\},\"result\":\\{\"ok\":6\\},"
                           "\"timestamp\":\"[0-9T:.Z-]+\","
                           "\"caller\":\"M\\.f\"\\}$">>)).
+
+%% A failing handler produces an err-tagged line byte-identical to the
+%% encoder's output for the same record — the same tool, args, error
+%% value, and caller as the http_get_err.json golden, which pins the
+%% encoder against the oracle bytes. Only the injected timestamp (read
+%% back from the line) and the observer-populated meta differ.
+audit_captures_err_results_test() ->
+    Path = filename:join("_build", "dispatch_audit_err.jsonl"),
+    _ = file:delete(Path),
+    Table = #{tools => #{http_get => #{name => <<"HttpGet">>,
+                                       args => {record, [{url, string}]},
+                                       result => {record, [{status, int}]},
+                                       error => {adt, http_error, []}}},
+              types => #{http_error =>
+                             [{http_error, <<"HttpError">>, [int, string]}]}},
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}}, {tools, Table}]),
+    Error = {http_error, 503, <<"service unavailable">>},
+    Args = #{url => <<"https://ci.example/status">>},
+    Handlers = #{{tool, http_get} =>
+                     fun(_Args, _Handlers) -> throw({hird_exn, Error}) end},
+    ?assertThrow({hird_exn, Error},
+                 hird_tool_dispatch:call(http_get, <<"Planner.check_ci">>,
+                                         Handlers, Args)),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    {ok, Bytes} = file:read_file(Path),
+    [Line, <<>>] = binary:split(Bytes, <<"\n">>),
+    [_, Tail] = binary:split(Line, <<"\"timestamp\":\"">>),
+    [Rfc3339, _] = binary:split(Tail, <<"\"">>),
+    Ts = calendar:rfc3339_to_system_time(binary_to_list(Rfc3339),
+                                         [{unit, millisecond}]),
+    Expected = hird_types:encode_invocation(
+        #{tool => http_get, args => Args, result => {err, Error},
+          timestamp => Ts, caller => <<"Planner.check_ci">>},
+        Table),
+    ?assertEqual(Expected, Line).
+
+%% A crash in a handler is not a domain error: it propagates untouched
+%% and leaves no audit record.
+crashes_propagate_unrecorded_test() ->
+    Path = filename:join("_build", "dispatch_audit_crash.jsonl"),
+    _ = file:delete(Path),
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}}]),
+    Handlers = #{{tool, exploder} =>
+                     fun(_Args, _Handlers) -> erlang:error(boom) end},
+    ?assertError(boom,
+                 hird_tool_dispatch:call(exploder, <<"M.f">>, Handlers, ok)),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    ?assertEqual({ok, <<>>}, file:read_file(Path)).
