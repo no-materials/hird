@@ -240,6 +240,87 @@ fn run_audit_file_redirects_the_audit_stream() {
 }
 
 #[test]
+fn run_replay_reproduces_a_recorded_run() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_replay");
+    let file = write(&dir, "main.hird", PING);
+
+    let recorded = dir.join("recorded.jsonl");
+    let record = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_record").display().to_string(),
+        "--audit-file",
+        &recorded.display().to_string(),
+    ]);
+    assert!(record.status.success(), "stderr: {}", stderr(&record));
+
+    let replayed = dir.join("replayed.jsonl");
+    let replay = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_replay").display().to_string(),
+        "--replay",
+        &recorded.display().to_string(),
+        "--audit-file",
+        &replayed.display().to_string(),
+    ]);
+    assert!(replay.status.success(), "stderr: {}", stderr(&replay));
+    let recorded_log = fs::read_to_string(&recorded).expect("read the recorded log");
+    let replayed_log = fs::read_to_string(&replayed).expect("read the replayed log");
+    assert_eq!(
+        strip_timestamps(&replayed_log),
+        strip_timestamps(&recorded_log),
+        "a replayed run must audit the recorded tool/args/result sequence"
+    );
+}
+
+#[test]
+fn run_replay_rejects_a_tampered_log() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_replay_tampered");
+    let file = write(&dir, "main.hird", PING);
+
+    let recorded = dir.join("recorded.jsonl");
+    let record = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_record").display().to_string(),
+        "--audit-file",
+        &recorded.display().to_string(),
+    ]);
+    assert!(record.status.success(), "stderr: {}", stderr(&record));
+
+    let log = fs::read_to_string(&recorded).expect("read the recorded log");
+    let tampered = log.replace("\"msg\":\"hi\"", "\"msg\":\"ho\"");
+    assert_ne!(tampered, log, "the tamper must change the recorded args");
+    fs::write(&recorded, tampered).expect("write the tampered log");
+
+    let replay = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_replay").display().to_string(),
+        "--replay",
+        &recorded.display().to_string(),
+    ]);
+    assert!(!replay.status.success(), "a tampered log must fail the run");
+    let err = stderr(&replay);
+    assert!(err.contains("replay_divergence"), "stderr: {err}");
+    assert!(err.contains("args_mismatch"), "stderr: {err}");
+    assert!(err.contains("position => 0"), "stderr: {err}");
+}
+
+#[test]
 fn run_requires_a_main_function() {
     if !erlang_available() {
         eprintln!("skipping: erlc not found on PATH");

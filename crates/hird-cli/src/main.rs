@@ -56,6 +56,10 @@ enum Command {
         /// Append the audit stream to this file instead of stdout.
         #[arg(long)]
         audit_file: Option<PathBuf>,
+        /// Replay tool calls from this recorded audit log instead of
+        /// dispatching to handlers.
+        #[arg(long)]
+        replay: Option<PathBuf>,
     },
     /// Build, then run on BEAM (requires a module defining `fn main`).
     Run {
@@ -67,6 +71,10 @@ enum Command {
         /// Append the audit stream to this file instead of stdout.
         #[arg(long)]
         audit_file: Option<PathBuf>,
+        /// Replay tool calls from this recorded audit log instead of
+        /// dispatching to handlers.
+        #[arg(long)]
+        replay: Option<PathBuf>,
         /// Arguments for `main` (reserved; not supported in v0.1).
         #[arg(last = true)]
         args: Vec<String>,
@@ -112,14 +120,16 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             input,
             out_dir,
             audit_file,
+            replay,
         } => {
-            build_input(&input, &out_dir, audit_file.as_deref())?;
+            build_input(&input, &out_dir, audit_file.as_deref(), replay.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
             input,
             out_dir,
             audit_file,
+            replay,
             args,
         } => {
             if !args.is_empty() {
@@ -127,7 +137,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
                     "arguments to `main` are reserved and not supported in v0.1"
                 ));
             }
-            let output = build_input(&input, &out_dir, audit_file.as_deref())?;
+            let output = build_input(&input, &out_dir, audit_file.as_deref(), replay.as_deref())?;
             let status = build::run(&output)?;
             Ok(u8::try_from(status).map_or(ExitCode::FAILURE, ExitCode::from))
         }
@@ -175,16 +185,18 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
 }
 
 /// Checks `input` and builds it into `out_dir`; the audit stream goes to
-/// `audit_file` when given, stdout otherwise.
+/// `audit_file` when given, stdout otherwise, and `replay` makes the boot
+/// module replay tool calls from that recorded log.
 fn build_input(
     input: &Path,
     out_dir: &Path,
     audit_file: Option<&Path>,
+    replay: Option<&Path>,
 ) -> Result<build::BuildOutput, Failure> {
     let modules = pipeline::parse_and_check(pipeline::load(input)?)?;
     let lowered: Vec<(PathBuf, hird_ir::IrModule)> = modules
         .iter()
         .map(|m| (m.path.clone(), m.lower()))
         .collect();
-    build::build(&lowered, out_dir, audit_file)
+    build::build(&lowered, out_dir, audit_file, replay)
 }

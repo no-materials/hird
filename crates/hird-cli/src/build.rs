@@ -19,7 +19,7 @@ use crate::{Failure, fail};
 
 /// The hand-written Erlang runtime library, embedded so the compiled binary
 /// is self-contained.
-const RUNTIME: [(&str, &str); 5] = [
+const RUNTIME: [(&str, &str); 6] = [
     (
         "hird_audit",
         include_str!(concat!(
@@ -32,6 +32,13 @@ const RUNTIME: [(&str, &str); 5] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_handlers.erl"
+        )),
+    ),
+    (
+        "hird_replay",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../runtime/hird_replay.erl"
         )),
     ),
     (
@@ -83,17 +90,26 @@ pub(crate) struct BuildOutput {
 /// Emits `modules` (paired with their source paths) plus the runtime and
 /// boot module into `out_dir`, then compiles everything with `erlc`. The
 /// boot module's audit sink appends to `audit_file` when given, stdout
-/// otherwise.
+/// otherwise; with `replay` it starts a replay cursor over that log
+/// before running `main`.
 pub(crate) fn build(
     modules: &[(PathBuf, IrModule)],
     out_dir: &Path,
     audit_file: Option<&Path>,
+    replay: Option<&Path>,
 ) -> Result<BuildOutput, Failure> {
     let entry = find_entry_point(modules)?;
     let audit_file = match audit_file {
         Some(path) => Some(
             path.to_str()
                 .ok_or_else(|| fail!("audit file path `{}` is not valid UTF-8", path.display()))?,
+        ),
+        None => None,
+    };
+    let replay = match replay {
+        Some(path) => Some(
+            path.to_str()
+                .ok_or_else(|| fail!("replay log path `{}` is not valid UTF-8", path.display()))?,
         ),
         None => None,
     };
@@ -135,7 +151,7 @@ pub(crate) fn build(
         erl_files.push(write_erl(
             out_dir,
             BOOT_MODULE,
-            &boot_module(entry, &tool_modules, audit_file),
+            &boot_module(entry, &tool_modules, audit_file, replay),
         )?);
     }
 
@@ -262,9 +278,16 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 /// Renders the boot module: starts the audit sink (appending to
 /// `audit_file` when given, stdout otherwise), registers each
 /// tool-declaring module's signature table, and calls `main` with an empty
-/// handler map. Kept as generated source so the build output runs on plain
-/// `erl` without the CLI.
-fn boot_module(entry: &EntryPoint, tool_modules: &[String], audit_file: Option<&str>) -> String {
+/// handler map. With `replay` it also starts the replay cursor over that
+/// log before `main` and requires the log fully consumed after. Kept as
+/// generated source so the build output runs on plain `erl` without the
+/// CLI.
+fn boot_module(
+    entry: &EntryPoint,
+    tool_modules: &[String],
+    audit_file: Option<&str>,
+    replay: Option<&str>,
+) -> String {
     let sink = match audit_file {
         Some(path) => format!("{{file, \"{}\"}}", erlang_string_escape(path)),
         None => "stdout".to_owned(),
@@ -290,6 +313,18 @@ fn boot_module(entry: &EntryPoint, tool_modules: &[String], audit_file: Option<&
             "    ok = hird_audit:register_tools({module}:hird_tools@()),"
         );
     }
+    if let Some(log) = replay {
+        let tables = tool_modules
+            .iter()
+            .map(|module| format!("{module}:hird_tools@()"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(
+            out,
+            "    {{ok, _}} = hird_replay:start_link(\"{}\", [{tables}]),",
+            erlang_string_escape(log)
+        );
+    }
     let main_call = if entry.takes_map {
         format!("{}:main(#{{}})", entry.module)
     } else {
@@ -297,6 +332,9 @@ fn boot_module(entry: &EntryPoint, tool_modules: &[String], audit_file: Option<&
     };
     let _ = writeln!(out, "    Result = {main_call},");
     let _ = writeln!(out, "    ok = hird_audit:sync(),");
+    if replay.is_some() {
+        let _ = writeln!(out, "    ok = hird_replay:finish(),");
+    }
     let _ = writeln!(out, "    Result.");
     let _ = writeln!(out);
     let _ = writeln!(
