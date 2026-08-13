@@ -3,6 +3,7 @@
 %%
 %% Dispatcher routing: threaded map first, registry fallback second,
 %% `{unhandled_tool, _}` crash third — and unconditional audit capture.
+%% Under a running replay cursor, none of that: the cursor alone answers.
 -module(hird_tool_dispatch_tests).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -100,6 +101,105 @@ audit_captures_err_results_test() ->
           timestamp => Ts, caller => <<"Planner.check_ci">>},
         Table),
     ?assertEqual(Expected, Line).
+
+%% Replay ------------------------------------------------------------------
+
+%% The `Probe : { n: Int } → Int` signature table.
+probe_table() ->
+    #{tools => #{probe => #{name => <<"Probe">>,
+                            args => {record, [{n, int}]},
+                            result => int,
+                            error => {adt, probe_error, []}}},
+      types => #{probe_error => [{probe_error, <<"ProbeError">>, [string]}]}}.
+
+%% Runs `Fun` with a replay cursor over `probe` records, stopping it
+%% afterwards.
+with_replay(Name, Records, Fun) ->
+    Path = filename:join("_build", Name),
+    Lines = [hird_types:encode_invocation(
+                 #{tool => probe, args => #{n => N}, result => Result,
+                   timestamp => 0, caller => <<"M.f">>},
+                 probe_table())
+             || {N, Result} <- Records],
+    ok = file:write_file(Path, [[L, $\n] || L <- Lines]),
+    {ok, Pid} = hird_replay:start_link(Path, [probe_table()]),
+    try
+        Fun()
+    after
+        gen_server:stop(Pid)
+    end.
+
+%% Under replay the cursor is the only authority: a threaded handler for
+%% the same tool is never invoked, so a `handle` block in the program
+%% cannot shadow the log.
+replay_ignores_threaded_handlers_test() ->
+    Handlers = #{{tool, probe} => fun(_Args, _Handlers) -> shadowed end},
+    with_replay("dispatch_replay_shadow.jsonl", [{3, {ok, 99}}], fun() ->
+        ?assertEqual(99,
+                     hird_tool_dispatch:call(probe, <<"M.f">>, Handlers,
+                                             #{n => 3}))
+    end).
+
+%% Same for the registry: an installed default loses to the cursor.
+replay_ignores_registry_handlers_test() ->
+    hird_handlers:with_handlers(
+        [{{tool, probe}, fun(_Args, _Handlers) -> shadowed end}],
+        fun() ->
+            with_replay("dispatch_replay_registry.jsonl", [{3, {ok, 99}}],
+                        fun() ->
+                            ?assertEqual(99,
+                                         hird_tool_dispatch:call(
+                                             probe, <<"M.f">>, #{}, #{n => 3}))
+                        end)
+        end).
+
+%% An err-tagged record replays its failure: the same `{hird_exn, _}`
+%% throw the recorded handler raised.
+replay_rethrows_logged_failures_test() ->
+    Error = {probe_error, <<"down">>},
+    with_replay("dispatch_replay_err.jsonl", [{3, {err, Error}}], fun() ->
+        ?assertThrow({hird_exn, Error},
+                     hird_tool_dispatch:call(probe, <<"M.f">>, #{}, #{n => 3}))
+    end).
+
+%% A mismatching dispatch crashes with the structured divergence.
+replay_divergence_crashes_test() ->
+    with_replay("dispatch_replay_diverge.jsonl", [{3, {ok, 99}}], fun() ->
+        ?assertError({replay_divergence, #{kind := args_mismatch,
+                                           position := 0}},
+                     hird_tool_dispatch:call(probe, <<"M.f">>, #{}, #{n => 4}))
+    end).
+
+%% Replayed dispatches audit exactly like live ones: same tool, args,
+%% and result on the stream, ok and err alike.
+replay_still_audits_test() ->
+    Path = filename:join("_build", "dispatch_replay_audit.jsonl"),
+    _ = file:delete(Path),
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}},
+                                        {tools, probe_table()}]),
+    Error = {probe_error, <<"down">>},
+    with_replay("dispatch_replay_audited_log.jsonl",
+                [{3, {ok, 99}}, {4, {err, Error}}],
+                fun() ->
+                    ?assertEqual(99,
+                                 hird_tool_dispatch:call(probe, <<"M.f">>, #{},
+                                                         #{n => 3})),
+                    ?assertThrow({hird_exn, Error},
+                                 hird_tool_dispatch:call(probe, <<"M.f">>, #{},
+                                                         #{n => 4}))
+                end),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    {ok, Bytes} = file:read_file(Path),
+    [First, Second, <<>>] = binary:split(Bytes, <<"\n">>, [global]),
+    ?assertMatch({match, _},
+                 re:run(First, <<"\"args\":\\{\"n\":3\\},"
+                                 "\"result\":\\{\"ok\":99\\}">>)),
+    ?assertMatch({match, _},
+                 re:run(Second,
+                        <<"\"args\":\\{\"n\":4\\},\"result\":\\{\"err\":"
+                          "\\{\"ctor\":\"ProbeError\","
+                          "\"args\":\\[\"down\"\\]\\}\\}">>)).
 
 %% A crash in a handler is not a domain error: it propagates untouched
 %% and leaves no audit record.

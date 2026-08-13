@@ -1,9 +1,10 @@
 %% Copyright 2026 the Hird Authors
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
-%% Encoder conformance: the goldens under conformance/v1 reproduced byte for
-%% byte, plus the canonical-form corners (floats, escapes, shapes) the
-%% goldens do not reach.
+%% Encoder and decoder conformance: the goldens under conformance/v1
+%% reproduced byte for byte and round-tripped through the decoder, plus the
+%% canonical-form corners (floats, escapes, shapes) the goldens do not
+%% reach.
 -module(hird_types_tests).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -132,3 +133,102 @@ unknown_tool_is_an_error_test() ->
 
 dynamic_shape_is_an_error_test() ->
     ?assertError({unencodable, dynamic, 1}, encode(dynamic, 1)).
+
+%% Decoding ----------------------------------------------------------------
+
+%% Every golden line decodes to the record the runtime assembled, and
+%% re-encoding the decoded record reproduces the golden bytes.
+decode_round_trips_golden_files_test() ->
+    lists:foreach(
+        fun({Name, Record}) ->
+            [Line, <<>>] = binary:split(golden(Name), <<"\n">>),
+            Decoded = hird_types:decode_invocation(Line, table()),
+            #{tool := Tool, args := Args, result := Result,
+              timestamp := Ts, caller := Caller} = Decoded,
+            ?assertEqual(maps:get(tool, Record), Tool),
+            ?assertEqual(maps:get(args, Record), Args),
+            ?assertEqual(maps:get(result, Record), Result),
+            ?assertEqual(maps:get(caller, Record), Caller),
+            Reencoded = hird_types:encode_invocation(
+                Decoded#{timestamp := ms(binary_to_list(Ts))}, table()),
+            ?assertEqual(golden(Name), <<Reencoded/binary, $\n>>)
+        end,
+        records()).
+
+decode(Shape, Args) ->
+    decode(Shape, Args, #{}).
+
+decode(Shape, Args, Types) ->
+    Table = #{tools => #{t => #{name => <<"T">>, args => Shape,
+                                result => unit, error => dynamic}},
+              types => Types},
+    Line = <<"{\"schema_version\":1,\"tool\":\"T\",\"args\":", Args/binary,
+             ",\"result\":{\"ok\":null},"
+             "\"timestamp\":\"2026-05-22T12:00:00.000Z\","
+             "\"caller\":\"M.f\"}">>,
+    maps:get(args, hird_types:decode_invocation(Line, Table)).
+
+decode_value_corners_test_() ->
+    [?_assertEqual(ok, decode(unit, <<"null">>)),
+     ?_assertEqual(true, decode(bool, <<"{\"ctor\":\"True\",\"args\":[]}">>)),
+     ?_assertEqual([1, 2], decode({list, int}, <<"[1,2]">>)),
+     ?_assertEqual({1, <<"x">>}, decode({tuple, [int, string]},
+                                        <<"[1,\"x\"]">>)),
+     ?_assertEqual(1.0, decode(float, <<"1">>)),
+     ?_assertEqual(1.0e20, decode(float, <<"100000000000000000000">>)),
+     ?_assertEqual(0.1 + 0.2, decode(float, <<"0.30000000000000004">>)),
+     ?_assertEqual(<<"a\"b\\c\n\t\x01é"/utf8>>,
+                   decode(string,
+                          <<"\"a\\\"b\\\\c\\n\\t\\u0001\x{c3}\x{a9}\"">>)),
+     ?_assertError({decode_error, {not_an_integer, <<"1.0">>}},
+                   decode(int, <<"1.0">>)),
+     ?_assertError({decode_error, {undecodable, dynamic}},
+                   decode(dynamic, <<"1">>))].
+
+decode_generic_adt_instantiates_parameters_test() ->
+    Types = #{option => [{some, <<"Some">>, [{param, 0}]},
+                         {none, <<"None">>, []}]},
+    ?assertEqual({some, [7]},
+                 decode({adt, option, [{list, int}]},
+                        <<"{\"ctor\":\"Some\",\"args\":[[7]]}">>, Types)),
+    ?assertEqual(none,
+                 decode({adt, option, [int]},
+                        <<"{\"ctor\":\"None\",\"args\":[]}">>, Types)).
+
+%% One canonical line to tamper with in the rejection tests.
+canonical_line() ->
+    [Line, <<>>] = binary:split(golden("http_get_err.json"), <<"\n">>),
+    Line.
+
+decode_rejects_malformed_lines_test_() ->
+    Line = canonical_line(),
+    Swap = fun(From, To) -> binary:replace(Line, From, To) end,
+    [?_assertError({decode_error, {unsupported_schema_version, 2}},
+                   hird_types:decode_invocation(
+                       Swap(<<"\"schema_version\":1">>,
+                            <<"\"schema_version\":2">>), table())),
+     ?_assertError({decode_error, {unknown_tool, <<"Ghost">>}},
+                   hird_types:decode_invocation(
+                       Swap(<<"\"HttpGet\"">>, <<"\"Ghost\"">>), table())),
+     ?_assertError({decode_error, {unknown_constructor, http_error,
+                                   <<"HttpErr">>}},
+                   hird_types:decode_invocation(
+                       Swap(<<"\"HttpError\"">>, <<"\"HttpErr\"">>), table())),
+     ?_assertError({decode_error, {expected_key, <<"url">>, <<"uri">>}},
+                   hird_types:decode_invocation(
+                       Swap(<<"\"url\"">>, <<"\"uri\"">>), table())),
+     ?_assertError({decode_error, {bad_timestamp, <<"2026-13-22T12:00:02.000Z">>}},
+                   hird_types:decode_invocation(
+                       Swap(<<"2026-05-22">>, <<"2026-13-22">>), table())),
+     ?_assertError({decode_error, trailing_input},
+                   hird_types:decode_invocation(
+                       <<Line/binary, "x">>, table())),
+     ?_assertError({decode_error, _},
+                   hird_types:decode_invocation(<<"not json">>, table()))].
+
+%% The decoder enforces the envelope's fixed field order.
+decode_rejects_reordered_envelope_test() ->
+    Line = <<"{\"tool\":\"HttpGet\",\"schema_version\":1}">>,
+    ?assertError({decode_error, {expected_key, <<"schema_version">>,
+                                 <<"tool">>}},
+                 hird_types:decode_invocation(Line, table())).
