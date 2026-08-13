@@ -245,6 +245,60 @@ diverges from its log, the honest answer is an error, not a guess.
 `Divergence` carries and how it renders) may be refined after experience
 with real runs; strict-sequential matching itself is settled.
 
+### Recording and replaying a run
+
+The CLI is the workflow. Recording routes the audit stream — emitted
+unconditionally, whatever handlers are installed — to a file:
+
+```sh
+hird run demo/agent_planner.hird --audit-file demo/agent_planner.golden.jsonl
+```
+
+The sink opens the file for append — an audit log is evidence, not a
+scratch buffer — so re-recording over an existing log means removing it
+first.
+
+Replaying feeds that file back as the tool implementation:
+
+```sh
+hird run demo/agent_planner.hird --replay demo/agent_planner.golden.jsonl
+```
+
+The replay cursor is consulted ahead of handler resolution, so the log
+wins over every `handle` and `install` block in the program: no tool runs,
+no service is contacted, and each call receives its logged result —
+`err`-tagged records rethrow the failure the recorded handler raised. A
+replayed run audits the same stream it consumed (fresh timestamps), so
+`--replay` and `--audit-file` combine into a round trip. Two conditions
+fail the run: a call the log does not match at the cursor, which crashes
+with a `replay_divergence` naming the position, the recorded call, and
+the offered one; and a log the run did not read to the end, since a
+truncated replay is not a faithful one.
+
+### Recorded runs as regression evidence
+
+A checked-in recording is a behavioral test with no oracle to maintain:
+replay it in CI, and the build fails the moment the program's decisions
+drift from the recorded ones. `demo/agent_planner.golden.jsonl` is one
+run of the planner demo, replayed by the demo test suite.
+
+Because matching is on tool and arguments — never on results — a golden
+log pins *what the agent decided to do*, not what the world answered.
+Widening the demo's actionability rule from `priority > 0` to
+`priority >= 0` files a ticket for a task the recorded run analyzed away,
+and the fifth call diverges:
+
+```
+{replay_divergence, #{kind => args_mismatch, position => 4, log_size => 7,
+  expected => #{tool => create_ticket, args => #{title => <<"Fuzz the parser">>, …}},
+  offered  => #{tool => create_ticket, args => #{title => <<"Tidy whitespace">>, …}}}}
+```
+
+Re-record deliberately, as its own reviewable change: the diff of a
+golden log is the diff of the agent's behavior. Timestamps are the one
+field a replay cannot reproduce (each run stamps its own), so compare a
+recorded stream to its golden with the timestamp values blanked.
+
 ## Tool effects vs regular effects
 
 | | regular effect | tool effect |
@@ -323,8 +377,8 @@ in sight.
 - The standard tools (`llm_call`, `http_get`, `http_post`, `read_file`,
   `write_file`, `shell`) are proven by type-checked fixtures but are not
   importable by user programs until standard-library resolution lands.
-- There is no backend yet: records and replay are exercised by the
-  reference implementation and its conformance suite, not by generated
-  code.
+- Replay is whole-log: a run replays one recorded log from its first call
+  to its last. There is no partial replay (a prefix from the log, the
+  rest live) and no per-tool selection.
 - The audit log has no tamper-proofing (content addressing, chaining,
   signatures); the `schema_version` field reserves the upgrade path.

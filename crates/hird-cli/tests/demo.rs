@@ -4,9 +4,10 @@
 //! End-to-end coverage of the supervised agent planner demo
 //! (`demo/agent_planner.hird`): check, build, run, and effect graph, plus
 //! the dry-run test harness — the demo with mock handlers installed in
-//! place of the demo set — verified against the audit stream on stdout.
-//! BEAM-dependent tests are skipped (with a note) when `erlc` is not on
-//! the `PATH`.
+//! place of the demo set — verified against the audit stream on stdout,
+//! and the golden-log regression harness replaying the checked-in
+//! recording. BEAM-dependent tests are skipped (with a note) when `erlc`
+//! is not on the `PATH`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,11 @@ use std::process::{Command, Output};
 /// The demo source checked into the repository.
 fn demo_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/agent_planner.hird")
+}
+
+/// The recorded demo run checked into the repository as a golden.
+fn golden_log_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/agent_planner.golden.jsonl")
 }
 
 /// Runs the `hird` binary with `args`, panicking if it cannot be spawned.
@@ -48,6 +54,21 @@ fn stderr(output: &Output) -> String {
 /// The captured stdout as UTF-8.
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// Blanks every `"timestamp":"…"` value, which differs across runs.
+fn strip_timestamps(log: &str) -> String {
+    let key = "\"timestamp\":\"";
+    let mut out = String::new();
+    let mut rest = log;
+    while let Some(i) = rest.find(key) {
+        let start = i + key.len();
+        out.push_str(&rest[..start]);
+        let end = start + rest[start..].find('"').expect("unterminated timestamp");
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The `"tool"` field of each audit line on stdout, in emission order.
@@ -294,4 +315,86 @@ fn harness_mocks_tools_and_verifies_the_audit_stream() {
             "missing Log record for {message}: {out}"
         );
     }
+}
+
+/// The golden-log regression harness: the demo replayed against
+/// `demo/agent_planner.golden.jsonl`, a run of the demo recorded with
+/// `--audit-file`. The recorded log is the reference behavior; the
+/// replay is green only while the current compiler and demo make the
+/// same calls, in the same order, with the same arguments.
+#[test]
+fn demo_replays_the_checked_in_golden_log() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("demo_golden_replay");
+    let out_dir = dir.join("out");
+    let replayed = dir.join("replayed.jsonl");
+    let output = hird(&[
+        "run",
+        demo_path().to_str().expect("utf-8 path"),
+        "-o",
+        out_dir.to_str().expect("utf-8 path"),
+        "--replay",
+        golden_log_path().to_str().expect("utf-8 path"),
+        "--audit-file",
+        replayed.to_str().expect("utf-8 path"),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    // Replay consumed the whole log — `--replay` fails a run that leaves
+    // records unread — and audited the recorded sequence back.
+    let golden = fs::read_to_string(golden_log_path()).expect("read the golden log");
+    let replayed = fs::read_to_string(&replayed).expect("read the replayed log");
+    assert_eq!(
+        strip_timestamps(&replayed),
+        strip_timestamps(&golden),
+        "the demo drifted from its recorded run"
+    );
+}
+
+/// The demo with its actionability rule widened to include priority-0
+/// tasks: the same program, one different agent decision.
+fn drifted_source() -> String {
+    let demo = fs::read_to_string(demo_path()).expect("read the demo source");
+    let drifted = demo.replace("if priority > 0", "if priority >= 0");
+    assert_ne!(drifted, demo, "the actionability test was not found");
+    drifted
+}
+
+#[test]
+fn a_drifted_demo_diverges_from_the_golden_log() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("demo_golden_divergence");
+    // The module name is checked against the file name, so the drifted
+    // copy keeps the demo's.
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir).expect("create the source dir");
+    let file = src_dir.join("agent_planner.hird");
+    fs::write(&file, drifted_source()).expect("write the drifted source");
+    let output = hird(&[
+        "run",
+        file.to_str().expect("utf-8 path"),
+        "-o",
+        dir.join("out").to_str().expect("utf-8 path"),
+        "--replay",
+        golden_log_path().to_str().expect("utf-8 path"),
+    ]);
+    assert!(
+        !output.status.success(),
+        "a drifted demo must fail its golden log"
+    );
+
+    // The first four calls match; the fifth files a ticket for the task
+    // the recorded run analyzed away, and the divergence names it.
+    let err = stderr(&output);
+    assert!(err.contains("replay_divergence"), "stderr: {err}");
+    assert!(err.contains("args_mismatch"), "stderr: {err}");
+    assert!(err.contains("position => 4"), "stderr: {err}");
+    assert!(err.contains("Tidy whitespace"), "stderr: {err}");
+    assert!(err.contains("Fuzz the parser"), "stderr: {err}");
 }
