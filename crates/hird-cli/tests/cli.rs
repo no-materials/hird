@@ -78,8 +78,17 @@ fn write(dir: &Path, name: &str, source: &str) -> String {
 }
 
 /// Whether `erlc` can be spawned (BEAM-dependent tests skip otherwise).
+/// Setting `HIRD_REQUIRE_BEAM` refuses the skip: where Erlang is meant to
+/// be installed, a missing toolchain is a failure, not a quiet pass.
 fn erlang_available() -> bool {
-    Command::new("erlc").arg("-version").output().is_ok()
+    if Command::new("erlc").arg("-version").output().is_ok() {
+        return true;
+    }
+    assert!(
+        std::env::var_os("HIRD_REQUIRE_BEAM").is_none(),
+        "HIRD_REQUIRE_BEAM is set but erlc is not on PATH"
+    );
+    false
 }
 
 /// The captured stderr as UTF-8.

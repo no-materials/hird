@@ -52,3 +52,9 @@ dispatcher.
 compiles everything with `erlc -Werror` and runs the eunit suites under
 `test/`, including byte-exact reproduction of the `conformance/v1` audit
 log goldens.
+
+CI runs this script, and then the workspace test suite with `erlc` on
+`PATH`, in the one job that installs Erlang/OTP. That job sets
+`HIRD_REQUIRE_BEAM`, which turns the "skipping: erlc not found on PATH"
+path of the Rust tests into a failure, so a broken toolchain install
+cannot pass as a green run.

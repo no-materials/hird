@@ -533,11 +533,17 @@ fn snapshot_tool_signature_table() {
 // ── erlc validation ──────────────────────────────────────────────
 
 /// Compiles every fixture's generated Erlang with stock `erlc`. Skipped (with
-/// a note) when `erlc` is not on the `PATH`.
+/// a note) when `erlc` is not on the `PATH`, unless `HIRD_REQUIRE_BEAM` is set
+/// — where Erlang is meant to be installed, a missing toolchain is a failure,
+/// not a quiet pass.
 #[test]
 fn generated_erlang_compiles_with_erlc() {
     let erlc = std::process::Command::new("erlc").arg("-version").output();
     if erlc.is_err() {
+        assert!(
+            std::env::var_os("HIRD_REQUIRE_BEAM").is_none(),
+            "HIRD_REQUIRE_BEAM is set but erlc is not on PATH"
+        );
         eprintln!("skipping: erlc not found on PATH");
         return;
     }

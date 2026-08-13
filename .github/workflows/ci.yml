@@ -50,6 +50,11 @@ env:
 # We don't save caches in the merge-group cases, because those caches will never be re-used (apart
 # from the very rare cases where there are multiple PRs in the merge queue).
 # This is because GitHub doesn't share caches between merge queues and the main branch.
+#
+# The BEAM job is the only one with Erlang/OTP installed. Tests that need it self-skip when erlc is
+# absent, so they would pass vacuously in every other job — and would keep passing there if the
+# toolchain install silently broke. HIRD_REQUIRE_BEAM turns those skips into failures, so the job
+# either exercises the BEAM or fails.
 
 name: CI
 
@@ -162,6 +167,48 @@ jobs:
 
       - name: cargo test --doc
         run: cargo test --doc --workspace --locked --all-features --no-fail-fast
+
+  beam:
+    name: erlang runtime and BEAM tests
+    # NOTE: The runtime is platform independent Erlang, and the BEAM-dependent Rust tests shell out
+    #       to the same erlc everywhere, so one OS is enough.
+    runs-on: ubuntu-latest
+    env:
+      # Refuse to skip a BEAM-dependent test in the one job that installs Erlang.
+      HIRD_REQUIRE_BEAM: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # The devshell ships OTP 28; track its latest patch release here.
+      - name: install erlang/otp
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: "28"
+
+      # Compiles the runtime and its suites with `-Werror`, then runs eunit: this is where the
+      # Erlang encoder is checked byte for byte against the `conformance/v1` goldens.
+      - name: runtime eunit suites
+        run: ./runtime/test.sh
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+
+      - name: install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      # The whole workspace, so the tests that build, run and replay programs on the BEAM execute
+      # instead of skipping.
+      - name: cargo nextest
+        run: cargo nextest run --workspace --locked --all-features --no-fail-fast
 
   check-msrv:
     name: cargo check (msrv)
