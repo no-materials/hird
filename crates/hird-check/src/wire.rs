@@ -563,18 +563,7 @@ pub fn decode_record(
     adts: &AdtTable,
 ) -> Result<InvocationRecord, DecodeError> {
     let mut reader = Reader::new(input);
-    reader.skip_ws();
-    reader.expect(b'{')?;
-    reader.key("schema_version")?;
-    let version = reader.integer()?;
-    if version != i64::from(SCHEMA_VERSION) {
-        return Err(reader.error(format!(
-            "unsupported schema_version {version}, expected {SCHEMA_VERSION}"
-        )));
-    }
-    reader.expect(b',')?;
-    reader.key("tool")?;
-    let tool = reader.string()?;
+    let tool = reader.envelope_tool()?;
     reader.expect(b',')?;
     reader.key("args")?;
     let args = reader.value(&sig.args, adts)?;
@@ -610,6 +599,18 @@ pub fn decode_record(
         caller,
         meta,
     })
+}
+
+/// Reads the tool name from a record line's envelope prefix without
+/// decoding the rest — enough to select the [`ToolWireSig`] a full
+/// [`decode_record`] needs.
+///
+/// # Errors
+///
+/// If the envelope prefix is malformed or the `schema_version` is not
+/// [`SCHEMA_VERSION`].
+pub fn peek_tool(input: &str) -> Result<String, DecodeError> {
+    Reader::new(input).envelope_tool()
 }
 
 /// A cursor over the bytes of one wire string.
@@ -664,6 +665,24 @@ impl<'a> Reader<'a> {
         } else {
             Err(self.error(String::from("trailing input after the record")))
         }
+    }
+
+    /// Consumes the envelope prefix through the tool name: `{`, a
+    /// `schema_version` checked against [`SCHEMA_VERSION`], and the `tool`
+    /// key with its string value.
+    fn envelope_tool(&mut self) -> Result<String, DecodeError> {
+        self.skip_ws();
+        self.expect(b'{')?;
+        self.key("schema_version")?;
+        let version = self.integer()?;
+        if version != i64::from(SCHEMA_VERSION) {
+            return Err(self.error(format!(
+                "unsupported schema_version {version}, expected {SCHEMA_VERSION}"
+            )));
+        }
+        self.expect(b',')?;
+        self.key("tool")?;
+        self.string()
     }
 
     /// Consumes the object key `name` and its `:`.

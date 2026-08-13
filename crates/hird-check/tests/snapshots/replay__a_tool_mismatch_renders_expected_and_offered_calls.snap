@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/replay.rs
+expression: report
+---
+replay diverged at position 0 of 3: the log expects `ReadRepo`, the program offered `CreateTicket`
+  expected: ReadRepo {"path":"/home/user/repo"} (caller Planner.plan_repo)
+  offered:  CreateTicket {"body":"Investigate flaky CI on main","title":"Flaky CI"}

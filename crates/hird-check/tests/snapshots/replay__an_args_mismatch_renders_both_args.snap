@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/replay.rs
+expression: report
+---
+replay diverged at position 0 of 3: `ReadRepo` matches but the args differ
+  expected: ReadRepo {"path":"/home/user/repo"} (caller Planner.plan_repo)
+  offered:  ReadRepo {"path":"/other/repo"}

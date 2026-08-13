@@ -1093,6 +1093,11 @@ impl Checker {
             .iter()
             .map(|(key, effect)| (*key, effect.map_args(|arg| self.subst.resolve(arg))))
             .collect();
+        let tools = self
+            .tool_signatures
+            .iter()
+            .map(|(name, ty)| (name.clone(), self.subst.resolve(ty)))
+            .collect();
         let invocation_records = self
             .invocation_records
             .iter()
@@ -1152,6 +1157,7 @@ impl Checker {
             adts,
             effect_rows,
             handled_effects,
+            tools,
             invocation_records,
             diagnostics: self.diags,
         };

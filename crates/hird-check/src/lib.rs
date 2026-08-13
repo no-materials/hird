@@ -31,7 +31,9 @@
 //! [`CheckedFile::invocation_records`]. Tool args and results must be
 //! wire-representable (no function types, no opaque capabilities); the
 //! [`wire`] module is the reference implementation of the audit-log wire
-//! format those records serialise to, and of replay over a recorded log.
+//! format those records serialise to, and of replay over a recorded log,
+//! and the [`replay`] module layers the log-file loader and the run
+//! cursor over it.
 //!
 //! An `actor` declaration registers its message sum type as an ordinary ADT
 //! and the actor itself in a separate actor namespace. `spawn(Actor, args…)`
@@ -78,6 +80,7 @@ mod exhaustive;
 mod infer;
 mod program;
 mod registry;
+pub mod replay;
 mod supervisors;
 pub mod wire;
 
@@ -199,6 +202,12 @@ pub struct CheckedFile {
     /// effect's type arguments are resolved. Lowering reads these to pair an arm
     /// with the effect it handles.
     pub handled_effects: BTreeMap<NodeKey, Effect>,
+    /// Each tool declaration's generated function scheme
+    /// (`(input) → output ! ({Tool<Name>} ∪ declared_row)`), keyed by the
+    /// tool's declared name (`ReadRepo`, not `read_repo`). What the wire
+    /// layer derives a tool's [`wire::ToolWireSig`] from when decoding a
+    /// recorded log.
+    pub tools: BTreeMap<Name, Type>,
     /// Each tool declaration's derived invocation record, keyed by generated
     /// name (`ReadRepo` derives `ReadRepoInvocation`). The record's shape is
     /// `{ tool: String, args: <input>, result: <output>, timestamp: Timestamp,

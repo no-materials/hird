@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/replay.rs
+expression: report
+---
+replay diverged at position 3 of 3: the log is exhausted
+  offered:  ReadRepo {"path":"/home/user/repo"}
