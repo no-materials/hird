@@ -299,6 +299,61 @@ golden log is the diff of the agent's behavior. Timestamps are the one
 field a replay cannot reproduce (each run stamps its own), so compare a
 recorded stream to its golden with the timestamp values blanked.
 
+### Record once, fan out
+
+Because replay serves every tool result from the log, a recording is a
+*fixed environment*. Replay one recorded episode against several
+variants of a program and every arm meets a byte-identical world, so
+whatever the arms do differently is attributable to the programs alone.
+
+Strict-sequential matching then puts every arm on one axis — the
+recording's own positions. An arm that replays green made exactly the
+recorded decisions. An arm that crashes at position K made the episode's
+first K calls, in order, with the same arguments, and then offered
+something else. That makes arms comparable with each other and not only
+with the recording: two arms that part at different positions agree with
+each other up to the earlier of the two.
+
+Fan the planner recording out over the demo and two variants of it, each
+one edit away: an *eager* arm that files a ticket for every task
+(`priority > 0` widened to `priority >= 0`), and an *announce-first* arm
+that announces a ticket before filing it rather than after (the
+`create_ticket` and `log` lines of `file_tickets` swapped).
+
+```sh
+# One directory per arm, each holding an agent_planner.hird — the module
+# name is checked against the file name, so every arm keeps the demo's.
+for arm in arms/*; do
+  hird run "$arm/agent_planner.hird" --replay demo/agent_planner.golden.jsonl
+done
+```
+
+Each arm exits green or crashes with a `replay_divergence`; collected,
+that is the evaluation:
+
+```
+baseline        agreed with all 7 calls
+announce-first  parted at call 2 (tool_mismatch)
+eager           parted at call 4 (args_mismatch)
+```
+
+Read across: both variants make the episode's first two calls. At call 2
+the episode files a ticket — which the eager arm still matches, and the
+announce-first arm does not, logging instead. The baseline is the
+control: it is the program the episode was recorded from, so it replays
+green, and every departure below it belongs to an edit rather than to the
+harness.
+
+This is a pattern, not a product. There is no evaluation subcommand: an
+exit status and a divergence report per arm are the whole harness, and a
+shell loop is the fan-out. The demo test suite runs the example above.
+
+Two limits are worth stating plainly. Matching is on calls and never on
+results, so a fan-out compares *decisions*, not outcomes — an arm is not
+better or worse, only earlier or later to leave the episode. And replay
+stops at the first departure: to see what a variant does after it parts,
+record that variant live with `--audit-file` and diff the two recordings.
+
 ## Tool effects vs regular effects
 
 | | regular effect | tool effect |

@@ -5,9 +5,10 @@
 //! (`demo/agent_planner.hird`): check, build, run, and effect graph, plus
 //! the dry-run test harness — the demo with mock handlers installed in
 //! place of the demo set — verified against the audit stream on stdout,
-//! and the golden-log regression harness replaying the checked-in
-//! recording. BEAM-dependent tests are skipped (with a note) when `erlc`
-//! is not on the `PATH`.
+//! the golden-log regression harness replaying the checked-in recording,
+//! and the record-once fan-out evaluating variants of the demo against
+//! that one recording. BEAM-dependent tests are skipped (with a note)
+//! when `erlc` is not on the `PATH`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -406,4 +407,146 @@ fn a_drifted_demo_diverges_from_the_golden_log() {
     assert!(err.contains("position => 4"), "stderr: {err}");
     assert!(err.contains("Tidy whitespace"), "stderr: {err}");
     assert!(err.contains("Fuzz the parser"), "stderr: {err}");
+}
+
+/// The demo with the ticket and its log line swapped in `file_tickets`:
+/// the same tickets, announced before they are filed instead of after.
+fn announce_first_source() -> String {
+    let demo = fs::read_to_string(demo_path()).expect("read the demo source");
+    let filing = "      let ticket = create_ticket({ title: title, body: body }) in\n";
+    let announcement = "      let logged = log({ level: \"info\", message: title }) in\n";
+    let swapped = demo.replace(
+        &format!("{filing}{announcement}"),
+        &format!("{announcement}{filing}"),
+    );
+    assert_ne!(swapped, demo, "the ticket and its log line were not found");
+    swapped
+}
+
+/// What one arm of a fan-out made of the shared recording.
+#[derive(Debug)]
+enum Outcome {
+    /// The arm replayed the episode to its end: the same calls, in order.
+    Agreed,
+    /// The arm parted from the episode.
+    Parted {
+        /// 0-based position of the first call that differs.
+        position: usize,
+        /// The `replay_divergence` report the run failed with.
+        crash: String,
+    },
+}
+
+/// Replays the golden episode against one variant of the demo. Every arm
+/// meets the same environment — the log answers every tool call — so a
+/// difference in outcome is a difference in the program, nothing else.
+fn replay_arm(name: &str, source: &str) -> Outcome {
+    let dir = scratch(&format!("fanout_{name}"));
+    // The module name is checked against the file name, so every arm
+    // keeps the demo's.
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir).expect("create the source dir");
+    let file = src_dir.join("agent_planner.hird");
+    fs::write(&file, source).expect("write the arm source");
+    let out_dir = dir.join("out");
+    let output = hird(&[
+        "run",
+        file.to_str().expect("utf-8 path"),
+        "-o",
+        out_dir.to_str().expect("utf-8 path"),
+        "--replay",
+        golden_log_path().to_str().expect("utf-8 path"),
+    ]);
+    if output.status.success() {
+        return Outcome::Agreed;
+    }
+    let crash = stderr(&output);
+    let position = crash_field(&crash, "position")
+        .parse()
+        .expect("a numeric divergence position");
+    Outcome::Parted { position, crash }
+}
+
+/// The value of `key => …` in a crash report, read to the first character
+/// that ends an integer or an atom.
+fn crash_field<'a>(crash: &'a str, key: &str) -> &'a str {
+    let rest = crash
+        .split_once(&format!("{key} => "))
+        .unwrap_or_else(|| panic!("no `{key} =>` in the crash report: {crash}"))
+        .1;
+    let end = rest
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+/// One arm's line in the fan-out summary, against an episode of `calls`.
+fn verdict(outcome: &Outcome, calls: usize) -> String {
+    match outcome {
+        Outcome::Agreed => format!("agreed with all {calls} calls"),
+        Outcome::Parted { position, crash } => {
+            format!("parted at call {position} ({})", crash_field(crash, "kind"))
+        }
+    }
+}
+
+/// The record-once fan-out: one recorded episode, several variants of the
+/// program, one shared axis. Replay serves every tool result from the
+/// log, so the environment is identical across arms and the program is
+/// the only variable left; strict-sequential matching then places each
+/// arm on the recording's own positions, which makes the arms comparable
+/// with each other and not just with the recording.
+#[test]
+fn one_recording_fans_out_over_demo_variants() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let demo = fs::read_to_string(demo_path()).expect("read the demo source");
+    let episode = fs::read_to_string(golden_log_path()).expect("read the golden log");
+    let calls = episode.lines().count();
+
+    let baseline = replay_arm("baseline", &demo);
+    let announce_first = replay_arm("announce-first", &announce_first_source());
+    let eager = replay_arm("eager", &drifted_source());
+
+    // The evaluation's output: where each arm's decisions leave the
+    // recorded episode. The baseline is the control — it is the program
+    // the episode was recorded from, so it replays green and every
+    // departure below it belongs to an edit, not to the harness.
+    let summary = [
+        ("baseline", &baseline),
+        ("announce-first", &announce_first),
+        ("eager", &eager),
+    ]
+    .iter()
+    .map(|(name, outcome)| format!("{name:<14}  {}", verdict(outcome, calls)))
+    .collect::<Vec<String>>()
+    .join("\n");
+    println!("{summary}");
+    assert_eq!(
+        summary,
+        "baseline        agreed with all 7 calls\n\
+         announce-first  parted at call 2 (tool_mismatch)\n\
+         eager           parted at call 4 (args_mismatch)",
+        "the fan-out summary"
+    );
+
+    // Read across the shared axis: both variants make the episode's first
+    // two calls, so that is as far as they agree with each other. At call
+    // 2 the episode files a ticket — which the eager arm still matched —
+    // and the announce-first arm logs instead.
+    let Outcome::Parted { position, crash } = &announce_first else {
+        panic!("the announce-first arm must part from the episode");
+    };
+    assert_eq!(
+        tool_sequence(&episode)[*position],
+        "CreateTicket",
+        "the episode's call at the parting position"
+    );
+    assert!(
+        crash.contains("tool => create_ticket"),
+        "the expected call: {crash}"
+    );
+    assert!(crash.contains("tool => log"), "the offered call: {crash}");
 }
