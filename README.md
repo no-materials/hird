@@ -13,6 +13,16 @@ Python agent frameworks hide side effects in coroutine soup; Hirð makes
 every tool call, every actor message, and every supervisor boundary
 visible in the types and queryable by tooling.
 
+**What that buys: deterministic replay of real agent traffic.** Every
+tool call is recorded unconditionally in a canonical wire format, so a
+recorded run is a file you can replay — the same calls, in the same
+order, each served the result the recorded run got back, with no service
+contacted. That is a regression test with no oracle to maintain, a bug
+report that reproduces, and a fixed environment to evaluate a change in.
+It is also not something you can retrofit onto a framework that hides
+its side effects: it needs the effects in the types and a single
+dispatch path underneath them.
+
 **Status**: pre-1.0 and experimental. The v0.1 compiler pipeline works
 end to end (the demos below type-check, compile to Erlang, and run on
 BEAM), but the language surface is unstable, nothing is published to
@@ -145,6 +155,48 @@ re-runs the same demo with mock handlers swapped into the `install`
 block and asserts on the audit JSON lines — the same program, the same
 unconditional audit stream, differing only in the installed handler
 set.
+
+## Record and replay a run
+
+Because the stream is complete — every call, full arguments, tagged
+result — a recorded run is a replayable environment. Record one to a
+file instead of stdout:
+
+```sh
+hird run demo/agent_planner.hird --audit-file run.jsonl
+```
+
+Then feed it back as the tool implementation:
+
+```sh
+hird run demo/agent_planner.hird --replay run.jsonl
+```
+
+The replay cursor outranks every `handle` and `install` block, so no
+tool runs and no service is contacted; each call receives its logged
+result, failures included. Matching is strict: the call at each position
+must be the one the log recorded there, or the run crashes with a
+`replay_divergence` naming the position, the recorded call and the
+offered one — and a log the run did not read to the end fails too.
+
+So a checked-in recording is a regression test with no oracle to
+maintain: `demo/agent_planner.golden.jsonl` is one run of the planner,
+replayed by the demo suite in CI, and the build fails the moment the
+program's decisions drift from it. And because the log serves every
+result, one recording is a fixed environment to compare variants of a
+program in — every arm meets a byte-identical world, so what differs is
+attributable to the programs:
+
+```
+baseline        agreed with all 7 calls
+announce-first  parted at call 2 (tool_mismatch)
+eager           parted at call 4 (args_mismatch)
+```
+
+[`docs/audit-evidence.md`](docs/audit-evidence.md) states what the
+stream guarantees and what it does not;
+[`docs/tool-effects.md`](docs/tool-effects.md) is the normative format
+and replay specification.
 
 ## LLM tooling (MCP)
 
@@ -290,7 +342,7 @@ cd tree-sitter-hird && tree-sitter generate && tree-sitter test
 - `demo/` — the v0.1 demo programs.
 - `conformance/` — golden files for the audit-log wire format.
 - `docs/` — normative specifications (grammar, error model, tool
-  effects wire format).
+  effects wire format) and the audit stream's guarantees.
 - `phrasebook.md` — dense surface-syntax reference.
 - `DECISIONS.md` — architecture decision records.
 - `.beads/README.md` — the issue tracker and roadmap, driven by `bd`.

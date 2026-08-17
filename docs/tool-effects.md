@@ -7,6 +7,9 @@ interact with them, and it is the **normative specification** of the audit
 log wire format and of replay semantics. The reference implementation is
 the `wire` module of `hird-check`; the golden files under `conformance/`
 are the byte-exact contract any other implementation must reproduce.
+[`audit-evidence.md`](audit-evidence.md) reads the same stream from the
+other side — what it guarantees, what it does not, and the policy under
+which the format may change.
 
 ## Why tool effects exist
 
@@ -214,6 +217,8 @@ v0.1 provides structured, deterministic, diffable logs — no
 tamper-proofing. `schema_version` is required on every record precisely so
 later versions can add content addressing, record chaining, or signatures
 without ambiguity. A decoder for version 1 must reject other versions.
+Which changes require a bump and which do not is the stability policy in
+[`audit-evidence.md`](audit-evidence.md#wire-format-stability-policy).
 
 ## Replay semantics
 
