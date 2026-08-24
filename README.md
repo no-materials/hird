@@ -359,6 +359,10 @@ cargo test --workspace --all-features
 
 BEAM-dependent tests skip themselves when `erlc` is not on `PATH`.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest: the dev shell, the
+checks CI runs beyond those three, what "done" means, and how to report
+a bug or file an issue from outside the repository.
+
 ## License
 
 Licensed under either of
