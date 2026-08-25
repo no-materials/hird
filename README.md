@@ -200,6 +200,8 @@ and replay specification.
 
 ## LLM tooling (MCP)
 
+[![hird-mcp on Glama](https://glama.ai/mcp/servers/no-materials/hird/badges/score.svg)](https://glama.ai/mcp/servers/no-materials/hird)
+
 `hird-mcp` is a Model Context Protocol server over the same compiler
 pipeline, speaking stdio. It gives LLM agents structured compiler
 queries instead of source-reading guesswork: `infer_type`,
