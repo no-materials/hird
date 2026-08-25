@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod build;
+mod demo;
 mod pipeline;
 mod report;
 mod text;
@@ -79,6 +80,17 @@ enum Command {
         #[arg(last = true)]
         args: Vec<String>,
     },
+    /// Record one run of the built-in demo and replay it against variants.
+    ///
+    /// Writes the demo planner and two edited variants of it into the
+    /// output directory, records one run, replays that recording against
+    /// all three, and prints where each one parts from the recording.
+    Demo {
+        /// The directory the demo's sources, recording, and build output
+        /// go in.
+        #[arg(short, long, default_value = "_build/hird-demo")]
+        out_dir: PathBuf,
+    },
     /// Dump the typed AST of one file.
     EmitAst {
         /// A `.hird` file.
@@ -140,6 +152,10 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             let output = build_input(&input, &out_dir, audit_file.as_deref(), replay.as_deref())?;
             let status = build::run(&output)?;
             Ok(u8::try_from(status).map_or(ExitCode::FAILURE, ExitCode::from))
+        }
+        Command::Demo { out_dir } => {
+            demo::run(&out_dir)?;
+            Ok(ExitCode::SUCCESS)
         }
         Command::EmitAst { input, json } => {
             if input.is_dir() {

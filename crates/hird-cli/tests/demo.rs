@@ -6,8 +6,9 @@
 //! the dry-run test harness — the demo with mock handlers installed in
 //! place of the demo set — verified against the audit stream on stdout,
 //! the golden-log regression harness replaying the checked-in recording,
-//! and the record-once fan-out evaluating variants of the demo against
-//! that one recording. BEAM-dependent tests are skipped (with a note)
+//! the record-once fan-out evaluating variants of the demo against that
+//! one recording, and the no-argument `hird demo` subcommand that records
+//! and fans out on its own. BEAM-dependent tests are skipped (with a note)
 //! when `erlc` is not on the `PATH`.
 
 use std::fs;
@@ -549,4 +550,47 @@ fn one_recording_fans_out_over_demo_variants() {
         "the expected call: {crash}"
     );
     assert!(crash.contains("tool => log"), "the offered call: {crash}");
+}
+
+/// The no-argument demonstration: `hird demo` writes the embedded planner
+/// and its variants into a directory of its own, records one run of the
+/// planner, replays that recording against every variant, and prints the
+/// divergence table. Nothing about the invocation names a file, and the
+/// episode each arm is evaluated against is the one the command just
+/// recorded.
+#[test]
+fn the_demo_subcommand_records_a_run_and_prints_the_divergence_table() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("demo_subcommand");
+    let out_dir = dir.join("out");
+    let out_arg = out_dir.to_str().expect("utf-8 path").to_owned();
+
+    let output = hird(&["demo", "-o", &out_arg]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let table = "  baseline        agreed with all 7 calls\n\
+                 \x20 announce-first  parted at call 2 (tool_mismatch)\n\
+                 \x20 eager           parted at call 4 (args_mismatch)\n";
+    let out = stdout(&output);
+    assert!(out.contains(table), "stdout: {out}");
+
+    // The episode came from this run rather than from the tree — and it
+    // is the checked-in recording again, timestamps aside.
+    let recording =
+        fs::read_to_string(out_dir.join("recording.jsonl")).expect("read the recording");
+    let golden = fs::read_to_string(golden_log_path()).expect("read the golden log");
+    assert_eq!(
+        strip_timestamps(&recording),
+        strip_timestamps(&golden),
+        "the recorded episode"
+    );
+
+    // Running again re-records: the audit sink appends, so a stale
+    // episode would otherwise be replayed along with the new one.
+    let again = hird(&["demo", "-o", &out_arg]);
+    assert!(again.status.success(), "stderr: {}", stderr(&again));
+    let out = stdout(&again);
+    assert!(out.contains(table), "stdout: {out}");
 }

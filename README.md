@@ -23,6 +23,11 @@ It is also not something you can retrofit onto a framework that hides
 its side effects: it needs the effects in the types and a single
 dispatch path underneath them.
 
+`hird demo` is that claim in one command, with no file argument and no
+service contacted: it records a run of the demo planner, replays that
+one recording against three variants of the program, and prints where
+each one parted from the recording.
+
 **Status**: pre-1.0 and experimental. The v0.1 compiler pipeline works
 end to end (the demos below type-check, compile to Erlang, and run on
 BEAM), but the language surface is unstable, nothing is published to
@@ -94,6 +99,7 @@ legal input.
 | `hird check <file-or-dir>` | type- and effect-check; coded diagnostics |
 | `hird build <file>` | emit readable Erlang, compile it to `.beam` |
 | `hird run <file>` | build, then execute `fn main` on BEAM |
+| `hird demo` | record one run of the built-in demo, replay it against variants of the program |
 | `hird emit-ast <file> --json` | the typed IR of every definition |
 | `hird emit-effect-graph <file> --json` | actors, mailboxes, handler rows, supervisors, tools |
 
@@ -192,6 +198,11 @@ baseline        agreed with all 7 calls
 announce-first  parted at call 2 (tool_mismatch)
 eager           parted at call 4 (args_mismatch)
 ```
+
+That evaluation is `hird demo`: no arguments, nothing to install beyond
+Erlang, and nothing checked in that it has to be trusted about — it
+writes the planner and the two edited variants into `_build/hird-demo`,
+records the episode itself, and replays it against all three.
 
 [`docs/audit-evidence.md`](docs/audit-evidence.md) states what the
 stream guarantees and what it does not;
