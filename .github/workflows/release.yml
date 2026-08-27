@@ -24,7 +24,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          cat > notes.md <<'EOF'
+          # The tag's section of CHANGELOG.md — between its `## [x.y.z]`
+          # heading and the next one — leads the notes; a version without an
+          # entry gets the install block alone.
+          awk -v version="${TAG#v}" '
+            $0 ~ "^## \\[" version "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > changes.md
+          : > notes.md
+          if [ -s changes.md ]; then
+            { echo "## Changes"; cat changes.md; } > notes.md
+          fi
+          cat >> notes.md <<'EOF'
           ## Install
 
           Download the archive for your platform below and extract it; each one
