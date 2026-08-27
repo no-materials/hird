@@ -1,0 +1,10 @@
+module App
+
+use Util.{Path, double}
+use Util
+
+fn run(n: Int) -> Int = double(n)
+
+fn describe(p: Path) -> String = Util.show(p)
+
+fn local(n: Int) -> Int = run(n)

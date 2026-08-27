@@ -3,11 +3,15 @@
 
 //! The introspection tools the server exposes, and their dispatch.
 //!
-//! Every tool takes a `file` argument, compiles it through [`Cache`], and
-//! answers from the compiled artifacts: the checker's side tables, the
-//! lowered IR, and the actor/effect graph. Failures are [`ToolError`]s — a
-//! stable machine code, a message, and optional structured data — which the
-//! server renders as `isError` tool results, never as protocol errors.
+//! Every tool takes a `file` argument, compiles its directory through
+//! [`Cache`], and answers from the compiled artifacts: the checker's side
+//! tables, the lowered IR, and the actor/effect graph. Symbol arguments
+//! resolve as the file's own source would — a local definition, a
+//! selectively imported member, or `Qualifier.member` — so the answer may
+//! come from, and name, a sibling module's file. Failures are
+//! [`ToolError`]s — a stable machine code, a message, and optional
+//! structured data — which the server renders as `isError` tool results,
+//! never as protocol errors.
 
 use std::collections::BTreeSet;
 
@@ -16,7 +20,7 @@ use hird_ir::{ActorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectRowRef, IrDecl, IrEx
 use hird_types::{EffectRow, Type};
 use serde_json::{Value, json};
 
-use crate::analysis::{Analysis, Cache, offset_of, tool_fn_name};
+use crate::analysis::{Cache, Module, Query, offset_of, tool_fn_name};
 
 /// A failed tool call: a stable code, a message, and optional details.
 #[derive(Debug)]
@@ -64,7 +68,20 @@ const DEFAULT_BUDGET: usize = 400;
 
 /// The tool descriptors served by `tools/list`.
 pub(crate) fn descriptors() -> Value {
-    let file = json!({ "type": "string", "description": "Path to a .hird source file." });
+    let file = json!({
+        "type": "string",
+        "description": "Path to a .hird source file. Its directory's .hird files are compiled \
+                        together as one program, so imported names resolve.",
+    });
+    let symbol = |what: &str| {
+        json!({
+            "type": "string",
+            "description": format!(
+                "{what}, as the file's source would write it: a local definition, a member \
+                 imported with `use Mod.{{name}}`, or `Qualifier.name` through `use Mod`."
+            ),
+        })
+    };
     json!([
         {
             "name": "infer_type",
@@ -88,7 +105,7 @@ pub(crate) fn descriptors() -> Value {
                 "type": "object",
                 "properties": {
                     "file": file,
-                    "name": { "type": "string", "description": "The definition's name." },
+                    "name": symbol("The definition's name"),
                 },
                 "required": ["file", "name"],
             },
@@ -101,7 +118,7 @@ pub(crate) fn descriptors() -> Value {
                 "type": "object",
                 "properties": {
                     "file": file,
-                    "fn_name": { "type": "string", "description": "The function's name." },
+                    "fn_name": symbol("The function's name"),
                 },
                 "required": ["file", "fn_name"],
             },
@@ -113,7 +130,7 @@ pub(crate) fn descriptors() -> Value {
                 "type": "object",
                 "properties": {
                     "file": file,
-                    "name": { "type": "string", "description": "The definition's name." },
+                    "name": symbol("The definition's name"),
                 },
                 "required": ["file", "name"],
             },
@@ -153,7 +170,7 @@ pub(crate) fn descriptors() -> Value {
                 "type": "object",
                 "properties": {
                     "file": file,
-                    "name": { "type": "string", "description": "The symbol's name." },
+                    "name": symbol("The symbol's name"),
                     "budget": {
                         "type": "integer",
                         "description": "Approximate token budget for the summary (default 400).",
@@ -193,16 +210,16 @@ pub(crate) fn is_known(tool: &str) -> bool {
 
 /// Dispatches one tool call.
 pub(crate) fn call(cache: &mut Cache, tool: &str, args: &Value) -> Result<Value, ToolError> {
-    let analysis = cache.analysis(str_arg(args, "file")?)?;
+    let query = cache.query(str_arg(args, "file")?)?;
     match tool {
-        "infer_type" => infer_type(analysis, args),
-        "lookup_definition" => lookup_definition(analysis, args),
-        "explain_effect_row" => explain_effect_row(analysis, args),
-        "render_ir_fragment" => render_ir_fragment(analysis, args),
-        "explain_actor_protocol" => explain_actor_protocol(analysis, args),
-        "emit_actor_effect_graph" => emit_actor_effect_graph(analysis, args),
-        "get_context_for_symbol" => get_context_for_symbol(analysis, args),
-        "get_context_budget" => Ok(get_context_budget(analysis)),
+        "infer_type" => infer_type(query, args),
+        "lookup_definition" => lookup_definition(query, args),
+        "explain_effect_row" => explain_effect_row(query, args),
+        "render_ir_fragment" => render_ir_fragment(query, args),
+        "explain_actor_protocol" => explain_actor_protocol(query, args),
+        "emit_actor_effect_graph" => emit_actor_effect_graph(query, args),
+        "get_context_for_symbol" => get_context_for_symbol(query, args),
+        "get_context_budget" => get_context_budget(query),
         _ => Err(ToolError::new(
             "invalid_params",
             format!("unknown tool `{tool}`"),
@@ -214,30 +231,34 @@ pub(crate) fn call(cache: &mut Cache, tool: &str, args: &Value) -> Result<Value,
 
 /// `infer_type(file, line, column)` — the inferred type (and effect row, for
 /// function-typed expressions) at a source location.
-fn infer_type(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
+fn infer_type(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let module = query.module;
     let line = usize_arg(args, "line")?;
     let column = usize_arg(args, "column")?;
-    let offset = offset_of(&analysis.source, line, column).ok_or_else(|| {
+    let offset = offset_of(&module.source, line, column).ok_or_else(|| {
         ToolError::new(
             "invalid_params",
-            format!("{line}:{column} is outside `{}`", analysis.file),
+            format!("{line}:{column} is outside `{}`", module.file),
         )
     })?;
-    let token = analysis
+    let token = module
         .token_at(offset)
         .ok_or_else(|| ToolError::new("not_found", format!("no token at {line}:{column}")))?;
-    let ty = analysis
+    let ty = module
         .checked
         .type_at(NodeKey::of_token(&token))
         .or_else(|| {
             token
                 .ancestors()
-                .find_map(|node| analysis.checked.type_at(NodeKey::of_node(node)))
+                .find_map(|node| module.checked.type_at(NodeKey::of_node(node)))
         })
         .or_else(|| {
+            // A name outside any expression (a declaration or `use` member):
+            // its binding, wherever it is defined.
             (token.kind() == hird_parse::SyntaxKind::IDENT)
-                .then(|| analysis.checked.bindings.get(token.text()))
+                .then(|| query.resolve(token.text()))
                 .flatten()
+                .and_then(|(defining, name)| defining.checked.bindings.get(name))
         })
         .ok_or_else(|| {
             ToolError::new(
@@ -248,7 +269,7 @@ fn infer_type(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
         .normalized();
     let effect_row = fn_row(&ty).map_or_else(|| String::from("{}"), |row| format!("{row}"));
     Ok(json!({
-        "file": analysis.file,
+        "file": module.file,
         "line": line,
         "column": column,
         "token": token.text(),
@@ -259,25 +280,28 @@ fn infer_type(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
 
 /// `lookup_definition(file, name)` — location, type, doc, and kind of a
 /// top-level definition.
-fn lookup_definition(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let name = str_arg(args, "name")?;
-    let definition = analysis
+fn lookup_definition(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let requested = str_arg(args, "name")?;
+    let (module, name) = query
+        .resolve(requested)
+        .ok_or_else(|| not_found(query, requested))?;
+    let definition = module
         .definitions
         .iter()
         .find(|d| d.name == name)
-        .ok_or_else(|| not_found(analysis, name))?;
-    let ty = analysis
+        .ok_or_else(|| not_found(query, name))?;
+    let ty = module
         .checked
         .bindings
         .get(name)
         .or_else(|| {
             (definition.kind == "tool")
-                .then(|| analysis.checked.bindings.get(&tool_fn_name(name)))
+                .then(|| module.checked.bindings.get(&tool_fn_name(name)))
                 .flatten()
         })
         .map(|ty| format!("{}", ty.normalized()));
     Ok(json!({
-        "file": analysis.file,
+        "file": module.file,
         "name": definition.name,
         "kind": definition.kind,
         "line": definition.line,
@@ -288,13 +312,16 @@ fn lookup_definition(analysis: &Analysis, args: &Value) -> Result<Value, ToolErr
 
 /// `explain_effect_row(file, fn_name)` — a function's effect row with each
 /// effect explained.
-fn explain_effect_row(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let name = str_arg(args, "fn_name")?;
-    let ty = analysis
+fn explain_effect_row(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let requested = str_arg(args, "fn_name")?;
+    let (module, name) = query
+        .resolve(requested)
+        .ok_or_else(|| not_found(query, requested))?;
+    let ty = module
         .checked
         .bindings
         .get(name)
-        .ok_or_else(|| not_found(analysis, name))?
+        .ok_or_else(|| not_found(query, requested))?
         .normalized();
     let row = fn_row(&ty).ok_or_else(|| {
         ToolError::new(
@@ -316,7 +343,7 @@ fn explain_effect_row(analysis: &Analysis, args: &Value) -> Result<Value, ToolEr
         .collect();
     let open = row.tail().is_some();
     Ok(json!({
-        "file": analysis.file,
+        "file": module.file,
         "name": name,
         "type": format!("{ty}"),
         "effect_row": format!("{row}"),
@@ -327,13 +354,13 @@ fn explain_effect_row(analysis: &Analysis, args: &Value) -> Result<Value, ToolEr
 }
 
 /// `render_ir_fragment(file, name)` — the typed IR of one definition.
-fn render_ir_fragment(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let name = str_arg(args, "name")?;
-    let decl = find_decl(analysis, name).ok_or_else(|| not_found(analysis, name))?;
+fn render_ir_fragment(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let (module, decl) = find_decl(query, str_arg(args, "name")?)?;
     let ir = serde_json::to_value(decl)
         .map_err(|e| ToolError::new("internal", format!("cannot serialize IR: {e}")))?;
     Ok(json!({
-        "module": analysis.ir.name,
+        "file": module.file,
+        "module": module.name,
         "name": decl_name(decl),
         "ir": ir,
     }))
@@ -341,14 +368,14 @@ fn render_ir_fragment(analysis: &Analysis, args: &Value) -> Result<Value, ToolEr
 
 /// `explain_actor_protocol(file, actor_name)` — an actor's mailbox, state,
 /// init, handlers, and effect summary.
-fn explain_actor_protocol(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let name = str_arg(args, "actor_name")?;
-    let actor = find_actor(analysis, name)?;
+fn explain_actor_protocol(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let module = query.module;
+    let actor = find_actor(module, str_arg(args, "actor_name")?)?;
     let actor = serde_json::to_value(actor)
         .map_err(|e| ToolError::new("internal", format!("cannot serialize actor: {e}")))?;
     Ok(json!({
-        "module": analysis.graph.module,
-        "file": analysis.file,
+        "module": module.name,
+        "file": module.file,
         "actor": actor,
     }))
 }
@@ -357,9 +384,9 @@ fn explain_actor_protocol(analysis: &Analysis, args: &Value) -> Result<Value, To
 /// one actor: actors (following `Send`/`Await`/`Spawn` message types),
 /// supervisors of included actors (and their whole child sets), and every
 /// tool named by an included actor's effect summary.
-fn emit_actor_effect_graph(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let root = find_actor(analysis, str_arg(args, "actor_name")?)?;
-    let graph = &analysis.graph;
+fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let root = find_actor(query.module, str_arg(args, "actor_name")?)?;
+    let graph = query.module.graph()?;
 
     let mut actors: BTreeSet<&str> = BTreeSet::from([root.name.as_str()]);
     let mut supervisors: BTreeSet<&str> = BTreeSet::new();
@@ -442,21 +469,20 @@ fn emit_actor_effect_graph(analysis: &Analysis, args: &Value) -> Result<Value, T
 /// `get_context_for_symbol(file, name, budget)` — a prompt-ready summary of
 /// a symbol, assembled section by section (signature, effects, doc, callers,
 /// callees) while it fits the token budget.
-fn get_context_for_symbol(analysis: &Analysis, args: &Value) -> Result<Value, ToolError> {
-    let name = str_arg(args, "name")?;
+fn get_context_for_symbol(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
     let budget = match args.get("budget") {
         Some(_) => usize_arg(args, "budget")?,
         None => DEFAULT_BUDGET,
     };
-    let decl = find_decl(analysis, name).ok_or_else(|| not_found(analysis, name))?;
+    let (module, decl) = find_decl(query, str_arg(args, "name")?)?;
     let decl_name = decl_name(decl);
     let kind = decl_kind(decl);
 
-    let mut sections: Vec<(&str, String)> = vec![("signature", header_line(analysis, decl))];
-    if let Some(row) = effects_line(analysis, decl) {
+    let mut sections: Vec<(&str, String)> = vec![("signature", header_line(module, decl))];
+    if let Some(row) = effects_line(module, decl) {
         sections.push(("effects", row));
     }
-    if let Some(doc) = analysis
+    if let Some(doc) = module
         .definitions
         .iter()
         .find(|d| d.name == decl_name && d.doc.is_some())
@@ -464,7 +490,7 @@ fn get_context_for_symbol(analysis: &Analysis, args: &Value) -> Result<Value, To
     {
         sections.push(("doc", format!("doc: {doc}")));
     }
-    let (callers, callees) = call_graph(analysis, decl);
+    let (callers, callees) = call_graph(query, module, decl);
     if !callers.is_empty() {
         sections.push(("callers", format!("callers: {}", callers.join(", "))));
     }
@@ -495,7 +521,7 @@ fn get_context_for_symbol(analysis: &Analysis, args: &Value) -> Result<Value, To
     }
 
     Ok(json!({
-        "file": analysis.file,
+        "file": module.file,
         "symbol": decl_name,
         "kind": kind,
         "budget": budget,
@@ -507,20 +533,21 @@ fn get_context_for_symbol(analysis: &Analysis, args: &Value) -> Result<Value, To
 
 /// `get_context_budget(file)` — approximate per-category token costs of the
 /// file's declarations, at ~4 characters per token.
-fn get_context_budget(analysis: &Analysis) -> Value {
-    let graph = &analysis.graph;
+fn get_context_budget(query: Query<'_>) -> Result<Value, ToolError> {
+    let module = query.module;
+    let graph = module.graph()?;
     let mut types = 0;
     let mut functions = 0;
     let mut effects: BTreeSet<String> = BTreeSet::new();
-    for decl in &analysis.ir.declarations {
+    for decl in &module.ir()?.declarations {
         match decl {
-            IrDecl::Type(_) => types += estimate_tokens(&header_line(analysis, decl)),
+            IrDecl::Type(_) => types += estimate_tokens(&header_line(module, decl)),
             IrDecl::Fn(_) | IrDecl::Extern(_) => {
-                functions += estimate_tokens(&header_line(analysis, decl));
+                functions += estimate_tokens(&header_line(module, decl));
             }
             IrDecl::Tool(_) | IrDecl::Actor(_) | IrDecl::Supervisor(_) => {}
         }
-        if let Some(ty) = analysis.checked.bindings.get(decl_name(decl)) {
+        if let Some(ty) = module.checked.bindings.get(decl_name(decl)) {
             let ty = ty.normalized();
             if let Some(row) = fn_row(&ty) {
                 effects.extend(row.effects().map(|e| format!("{e}")));
@@ -573,9 +600,9 @@ fn get_context_budget(analysis: &Analysis) -> Value {
         .sum();
     let effects: usize = effects.iter().map(|e| estimate_tokens(e)).sum();
     let total = types + effects + actors + supervisors + tools + functions;
-    json!({
-        "file": analysis.file,
-        "module": analysis.ir.name,
+    Ok(json!({
+        "file": module.file,
+        "module": module.name,
         "approx_tokens": {
             "types": types,
             "effects": effects,
@@ -586,7 +613,7 @@ fn get_context_budget(analysis: &Analysis) -> Value {
             "total": total,
         },
         "note": "approximate, at ~4 characters per token",
-    })
+    }))
 }
 
 // ── shared helpers ───────────────────────────────────────────────
@@ -614,16 +641,12 @@ fn usize_arg(args: &Value, name: &str) -> Result<usize, ToolError> {
         })
 }
 
-/// A `not_found` error for `name`, listing the file's definition names.
-fn not_found(analysis: &Analysis, name: &str) -> ToolError {
-    let available: BTreeSet<&str> = analysis
-        .definitions
-        .iter()
-        .map(|d| d.name.as_str())
-        .collect();
+/// A `not_found` error for `name`, listing the names in the file's scope.
+fn not_found(query: Query<'_>, name: &str) -> ToolError {
+    let available: BTreeSet<&str> = query.names_in_scope().collect();
     ToolError::with_data(
         "not_found",
-        format!("`{name}` is not defined in `{}`", analysis.file),
+        format!("`{name}` is not defined in `{}`", query.module.file),
         json!({ "available": available }),
     )
 }
@@ -637,35 +660,33 @@ fn fn_row(ty: &Type) -> Option<&EffectRow> {
     }
 }
 
-/// The top-level IR declaration named `name`; a tool also resolves through
-/// its generated function name.
-fn find_decl<'a>(analysis: &'a Analysis, name: &str) -> Option<&'a IrDecl> {
-    analysis.ir.declarations.iter().find(|decl| {
-        decl_name(decl) == name
-            || matches!(decl, IrDecl::Tool(tool) if tool_fn_name(&tool.name) == name)
-    })
+/// The top-level IR declaration `name` resolves to, with its defining
+/// module; a tool also resolves through its generated function name.
+fn find_decl<'a>(query: Query<'a>, name: &str) -> Result<(&'a Module, &'a IrDecl), ToolError> {
+    let (module, member) = query.resolve(name).ok_or_else(|| not_found(query, name))?;
+    module
+        .ir()?
+        .declarations
+        .iter()
+        .find(|decl| {
+            decl_name(decl) == member
+                || matches!(decl, IrDecl::Tool(tool) if tool_fn_name(&tool.name) == member)
+        })
+        .map(|decl| (module, decl))
+        .ok_or_else(|| not_found(query, name))
 }
 
 /// The actor node named `name`, or a `not_found` error listing the actors.
-fn find_actor<'a>(analysis: &'a Analysis, name: &str) -> Result<&'a ActorNode, ToolError> {
-    analysis
-        .graph
-        .actors
-        .iter()
-        .find(|a| a.name == name)
-        .ok_or_else(|| {
-            let available: Vec<&str> = analysis
-                .graph
-                .actors
-                .iter()
-                .map(|a| a.name.as_str())
-                .collect();
-            ToolError::with_data(
-                "not_found",
-                format!("`{name}` is not an actor in `{}`", analysis.file),
-                json!({ "available_actors": available }),
-            )
-        })
+fn find_actor<'a>(module: &'a Module, name: &str) -> Result<&'a ActorNode, ToolError> {
+    let graph = module.graph()?;
+    graph.actors.iter().find(|a| a.name == name).ok_or_else(|| {
+        let available: Vec<&str> = graph.actors.iter().map(|a| a.name.as_str()).collect();
+        ToolError::with_data(
+            "not_found",
+            format!("`{name}` is not an actor in `{}`", module.file),
+            json!({ "available_actors": available }),
+        )
+    })
 }
 
 /// The name a declaration binds.
@@ -693,9 +714,10 @@ fn decl_kind(decl: &IrDecl) -> &'static str {
 }
 
 /// The one-line signature of a declaration, for summaries and budgets.
-fn header_line(analysis: &Analysis, decl: &IrDecl) -> String {
+fn header_line(module: &Module, decl: &IrDecl) -> String {
+    let graph = module.graph().ok();
     match decl {
-        IrDecl::Fn(d) => format!("fn {} : {}", d.name, binding_type(analysis, &d.name)),
+        IrDecl::Fn(d) => format!("fn {} : {}", d.name, binding_type(module, &d.name)),
         IrDecl::Extern(d) => format!("extern {} : {}", d.name, d.ty.normalized()),
         IrDecl::Type(d) => {
             let params = if d.params.is_empty() {
@@ -725,11 +747,8 @@ fn header_line(analysis: &Analysis, decl: &IrDecl) -> String {
                 .join(" | ");
             format!("type {}{params} = {constructors}", d.name)
         }
-        IrDecl::Tool(d) => analysis
-            .graph
-            .tools
-            .iter()
-            .find(|t| t.name == d.name)
+        IrDecl::Tool(d) => graph
+            .and_then(|g| g.tools.iter().find(|t| t.name == d.name))
             .map_or_else(
                 || format!("tool {}", d.name),
                 |t| {
@@ -739,11 +758,8 @@ fn header_line(analysis: &Analysis, decl: &IrDecl) -> String {
                     )
                 },
             ),
-        IrDecl::Actor(d) => analysis
-            .graph
-            .actors
-            .iter()
-            .find(|a| a.name == d.name)
+        IrDecl::Actor(d) => graph
+            .and_then(|g| g.actors.iter().find(|a| a.name == d.name))
             .map_or_else(|| format!("actor {}", d.name), actor_header),
         IrDecl::Supervisor(d) => format!(
             "supervisor {} — {}, intensity {}/{}s, children: {}",
@@ -790,14 +806,14 @@ fn actor_header(actor: &ActorNode) -> String {
 }
 
 /// The `effects: {…}` summary line of a declaration, when it has a row.
-fn effects_line(analysis: &Analysis, decl: &IrDecl) -> Option<String> {
+fn effects_line(module: &Module, decl: &IrDecl) -> Option<String> {
     let row = match decl {
         IrDecl::Fn(d) => Some(format!("{}", d.effect_row)),
         IrDecl::Extern(d) => fn_row(&d.ty).map(|row| format!("{row}")),
         IrDecl::Tool(d) => {
             // The generated function's full row, including the implicit
             // `Tool<name>` effect.
-            let ty = analysis
+            let ty = module
                 .checked
                 .bindings
                 .get(&tool_fn_name(&d.name))?
@@ -812,38 +828,58 @@ fn effects_line(analysis: &Analysis, decl: &IrDecl) -> Option<String> {
 }
 
 /// The normalized bound type of `name`, or `?` when the checker has none.
-fn binding_type(analysis: &Analysis, name: &str) -> String {
-    analysis
+fn binding_type(module: &Module, name: &str) -> String {
+    module
         .checked
         .bindings
         .get(name)
         .map_or_else(|| String::from("?"), |ty| format!("{}", ty.normalized()))
 }
 
-/// The callers and callees of a declaration, as sorted top-level names.
-fn call_graph(analysis: &Analysis, decl: &IrDecl) -> (Vec<String>, Vec<String>) {
+/// The callers and callees of `module`'s declaration `decl`, as sorted
+/// top-level names. Callers are searched program-wide, through each
+/// module's imports (`Util.double` in a sibling counts as a call of
+/// `double`); callees are the names the body references, as written, that
+/// resolve in `module` — its own declarations, selectively imported members,
+/// and qualified members of whole-module imports.
+fn call_graph(query: Query<'_>, module: &Module, decl: &IrDecl) -> (Vec<String>, Vec<String>) {
     let name = decl_name(decl);
     let mut aliases: BTreeSet<String> = BTreeSet::from([String::from(name)]);
     if let IrDecl::Tool(tool) = decl {
         aliases.insert(tool_fn_name(&tool.name));
     }
-    let known: BTreeSet<String> = analysis
-        .ir
-        .declarations
-        .iter()
-        .flat_map(|d| match d {
-            IrDecl::Tool(tool) => vec![tool.name.clone(), tool_fn_name(&tool.name)],
-            _ => vec![String::from(decl_name(d))],
-        })
-        .collect();
+    let bound_names = |decls: &[IrDecl]| -> Vec<String> {
+        decls
+            .iter()
+            .flat_map(|d| match d {
+                IrDecl::Tool(tool) => vec![tool.name.clone(), tool_fn_name(&tool.name)],
+                _ => vec![String::from(decl_name(d))],
+            })
+            .collect()
+    };
 
     let mut callers: Vec<String> = Vec::new();
-    for other in &analysis.ir.declarations {
-        if decl_name(other) == name {
+    let mut known: BTreeSet<String> = BTreeSet::new();
+    for other_module in &query.program.modules {
+        let Ok(ir) = other_module.ir() else {
             continue;
+        };
+        // How `other_module` spells `decl`, and how `module` spells
+        // `other_module`'s declarations.
+        let spellings: BTreeSet<String> = aliases
+            .iter()
+            .flat_map(|alias| query.names_for(other_module, module, alias))
+            .collect();
+        for bound in bound_names(&ir.declarations) {
+            known.extend(query.names_for(module, other_module, &bound));
         }
-        if !decl_refs(other).is_disjoint(&aliases) {
-            callers.push(String::from(decl_name(other)));
+        for other in &ir.declarations {
+            if std::ptr::eq(other, decl) {
+                continue;
+            }
+            if !decl_refs(other).is_disjoint(&spellings) {
+                callers.push(String::from(decl_name(other)));
+            }
         }
     }
     let callees: Vec<String> = decl_refs(decl)

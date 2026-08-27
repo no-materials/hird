@@ -1,0 +1,8 @@
+module Util
+
+pub type Path = Path(String)
+
+// Doubles a number.
+pub fn double(n: Int) -> Int = n + n
+
+pub fn show(p: Path) -> String = match p { Path(s) -> s, }

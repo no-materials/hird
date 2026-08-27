@@ -475,3 +475,233 @@ fn edits_invalidate_the_cache() {
     );
     assert_eq!(result["type"], "() \u{2192} String");
 }
+
+/// The path of one file of the two-module fixture (`app.hird` imports from
+/// `util.hird`).
+fn two_modules_path(file: &str) -> String {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/two_modules")
+        .join(file)
+        .to_str()
+        .expect("a UTF-8 path")
+        .to_owned()
+}
+
+#[test]
+fn imported_symbols_resolve_to_their_defining_file() {
+    let mut server = Server::new();
+    let app = two_modules_path("app.hird");
+    let util = two_modules_path("util.hird");
+
+    // A selectively imported function: defined, typed, and documented in the
+    // sibling file.
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": app, "name": "double" }),
+    );
+    assert_eq!(result["file"], util);
+    assert_eq!(result["kind"], "function");
+    assert_eq!(result["type"], "Int \u{2192} Int");
+    assert_eq!(result["doc"], "Doubles a number.");
+    assert_eq!(result["line"], 6);
+
+    // A qualified member through a whole-module import.
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": app, "name": "Util.show" }),
+    );
+    assert_eq!(result["file"], util);
+    assert_eq!(result["name"], "show");
+    assert_eq!(result["type"], "Path \u{2192} String");
+
+    // An imported type.
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": app, "name": "Path" }),
+    );
+    assert_eq!(result["file"], util);
+    assert_eq!(result["kind"], "type");
+
+    // The IR of an imported definition comes from the defining module.
+    let result = call_tool(
+        &mut server,
+        "render_ir_fragment",
+        json!({ "file": app, "name": "Util.show" }),
+    );
+    assert_eq!(result["file"], util);
+    assert_eq!(result["module"], "Util");
+    assert_eq!(result["ir"]["kind"], "Fn");
+    assert_eq!(result["ir"]["name"], "show");
+
+    // Effect rows resolve the same way.
+    let result = call_tool(
+        &mut server,
+        "explain_effect_row",
+        json!({ "file": app, "fn_name": "double" }),
+    );
+    assert_eq!(result["file"], util);
+    assert_eq!(result["pure"], true);
+}
+
+#[test]
+fn infer_type_sees_through_imports() {
+    let mut server = Server::new();
+    let app = two_modules_path("app.hird");
+    let source = std::fs::read_to_string(&app).expect("the fixture reads");
+
+    // A selectively imported function reference.
+    let (line, column) = position(&source, "= double(n)", "double");
+    let result = call_tool(
+        &mut server,
+        "infer_type",
+        json!({ "file": app, "line": line, "column": column }),
+    );
+    assert_eq!(result["file"], app);
+    assert_eq!(result["token"], "double");
+    assert_eq!(result["type"], "Int \u{2192} Int");
+
+    // The member of a qualified access.
+    let (line, column) = position(&source, "Util.show(p)", "show");
+    let result = call_tool(
+        &mut server,
+        "infer_type",
+        json!({ "file": app, "line": line, "column": column }),
+    );
+    assert_eq!(result["type"], "Path \u{2192} String");
+
+    // An imported type annotation resolves rather than erroring.
+    let (line, column) = position(&source, "(p: Path)", "Path");
+    let result = call_tool(
+        &mut server,
+        "infer_type",
+        json!({ "file": app, "line": line, "column": column }),
+    );
+    assert_eq!(result["token"], "Path");
+}
+
+#[test]
+fn context_for_imported_symbol_spans_the_program() {
+    let mut server = Server::new();
+    let app = two_modules_path("app.hird");
+    let util = two_modules_path("util.hird");
+
+    // Callers of an imported function are found in the importing module.
+    let result = call_tool(
+        &mut server,
+        "get_context_for_symbol",
+        json!({ "file": app, "name": "double" }),
+    );
+    assert_eq!(result["file"], util);
+    let summary = result["summary"].as_str().expect("a summary");
+    assert!(
+        summary.contains("fn double : Int \u{2192} Int"),
+        "summary: {summary}"
+    );
+    assert!(
+        summary.contains("doc: Doubles a number."),
+        "summary: {summary}"
+    );
+    assert!(summary.contains("callers: run"), "summary: {summary}");
+
+    // Callees are the imported names as the body writes them.
+    let result = call_tool(
+        &mut server,
+        "get_context_for_symbol",
+        json!({ "file": app, "name": "describe" }),
+    );
+    assert_eq!(result["file"], app);
+    let summary = result["summary"].as_str().expect("a summary");
+    assert!(summary.contains("callees: Util.show"), "summary: {summary}");
+    let result = call_tool(
+        &mut server,
+        "get_context_for_symbol",
+        json!({ "file": app, "name": "run" }),
+    );
+    let summary = result["summary"].as_str().expect("a summary");
+    assert!(summary.contains("callees: double"), "summary: {summary}");
+    assert!(summary.contains("callers: local"), "summary: {summary}");
+}
+
+#[test]
+fn imports_are_scoped_to_the_querying_file() {
+    let mut server = Server::new();
+    let app = two_modules_path("app.hird");
+    let util = two_modules_path("util.hird");
+
+    // `util.hird` does not import `App`, so `run` is not in its scope.
+    let error = call_tool_err(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": util, "name": "run" }),
+    );
+    assert_eq!(error["code"], "not_found");
+
+    // The importing file's scope lists its imports alongside its own names.
+    let error = call_tool_err(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": app, "name": "nonsense" }),
+    );
+    let available = error["data"]["available"].as_array().expect("names");
+    for name in ["run", "double", "Path"] {
+        assert!(available.iter().any(|n| n == name), "missing `{name}`");
+    }
+    assert!(
+        !available.iter().any(|n| n == "show"),
+        "qualified-only names stay out"
+    );
+}
+
+#[test]
+fn sibling_edits_invalidate_the_program() {
+    let mut server = Server::new();
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sibling_edits");
+    std::fs::create_dir_all(&dir).expect("the fixture directory creates");
+    let lib = dir.join("lib.hird");
+    let main = dir.join("main.hird");
+    std::fs::write(&lib, "pub fn answer() \u{2192} Int = 42\n").expect("the fixture writes");
+    std::fs::write(
+        &main,
+        "use Lib.{answer}\nfn run() \u{2192} Int = answer()\n",
+    )
+    .expect("the fixture writes");
+    let main = main.to_str().expect("a UTF-8 path").to_owned();
+
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": main, "name": "answer" }),
+    );
+    assert_eq!(result["line"], 1);
+    assert_eq!(result["doc"], Value::Null);
+
+    // Changing only the sibling recompiles the program.
+    std::fs::write(&lib, "// The answer.\npub fn answer() \u{2192} Int = 42\n")
+        .expect("the fixture writes");
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": main, "name": "answer" }),
+    );
+    assert_eq!(result["line"], 2);
+    assert_eq!(result["doc"], "The answer.");
+
+    // A sibling edit that breaks the importer is the importer's type error.
+    std::fs::write(&lib, "pub fn answer() \u{2192} String = \"42\"\n").expect("the fixture writes");
+    let error = call_tool_err(&mut server, "get_context_budget", json!({ "file": main }));
+    assert_eq!(error["code"], "check_error");
+
+    // A sibling that no longer parses drops out of the program; the
+    // importer reports the unresolved import and names the broken file.
+    std::fs::write(&lib, "pub fn answer( = 1\n").expect("the fixture writes");
+    let error = call_tool_err(&mut server, "get_context_budget", json!({ "file": main }));
+    assert_eq!(error["code"], "check_error");
+    assert_eq!(error["data"]["diagnostics"][0]["code"], "C0023");
+    assert_eq!(
+        error["data"]["siblings_with_parse_errors"][0]["file"],
+        lib.to_str().expect("a UTF-8 path")
+    );
+}

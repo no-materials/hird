@@ -21,8 +21,11 @@
 //! - `get_context_for_symbol` — token-budget-aware symbol summary.
 //! - `get_context_budget` — approximate token costs per declaration category.
 //!
-//! Compilation is lazy: a file compiles on first query and the result is
-//! cached until its source text changes. Invalid files, undefined names, and
+//! Compilation is lazy and directory-scoped: the queried file's directory
+//! compiles as one program on first query (every `.hird` sibling is a
+//! module, so `use` imports resolve) and the result is cached until any
+//! member's source text changes. Symbol lookups follow the file's imports,
+//! and answers name the defining file. Invalid files, undefined names, and
 //! parse or type errors all come back as structured tool errors, never as
 //! protocol failures.
 

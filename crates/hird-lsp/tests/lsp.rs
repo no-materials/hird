@@ -9,6 +9,7 @@ use hird_lsp::Backend;
 use serde_json::{Value, json};
 use tower::{Service as _, ServiceExt as _};
 use tower_lsp::jsonrpc::Request;
+use tower_lsp::lsp_types::Url;
 use tower_lsp::{ClientSocket, LspService};
 
 /// A simple, well-typed Hirð file exercising every definition kind the
@@ -292,5 +293,184 @@ async fn definitions_resolve_functions_types_actors_and_effects() {
         locations[1]["range"],
         range(FIXTURE, "= Path(String)", "Path"),
         "the constructor"
+    );
+}
+
+/// The two-module fixture directory: `app.hird` imports from `util.hird`.
+fn two_modules() -> (Url, String, Url, String) {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/two_modules")
+        .canonicalize()
+        .expect("the fixture directory exists");
+    let read = |name: &str| {
+        let path = dir.join(name);
+        let text = std::fs::read_to_string(&path).expect("the fixture reads");
+        (Url::from_file_path(path).expect("an absolute path"), text)
+    };
+    let (app_uri, app) = read("app.hird");
+    let (util_uri, util) = read("util.hird");
+    (app_uri, app, util_uri, util)
+}
+
+#[tokio::test]
+async fn imports_resolve_into_sibling_files() {
+    let (mut service, mut socket) = LspService::new(Backend::new);
+    initialize(&mut service).await;
+    let (app_uri, app, util_uri, util) = two_modules();
+
+    // Only the importer is open; its imports resolve against the file on
+    // disk, so nothing is flagged as unresolved.
+    let published = open(&mut service, &mut socket, app_uri.as_str(), &app).await;
+    assert_eq!(published["diagnostics"], json!([]), "{published}");
+
+    // Hover on an imported function reference shows its type.
+    let hover = request(
+        &mut service,
+        2,
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": app_uri },
+            "position": position(&app, "= double(n)", "double"),
+        }),
+    )
+    .await;
+    assert_eq!(
+        hover["contents"]["value"],
+        "```hird\ndouble : Int \u{2192} Int\n```"
+    );
+
+    // Hover on the member of a `use` group resolves through the import.
+    let hover = request(
+        &mut service,
+        3,
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": app_uri },
+            "position": position(&app, "use Util.{Path, double}", "double"),
+        }),
+    )
+    .await;
+    assert_eq!(
+        hover["contents"]["value"],
+        "```hird\ndouble : Int \u{2192} Int\n```"
+    );
+
+    // Go-to-definition lands in the defining file, which is not open.
+    let cases = [
+        ("= double(n)", "double", "pub fn double"),
+        ("Util.show(p)", "show", "pub fn show"),
+        ("use Util.{Path, double}", "double", "pub fn double"),
+    ];
+    for (id, (reference_context, name, definition_context)) in cases.into_iter().enumerate() {
+        let response = request(
+            &mut service,
+            10 + i64::try_from(id).expect("small id"),
+            "textDocument/definition",
+            json!({
+                "textDocument": { "uri": app_uri },
+                "position": position(&app, reference_context, name),
+            }),
+        )
+        .await;
+        assert_eq!(response["uri"], util_uri.as_str(), "case `{name}`");
+        assert_eq!(
+            response["range"],
+            range(&util, definition_context, name),
+            "case `{name}`"
+        );
+    }
+
+    // An imported type names both the type and its constructor.
+    let response = request(
+        &mut service,
+        20,
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": app_uri },
+            "position": position(&app, "(p: Path)", "Path"),
+        }),
+    )
+    .await;
+    let locations = response.as_array().expect("two definitions");
+    assert_eq!(locations.len(), 2);
+    assert_eq!(locations[0]["uri"], util_uri.as_str());
+    assert_eq!(locations[0]["range"], range(&util, "pub type Path", "Path"));
+    assert_eq!(
+        locations[1]["range"],
+        range(&util, "= Path(String)", "Path")
+    );
+
+    // A local definition still wins over the sibling file.
+    let response = request(
+        &mut service,
+        21,
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": app_uri },
+            "position": position(&app, "= run(n)", "run"),
+        }),
+    )
+    .await;
+    assert_eq!(response["uri"], app_uri.as_str());
+    assert_eq!(response["range"], range(&app, "fn run(", "run"));
+}
+
+#[tokio::test]
+async fn open_buffers_stand_in_for_sibling_files() {
+    let (mut service, mut socket) = LspService::new(Backend::new);
+    initialize(&mut service).await;
+    let (app_uri, app, util_uri, util) = two_modules();
+    open(&mut service, &mut socket, app_uri.as_str(), &app).await;
+
+    // Open the sibling with an unsaved edit that moves its definitions down
+    // one line; definitions from the importer follow the live buffer.
+    let edited = format!("\n{util}");
+    open(&mut service, &mut socket, util_uri.as_str(), &edited).await;
+    let response = request(
+        &mut service,
+        2,
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": app_uri },
+            "position": position(&app, "= double(n)", "double"),
+        }),
+    )
+    .await;
+    assert_eq!(response["uri"], util_uri.as_str());
+    assert_eq!(response["range"], range(&edited, "pub fn double", "double"));
+
+    // Breaking the sibling's export surfaces in the importer: the change
+    // invalidates the shared program, and saving republishes every open
+    // document of the directory — the sibling first, then the importer.
+    notify(
+        &mut service,
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": util_uri, "version": 2 },
+            "contentChanges": [{ "text": util.replace("pub fn double", "fn double") }]
+        }),
+    )
+    .await;
+    let ((), (first, second)) = tokio::join!(
+        notify(
+            &mut service,
+            "textDocument/didSave",
+            json!({ "textDocument": { "uri": util_uri } }),
+        ),
+        async {
+            (
+                next_diagnostics(&mut socket).await,
+                next_diagnostics(&mut socket).await,
+            )
+        }
+    );
+    assert_eq!(first["uri"], util_uri.as_str());
+    assert_eq!(first["diagnostics"], json!([]));
+    assert_eq!(second["uri"], app_uri.as_str());
+    let diagnostics = second["diagnostics"].as_array().expect("array");
+    assert!(
+        diagnostics.iter().any(|d| d["code"] == "C0023"
+            && d["range"] == range(&app, "use Util.{Path, double}", "double")),
+        "the importer flags the now-private member: {second}"
     );
 }
