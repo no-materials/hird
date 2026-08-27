@@ -102,10 +102,10 @@ effect Spawn<t>
 
 Parametric effects reference specific capabilities or message types.
 
-Only `Install` and `Supervise` are pre-declared. Every other head a row
-names — including `Tool`, `Send`, `Await`, `Spawn`, `Exn` — needs an
-`effect` declaration like the above, even though the checker knows the
-keyword forms' semantics.
+Only `Install`, `Supervise`, and `Stand` are pre-declared. Every other
+head a row names — including `Tool`, `Send`, `Await`, `Spawn`, `Exn` —
+needs an `effect` declaration like the above, even though the checker
+knows the keyword forms' semantics.
 
 ---
 
@@ -208,6 +208,7 @@ reply(reply_to, status) → () ! {Send<PlannerStatus>}
 
 supervise(PlannerSup) → () ! {Supervise}
 child(PlannerSup, planner) → Pid<PlannerMsg> ! {}
+stand() → () ! {Stand}
 ```
 
 - `Pid<t>` and `ReplyTo<t>` are built-in type constructors (like `List<t>`);
@@ -230,6 +231,13 @@ child(PlannerSup, planner) → Pid<PlannerMsg> ! {}
   message type. Effect-free; a missing or restarting child crashes
   (`{no_child, id}`) — tree health is supervision's concern, never a
   caller-recoverable error.
+- `stand` keeps the program up: it blocks the caller until the node
+  receives SIGTERM (Ctrl-C under `hird run`), then shuts down every
+  supervisor the caller started and returns, so `main` finishes and the
+  audit stream is synced before the halt. Without it a program halts when
+  `main` returns, trees included. Its bare `Stand` effect is checker-known
+  (like `Supervise`). Not allowed inside an actor's `init` or handlers
+  (C0054) — it would park the actor's process.
 
 ---
 
@@ -316,9 +324,9 @@ fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 - **Opaque types outside their module**: constructing (C0022) or
   destructuring (C0021) an opaque type outside its declaring module is a
   compile error — that is the capability discipline doing its job.
-- **Undeclared effect heads** (C0027): only `Install` and `Supervise` are
-  built in; declare `effect Tool<t>`, `effect Send<t>`, … before a row
-  names them.
+- **Undeclared effect heads** (C0027): only `Install`, `Supervise`, and
+  `Stand` are built in; declare `effect Tool<t>`, `effect Send<t>`, …
+  before a row names them.
 - **Tool arms**: `Tool<X>` requires `X` to be a declared tool (C0033); the
   handler must match the tool's operation signature (C0034); `install`
   handlers must be pure — closed empty row (C0051).

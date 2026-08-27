@@ -21,7 +21,9 @@ hird-parse = { features = ["std"], workspace = true }
 hird-types.workspace = true
 
 clap = { features = ["derive"], version = "4" }
+ctrlc = { features = ["termination"], version = "3" }
 miette = { default-features = false, features = ["fancy-no-syscall"], version = "7" }
+nix = { features = ["signal"], version = "0.31" }
 serde_json = "1"
 
 [lints]

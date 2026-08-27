@@ -214,7 +214,10 @@ const TREE: &str = "effect Send<t>\n\
      }\n\
      fn boot() ! {Supervise, Send<PlannerMsg>} =\n\
        let u = supervise(PlannerSup) in\n\
-       send(child(PlannerSup, planner), Nop)";
+       send(child(PlannerSup, planner), Nop)\n\
+     fn serve() ! {Supervise, Stand} =\n\
+       let u = supervise(PlannerSup) in\n\
+       stand()";
 
 const FLEET: &str = "type St = St(Int)\n\
      fn planner_config() -> St = St(0)\n\

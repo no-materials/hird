@@ -843,6 +843,11 @@ impl<'a> Emitter<'a> {
                 );
                 sequence(&[start, String::from("ok")], indent, ctx)
             }
+            IrExpr::Stand(_) => sequence(
+                &[String::from("ok = hird_stand:await(),"), String::from("ok")],
+                indent,
+                ctx,
+            ),
             IrExpr::Child(child) => {
                 // The runtime lookup yields `{ok, Pid} | error`; the miss is a
                 // crash (a missing or restarting child is supervision's
@@ -1580,6 +1585,7 @@ fn expr_type(expr: &IrExpr) -> Type {
         IrExpr::Install(inst) => inst.result_type.clone(),
         IrExpr::Spawn(s) => s.result_type.clone(),
         IrExpr::Supervise(s) => s.result_type.clone(),
+        IrExpr::Stand(s) => s.result_type.clone(),
         IrExpr::Child(c) => c.result_type.clone(),
         IrExpr::Send(s) => s.result_type.clone(),
         IrExpr::Request(r) => r.result_type.clone(),

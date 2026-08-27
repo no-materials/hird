@@ -30,8 +30,8 @@ effectful function *must* be annotated. Effect polymorphism is
 expressed with a row tail (`! {r}` or `! {Log, r}`), never by
 subsumption.
 
-**Effect heads need declarations.** Only `Install` and `Supervise`
-are built in. Before a row can name `Tool<…>`, `Send<…>`, `Await<…>`,
+**Effect heads need declarations.** Only `Install`, `Supervise`, and
+`Stand` are built in. Before a row can name `Tool<…>`, `Send<…>`, `Await<…>`,
 `Spawn<…>`, or `Exn<…>`, the program must declare them:
 `effect Tool<t>`, `effect Send<t>`, etc.
 
@@ -59,7 +59,10 @@ the spawned actor — use `install`.
 
 **Entry point.** `hird run` requires exactly one `fn main() → ()`
 with no parameters and no residual `Tool<…>` in its row. `Install`,
-`Supervise`, `Send`, `Await` may remain.
+`Supervise`, `Stand`, `Send`, `Await` may remain. A program halts when
+`main` returns, supervision trees included; end `main` with `stand()`
+(effect `Stand`) to keep it up until SIGTERM or Ctrl-C, which shuts the
+trees down and syncs the audit stream first.
 
 ## Querying the compiler
 
@@ -117,6 +120,7 @@ not something visible in any one signature.
 | `Tool<X>` arm where `X` is not a declared tool | C0033 |
 | Handler whose type does not match the tool's signature | C0034 (non-function handler: C0031) |
 | Effectful handler in an `install` block | C0051 — installed handlers must be pure |
+| `stand()` inside an actor's `init` or handler | C0054 — it would park the actor's process; stand from `main` |
 | Function or capability types in a tool signature | C0032 — not wire-representable |
 | `f { a: 1 }` instead of `f({ a: 1 })` | parse error — `{` never starts an application argument |
 | Chained comparisons `a == b == c` | P0005 — relational operators do not associate |

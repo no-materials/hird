@@ -160,6 +160,10 @@ pub enum CheckCode {
     /// A `child` expression names a child id the named supervisor does not
     /// declare.
     C0053,
+    /// A `stand` expression inside an actor's `init` or handler body; it
+    /// would park the actor's process, and that process started no trees to
+    /// shut down.
+    C0054,
 }
 
 /// A secondary source location attached to a diagnostic.

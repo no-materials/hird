@@ -895,6 +895,11 @@ fn supervise_expr_projection() {
 }
 
 #[test]
+fn stand_expr_projection() {
+    assert!(matches!(body("stand()"), Expr::Stand(_)));
+}
+
+#[test]
 fn child_expr_projection() {
     let Expr::Child(child) = body("child(PlannerSup, planner)") else {
         panic!("expected a child expression");

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(&format!(\"{PLANNER_SUP}fn serve() ! {{Supervise, Stand}} = let u = supervise(PlannerSup) in stand()\\n\\\n         fn quiet() ! {{}} = stand()\")))"
+---
+error[C0030] 1205..1213: declared {} but body performs {Stand}
+supervisor PlannerSup ! {Tool<ReadRepo>}

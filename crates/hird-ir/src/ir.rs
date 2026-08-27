@@ -336,6 +336,8 @@ pub enum IrExpr {
     Spawn(IrSpawn),
     /// `supervise(SupName)`
     Supervise(IrSupervise),
+    /// `stand()`
+    Stand(IrStand),
     /// `child(SupName, child_id)`
     Child(IrChild),
     /// `send(pid, msg)`
@@ -506,6 +508,15 @@ pub struct IrSpawn {
 pub struct IrSupervise {
     /// The supervised supervisor's name.
     pub supervisor: String,
+    /// The expression's type: unit.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `stand()` expression: blocks until a shutdown signal, then takes the
+/// caller's supervision trees down; unit-valued with a bare `Stand` effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrStand {
     /// The expression's type: unit.
     #[serde(serialize_with = "serialize_type")]
     pub result_type: Type,

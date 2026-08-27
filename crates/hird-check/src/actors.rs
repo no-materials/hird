@@ -21,7 +21,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use hird_ast::{ActorDecl, ActorField, ActorHandler, AstNode, Pattern, TypeExpr};
+use hird_ast::{ActorDecl, ActorField, ActorHandler, AstNode, Expr, Pattern, TypeExpr};
 use hird_lex::Span;
 use hird_types::{EffectRow, Name, Type, TypeError, unify_row};
 
@@ -321,7 +321,7 @@ impl Checker {
         self.check_message_reply_to(decl);
 
         if let Some(init_field) = actor_field(decl, "init") {
-            let _ = self.check_init_body(&init_field, &info);
+            let _ = self.check_init_body(&init_field, name, &info);
         }
 
         let mut member_rows = info.init_row.clone();
@@ -453,7 +453,12 @@ impl Checker {
     }
 
     /// Checks the init body against the state type and the declared init row.
-    fn check_init_body(&mut self, field: &ActorField, info: &ActorInfo) -> Checked<()> {
+    fn check_init_body(
+        &mut self,
+        field: &ActorField,
+        actor: &str,
+        info: &ActorInfo,
+    ) -> Checked<()> {
         let (Some(sig), Some(body)) = (field.fn_sig(), field.body()) else {
             return Ok(());
         };
@@ -462,7 +467,7 @@ impl Checker {
             self.bind_param(&param, ty);
         }
         self.begin_effect_scope();
-        let body_ty = self.infer_expr(&body);
+        let body_ty = self.infer_actor_body(&body, actor);
         let inferred = self.take_effect_row();
         self.env.pop_scope();
         let body_ty = body_ty?;
@@ -470,6 +475,15 @@ impl Checker {
         self.unify_at(&info.state, &body_ty, span)?;
         self.check_effect_row(&info.init_row, &inferred, span);
         Ok(())
+    }
+
+    /// Infers an actor's `init` or handler body with the actor recorded as
+    /// current, so process-parking forms (`stand`) can reject the site.
+    fn infer_actor_body(&mut self, body: &Expr, actor: &str) -> Checked<Type> {
+        self.current_actor = Some(String::from(actor));
+        let ty = self.infer_expr(body);
+        self.current_actor = None;
+        ty
     }
 
     /// Checks one `handle` clause: the message pattern names a constructor of
@@ -564,7 +578,7 @@ impl Checker {
         let body_res = match (&result, handler.body()) {
             (Ok(()), Some(body)) => {
                 self.begin_effect_scope();
-                let body_ty = self.infer_expr(&body);
+                let body_ty = self.infer_actor_body(&body, actor);
                 let inferred = self.take_effect_row();
                 body_ty.map(|ty| (ty, inferred, expr_span(&body, self.source_id)))
             }

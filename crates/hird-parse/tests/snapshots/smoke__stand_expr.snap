@@ -1,0 +1,18 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = stand()\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    STAND_EXPR
+      WHITESPACE " "
+      STAND_KW "stand"
+      L_PAREN "("
+      R_PAREN ")"

@@ -42,6 +42,12 @@ dispatcher.
 - `hird_sup_util.erl` — supervisor utilities: `child_pid/2` looks up an
   unregistered supervised child's pid. Generated supervisor modules carry
   their child specs inline, so nothing more is needed here.
+- `hird_stand.erl` — standing mode: `await/0` blocks the caller until the
+  node receives SIGTERM, then shuts down every supervisor the caller
+  started (its linked `supervisor` children, in reverse start order, by
+  the OTP parent-shutdown protocol) and returns, so the boot module's
+  audit sync runs after the trees are gone. It replaces OTP's default
+  signal handler for the node's lifetime.
 
 ## Tests
 

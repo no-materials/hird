@@ -46,7 +46,7 @@ use crate::ir::{
     IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef,
     IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral,
     IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply,
-    IrRequest, IrSend, IrSpan, IrSpawn, IrSupervise, IrSupervisorDef, IrToolDef, IrTuple,
+    IrRequest, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrToolDef, IrTuple,
     IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
@@ -362,6 +362,9 @@ impl Lowerer<'_> {
             Expr::Install(install) => self.lower_install(install),
             Expr::Spawn(spawn) => self.lower_spawn(spawn),
             Expr::Supervise(supervise) => self.lower_supervise(supervise),
+            Expr::Stand(stand) => IrExpr::Stand(IrStand {
+                result_type: self.node_type(stand.syntax()),
+            }),
             Expr::Child(child) => self.lower_child_lookup(child),
             Expr::Send(send) => self.lower_send(send),
             Expr::Request(request) => self.lower_request(request),

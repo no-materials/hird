@@ -19,7 +19,7 @@ use core::mem;
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Expr, FieldExpr, HandleArm, HandleBlock,
     IfExpr, InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr,
-    RequestExpr, SendExpr, SpawnExpr, SuperviseExpr,
+    RequestExpr, SendExpr, SpawnExpr, StandExpr, SuperviseExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -102,6 +102,7 @@ impl Checker {
             Expr::Install(install) => self.infer_install(install),
             Expr::Spawn(spawn) => self.infer_spawn(spawn),
             Expr::Supervise(supervise) => self.infer_supervise(supervise),
+            Expr::Stand(stand) => self.infer_stand(stand),
             Expr::Child(child) => self.infer_child(child),
             Expr::Send(send) => self.infer_send(send),
             Expr::Request(request) => self.infer_request(request),
@@ -511,6 +512,30 @@ impl Checker {
             ));
         }
         let row = EffectRow::closed([Effect::named("Supervise")]);
+        self.add_effects(&row, span);
+        Ok(Type::tuple(Vec::new()))
+    }
+
+    /// `stand()` — keeps the program up until a shutdown signal.
+    ///
+    /// Unit-valued; carries the checker-known bare effect `Stand` (the
+    /// `Supervise` precedent): blocking the calling process for the life of
+    /// the node is global behaviour, so the row records it. Rejected inside
+    /// an actor's `init` or handler body, where it would park the actor's
+    /// process instead of the program's.
+    fn infer_stand(&mut self, stand: &StandExpr) -> Checked<Type> {
+        let span = node_span(stand.syntax(), self.source_id);
+        if let Some(actor) = &self.current_actor {
+            return Err(self.error(
+                CheckCode::C0054,
+                span,
+                format!(
+                    "`stand` cannot be used inside actor `{actor}`: it would park the actor's \
+                     process; stand from `main`"
+                ),
+            ));
+        }
+        let row = EffectRow::closed([Effect::named("Stand")]);
         self.add_effects(&row, span);
         Ok(Type::tuple(Vec::new()))
     }

@@ -1106,8 +1106,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
-    /// one of the keyword forms (`spawn`, `supervise`, `child`, `send`,
-    /// `request`, `reply`, `crash!`/`panic!`), otherwise an atom.
+    /// one of the keyword forms (`spawn`, `supervise`, `stand`, `child`,
+    /// `send`, `request`, `reply`, `crash!`/`panic!`), otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1118,6 +1118,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::INSTALL_KW => self.parse_install_expr(),
             SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
             SyntaxKind::SUPERVISE_KW => self.parse_supervise_expr(),
+            SyntaxKind::STAND_KW => self.parse_stand_expr(),
             SyntaxKind::CHILD_KW => self.parse_child_expr(),
             SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
             SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
@@ -1268,6 +1269,15 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::SUPERVISE_KW);
         self.expect(SyntaxKind::L_PAREN);
         self.expect(SyntaxKind::IDENT);
+        self.expect(SyntaxKind::R_PAREN);
+        self.finish_node();
+    }
+
+    /// `stand()` — a keyword form taking no arguments.
+    fn parse_stand_expr(&mut self) {
+        self.start_node(SyntaxKind::STAND_EXPR);
+        self.expect(SyntaxKind::STAND_KW);
+        self.expect(SyntaxKind::L_PAREN);
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
     }

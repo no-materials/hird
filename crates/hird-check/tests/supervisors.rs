@@ -378,6 +378,30 @@ fn supervise_unknown_supervisor() {
     )));
 }
 
+/// `stand` types as unit and contributes the checker-known bare `Stand`
+/// effect; a row omitting it fails the declared-vs-inferred check.
+#[test]
+fn stand_contributes_stand_effect() {
+    insta::assert_snapshot!(check_str(&with_prelude(&format!(
+        "{PLANNER_SUP}fn serve() ! {{Supervise, Stand}} = let u = supervise(PlannerSup) in stand()\n\
+         fn quiet() ! {{}} = stand()"
+    ))));
+}
+
+/// `stand` inside an actor's init or handler body is a dedicated diagnostic.
+#[test]
+fn stand_rejected_in_actor_bodies() {
+    insta::assert_snapshot!(check_str(&with_prelude(
+        "type Cfg = Cfg(Int)
+actor Parker {
+  state: Cfg,
+  message: ParkerMsg = | Park,
+  init: fn(c: Cfg) -> Cfg ! {Stand} = let u = stand() in c,
+  handle Park, st -> Cfg ! {Stand} = let u = stand() in st,
+} ! {Stand}"
+    )));
+}
+
 /// `child` on a declared pair types as the child actor's `Pid<Msg>` with the
 /// empty effect row.
 #[test]

@@ -147,7 +147,7 @@ fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ```
 
 Effect heads are declared like types (`effect Tool<t>`,
-`effect Send<t>`); only `Install` and `Supervise` are built in.
+`effect Send<t>`); only `Install`, `Supervise`, and `Stand` are built in.
 
 ### Tools
 
@@ -245,7 +245,10 @@ supervisor PlannerSup {
 
 `supervise(PlannerSup)` starts the tree (effect `Supervise`);
 `child(PlannerSup, planner)` looks up the running child as a typed
-`Pid<PlannerMsg>`. The full worked example is
+`Pid<PlannerMsg>`. A program halts when `main` returns, tree included —
+end `main` with `stand()` (effect `Stand`) to keep it up until SIGTERM
+or Ctrl-C, which shuts the trees down and syncs the audit stream before
+the halt. The full worked example is
 [`demo/agent_planner.hird`](../demo/agent_planner.hird) — a
 supervised planner driven end to end by `hird run`.
 
@@ -282,8 +285,8 @@ restart makes sense, it is a crash. The normative treatment is in
 needs exactly one `fn main() → ()` with no parameters and no residual
 `Tool<…>` effects — handle them with a `handle` block, or keep tool
 calls inside actors and `install` their implementations. Other
-effects (`Install`, `Supervise`, `Send`, `Await`, …) may remain on
-`main`.
+effects (`Install`, `Supervise`, `Stand`, `Send`, `Await`, …) may remain
+on `main`.
 
 Diagnostics carry stable codes: `P####` for parse errors (catalogued
 in [`parser-diagnostics.md`](parser-diagnostics.md)) and `C####` for check errors. The wire

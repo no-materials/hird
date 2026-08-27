@@ -332,6 +332,11 @@ fn supervise_expr() {
 }
 
 #[test]
+fn stand_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = stand()"));
+}
+
+#[test]
 fn child_expr() {
     insta::assert_snapshot!(render_cst("fn go() = child(PlannerSup, planner)"));
 }

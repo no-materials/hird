@@ -84,6 +84,9 @@ pub(crate) struct Checker {
     /// and `child` resolve their supervisor argument here; supervisor names
     /// are not values.
     pub(crate) supervisors: BTreeMap<String, crate::supervisors::SupervisorInfo>,
+    /// The actor whose `init` or handler body is being inferred, if any.
+    /// `stand` is rejected there: it would park the actor's process.
+    pub(crate) current_actor: Option<String>,
     /// The effect row accumulated while inferring the current function or lambda
     /// body — the union of every effect its applications perform. Reset at each
     /// function body and saved/restored across lambda boundaries (a lambda's
@@ -144,6 +147,7 @@ impl Checker {
             tool_signatures: BTreeMap::new(),
             actors: BTreeMap::new(),
             supervisors: BTreeMap::new(),
+            current_actor: None,
             current_row: EffectRow::empty(),
             current_prov: Vec::new(),
             bindings: Vec::new(),

@@ -58,11 +58,12 @@ impl Registry {
             ctors: BTreeMap::new(),
             effects: BTreeMap::new(),
         };
-        // `Install` and `Supervise` are the checker-known effects of
-        // `install` blocks and `supervise` expressions: rows may name them
-        // without a user declaration existing.
+        // `Install`, `Supervise`, and `Stand` are the checker-known effects
+        // of `install` blocks and the `supervise` and `stand` expressions:
+        // rows may name them without a user declaration existing.
         registry.declare_effect(Name::new("Install"), 0);
         registry.declare_effect(Name::new("Supervise"), 0);
+        registry.declare_effect(Name::new("Stand"), 0);
         registry.declare_adt(
             Name::new("Bool"),
             0,

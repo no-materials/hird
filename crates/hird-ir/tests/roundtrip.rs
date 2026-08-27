@@ -22,8 +22,8 @@ use hird_ir::{
     IrConstructor, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
     IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
     IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan,
-    IrSpawn, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module,
-    pretty_print,
+    IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat,
+    lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -392,6 +392,9 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
         IrExpr::Supervise(supervise) => IrExpr::Supervise(IrSupervise {
             supervisor: supervise.supervisor.clone(),
             result_type: canon_type(&supervise.result_type, map),
+        }),
+        IrExpr::Stand(stand) => IrExpr::Stand(IrStand {
+            result_type: canon_type(&stand.result_type, map),
         }),
         IrExpr::Child(child) => IrExpr::Child(IrChild {
             supervisor: child.supervisor.clone(),
@@ -773,7 +776,8 @@ fn supervision_round_trips() {
            ]\n\
          }\n\
          fn boot() ! {Supervise} = supervise(CounterSup)\n\
-         fn counter() -> Pid<Msg> ! {} = child(CounterSup, counter)",
+         fn counter() -> Pid<Msg> ! {} = child(CounterSup, counter)\n\
+         fn serve() ! {Supervise, Stand} = let u = supervise(CounterSup) in stand()",
     );
 }
 

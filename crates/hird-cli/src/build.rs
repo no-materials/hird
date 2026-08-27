@@ -9,7 +9,10 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command};
+
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 
 use hird_codegen::erlang_module_name;
 use hird_ir::{IrDecl, IrFnDef, IrModule};
@@ -19,7 +22,7 @@ use crate::{Failure, fail};
 
 /// The hand-written Erlang runtime library, embedded so the compiled binary
 /// is self-contained.
-const RUNTIME: [(&str, &str); 6] = [
+const RUNTIME: [(&str, &str); 7] = [
     (
         "hird_audit",
         include_str!(concat!(
@@ -39,6 +42,13 @@ const RUNTIME: [(&str, &str); 6] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_replay.erl"
+        )),
+    ),
+    (
+        "hird_stand",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../runtime/hird_stand.erl"
         )),
     ),
     (
@@ -178,6 +188,12 @@ pub(crate) fn build(
 
 /// Runs a built program on BEAM through the generated boot module, returning
 /// the emulator's exit status.
+///
+/// Ctrl-C (SIGINT) and SIGTERM to `hird run` reach the emulator as SIGTERM:
+/// a standing program then shuts its trees down and syncs the audit stream
+/// before halting, any other program stops. The BEAM's break handler owns
+/// SIGINT itself, so the emulator is told to ignore it (`+Bi`) and the relay
+/// is the only Ctrl-C path.
 pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
     let entry_module = match &build.entry {
         Some(_) => BOOT_MODULE,
@@ -187,16 +203,33 @@ pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
             ));
         }
     };
-    let status = Command::new("erl")
+    let mut child = Command::new("erl")
+        .arg("+Bi")
         .arg("-noshell")
         .arg("-pa")
         .arg(&build.out_dir)
         .arg("-s")
         .arg(entry_module)
         .arg("run")
-        .status()
+        .spawn()
         .map_err(erlang_unavailable)?;
+    relay_termination(&child)?;
+    let status = child
+        .wait()
+        .map_err(|e| fail!("cannot wait for Erlang/OTP: {e}"))?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// Installs the handler relaying SIGINT/SIGTERM/SIGHUP to `emulator` as
+/// SIGTERM. An emulator already gone has nothing to relay to.
+fn relay_termination(emulator: &Child) -> Result<(), Failure> {
+    let pid = i32::try_from(emulator.id())
+        .map(Pid::from_raw)
+        .map_err(|_| fail!("emulator pid out of range"))?;
+    ctrlc::set_handler(move || {
+        let _ = signal::kill(pid, Signal::SIGTERM);
+    })
+    .map_err(|e| fail!("cannot install the termination handler: {e}"))
 }
 
 /// Maps a process-spawn error to the missing-Erlang advice when the binary

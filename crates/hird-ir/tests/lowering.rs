@@ -728,6 +728,20 @@ fn supervise_lowers_to_supervise_node() {
 }
 
 #[test]
+fn stand_lowers_to_stand_node() {
+    let module = lower(
+        &format!("{SUPERVISED}\nfn serve() ! {{Stand}} = stand()"),
+        "Sup",
+    );
+    let serve = fn_named(&module, "serve");
+    let IrExpr::Stand(stand) = &serve.body else {
+        panic!("body should be a stand, got {:?}", serve.body);
+    };
+    assert_eq!(ty_str(&stand.result_type), "()");
+    assert_eq!(format!("{}", serve.effect_row), "{Stand}");
+}
+
+#[test]
 fn child_lowers_to_child_node() {
     let module = lower(&supervised_with_consumers(), "Sup");
     let planner = fn_named(&module, "planner");

@@ -6,8 +6,11 @@
 //! skipped (with a note) when `erlc` is not on the `PATH`.
 
 use std::fs;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// A self-contained program with a tool, a mock handler, and `fn main`.
 const PING: &str = "effect Tool<t>\n\
@@ -40,6 +43,34 @@ const PLANNER: &str = "effect Tool<t>\n\
          { id: planner, actor: Planner, start_args: default_config(), restart: permanent },\n\
        ]\n\
      }";
+
+/// A standing program: a supervised actor that logs each note it is sent,
+/// and a `main` that supervises it, sends one note, then stands.
+const STANDING: &str = "effect Tool<t>\n\
+     effect Send<t>\n\
+     type St = St(Int)\n\
+     tool Log : { message: String } -> ()\n\
+     fn fake_log(args: { message: String }) -> () = ()\n\
+     fn config() -> St = St(0)\n\
+     actor Keeper {\n\
+       state: St,\n\
+       message: KeeperMsg = | Note(String),\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Note(m), st -> St ! {Tool<Log>} = match log({ message: m }) { _ -> st },\n\
+     } ! {Tool<Log>}\n\
+     supervisor KeeperSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: keeper, actor: Keeper, start_args: config(), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn main() ! {Install, Supervise, Send<KeeperMsg>, Stand} =\n\
+       install { Tool<Log> -> fake_log } in\n\
+       let u = supervise(KeeperSup) in\n\
+       let s = send(child(KeeperSup, keeper), Note(\"standing\")) in\n\
+       stand()";
 
 /// A program whose `main` leaks a tool effect (no `handle` block).
 const LEAKY: &str = "effect Tool<t>\n\
@@ -416,4 +447,97 @@ fn missing_erlang_produces_install_advice() {
         "stderr: {}",
         stderr(&output)
     );
+}
+
+// ── standing programs ───────────────────────────────────────────
+
+/// Polls `path` until it contains `needle`; panics after `timeout`, or as
+/// soon as `child` (the program writing the file) exits.
+fn wait_for_content(child: &mut Child, path: &Path, needle: &str, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if fs::read_to_string(path)
+            .unwrap_or_default()
+            .contains(needle)
+        {
+            return;
+        }
+        if let Some(status) = child.try_wait().expect("poll the hird binary") {
+            let mut err = String::new();
+            if let Some(stderr) = child.stderr.as_mut() {
+                let _ = stderr.read_to_string(&mut err);
+            }
+            panic!("the program exited early with {status}; stderr: {err}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "`{}` never contained `{needle}`",
+            path.display()
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// A `main` that stands keeps its supervised actor serving after its own
+/// setup is done, and Ctrl-C to `hird run` shuts the tree down cleanly:
+/// exit status 0 with the audit stream synced.
+#[test]
+fn run_stands_until_interrupted_then_exits_cleanly() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_stands");
+    let file = write(&dir, "standing.hird", STANDING);
+    let audit = dir.join("audit.jsonl");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args([
+            "run",
+            &file,
+            "-o",
+            dir.join("out").to_str().expect("utf-8 path"),
+            "--audit-file",
+            audit.to_str().expect("utf-8 path"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the hird binary");
+
+    // The actor served the note (main has moved on to standing by the time
+    // an unrelated process observes the write), and the program is still up.
+    wait_for_content(
+        &mut child,
+        &audit,
+        "\"tool\":\"Log\"",
+        Duration::from_secs(60),
+    );
+    thread::sleep(Duration::from_millis(200));
+    assert!(
+        child.try_wait().expect("poll the hird binary").is_none(),
+        "the program halted instead of standing"
+    );
+
+    let interrupt = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send SIGINT");
+    assert!(interrupt.success());
+    let output = child.wait_with_output().expect("wait for the hird binary");
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        stderr(&output)
+    );
+
+    // The audit stream was synced before the halt: one complete record.
+    let log = fs::read_to_string(&audit).expect("read the audit log");
+    let lines: Vec<&str> = log.lines().collect();
+    assert_eq!(lines.len(), 1, "audit log: {log}");
+    assert!(
+        lines[0].contains("\"args\":{\"message\":\"standing\"}"),
+        "audit log: {log}"
+    );
+    assert!(lines[0].ends_with('}'), "audit log: {log}");
 }

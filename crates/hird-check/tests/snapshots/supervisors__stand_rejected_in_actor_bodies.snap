@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"type Cfg = Cfg(Int)\nactor Parker {\n  state: Cfg,\n  message: ParkerMsg = | Park,\n  init: fn(c: Cfg) -> Cfg ! {Stand} = let u = stand() in c,\n  handle Park, st -> Cfg ! {Stand} = let u = stand() in st,\n} ! {Stand}\"))"
+---
+error[C0054] 1052..1060: `stand` cannot be used inside actor `Parker`: it would park the actor's process; stand from `main`
+error[C0054] 1111..1119: `stand` cannot be used inside actor `Parker`: it would park the actor's process; stand from `main`

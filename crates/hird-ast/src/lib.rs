@@ -890,6 +890,12 @@ impl SuperviseExpr {
 }
 
 ast_node! {
+    /// A `stand()` expression: keeps the program up until a shutdown
+    /// signal, then takes its supervision trees down.
+    StandExpr => STAND_EXPR
+}
+
+ast_node! {
     /// A `child(SupName, child_id)` expression: typed lookup of a supervised
     /// child's pid. Both arguments are namespace references, not expressions.
     ChildExpr => CHILD_EXPR
@@ -1195,6 +1201,8 @@ pub enum Expr {
     Spawn(SpawnExpr),
     /// `supervise(SupName)`
     Supervise(SuperviseExpr),
+    /// `stand()`
+    Stand(StandExpr),
     /// `child(SupName, child_id)`
     Child(ChildExpr),
     /// `send(pid, msg)`
@@ -1237,6 +1245,7 @@ impl Expr {
             SyntaxKind::INSTALL_EXPR => Self::Install(InstallBlock(node)),
             SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
             SyntaxKind::SUPERVISE_EXPR => Self::Supervise(SuperviseExpr(node)),
+            SyntaxKind::STAND_EXPR => Self::Stand(StandExpr(node)),
             SyntaxKind::CHILD_EXPR => Self::Child(ChildExpr(node)),
             SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
             SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
@@ -1287,6 +1296,7 @@ impl Expr {
             Self::Install(n) => Some(n.syntax()),
             Self::Spawn(n) => Some(n.syntax()),
             Self::Supervise(n) => Some(n.syntax()),
+            Self::Stand(n) => Some(n.syntax()),
             Self::Child(n) => Some(n.syntax()),
             Self::Send(n) => Some(n.syntax()),
             Self::Request(n) => Some(n.syntax()),

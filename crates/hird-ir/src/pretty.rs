@@ -118,6 +118,7 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         // self-delimiting.
         IrExpr::Spawn(_)
         | IrExpr::Supervise(_)
+        | IrExpr::Stand(_)
         | IrExpr::Child(_)
         | IrExpr::Send(_)
         | IrExpr::Request(_)
@@ -458,6 +459,9 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
         // printed source declares every effect it names.
         IrExpr::Supervise(_) => {
             out.insert(String::from("Supervise"), 0);
+        }
+        IrExpr::Stand(_) => {
+            out.insert(String::from("Stand"), 0);
         }
         // A child lookup is effect-free.
         IrExpr::Child(_) => {}
@@ -895,6 +899,7 @@ impl Printer {
                 self.push(&supervise.supervisor);
                 self.push(")");
             }
+            IrExpr::Stand(_) => self.push("stand()"),
             IrExpr::Child(child) => {
                 self.push("child(");
                 self.push(&child.supervisor);

@@ -8,6 +8,19 @@ minor versions may break the language surface and the tooling APIs.
 The tree-sitter grammar (`tree-sitter-hird/`) versions on its own
 schedule and is not covered by these entries.
 
+## [Unreleased]
+
+### Added
+
+- **Standing programs.** The `stand()` keyword form keeps a program up
+  after `main`'s setup: it blocks until the node receives SIGTERM, then
+  shuts down every supervisor the caller started (OTP parent shutdown,
+  reverse start order) and returns, so the audit stream is synced before
+  the halt. It carries the checker-known bare effect `Stand`. `hird run`
+  relays Ctrl-C and SIGTERM to the emulator as SIGTERM, so a standing
+  program ends cleanly from the terminal; without `stand()` a program
+  halts when `main` returns, as before.
+
 ## [0.1.1] — 2026-08-27
 
 ### Added

@@ -953,6 +953,7 @@ fn expr_refs(expr: &IrExpr, out: &mut BTreeSet<String>) {
         IrExpr::Supervise(e) => {
             out.insert(e.supervisor.clone());
         }
+        IrExpr::Stand(_) => {}
         IrExpr::Child(e) => {
             out.insert(e.supervisor.clone());
         }
@@ -1012,6 +1013,9 @@ fn explain_effect(head: &str, arg: Option<String>) -> String {
             String::from("installs registry-backed default tool handlers for the extent of a block")
         }
         "Supervise" => String::from("starts a declared supervisor's tree"),
+        "Stand" => String::from(
+            "keeps the program up until a shutdown signal, then takes its supervision trees down",
+        ),
         "Exn" => format!("may raise domain errors of type `{arg}`"),
         other => format!("performs the declared effect `{other}`"),
     }

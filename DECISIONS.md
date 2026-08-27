@@ -1601,6 +1601,81 @@ the headline claim the demo exists to make.
 
 ---
 
+## ADR-025: Standing programs — `stand` keeps the tree up until shutdown
+
+**Date**: 2026-08-27
+**Status**: Accepted (builds on ADR-023/024)
+
+### Context
+
+The boot module runs `main`, syncs the audit sink, and halts the VM. A
+supervision tree started by `supervise` (ADR-024) is linked to `main`'s
+process and dies with the halt, so no Hirð program can outlive its entry
+function — the headline long-running claim has no runtime footing.
+Whatever keeps a program up must be explicit (the tenet that already
+rejected implicit boot-time supervisor starts), and its end must be as
+clean as its start: trees shut down, audit stream synced, then halt.
+
+### Decision
+
+1. **`stand()` is a keyword form that keeps the program up.** It blocks
+   the calling process until the node receives SIGTERM, then shuts down
+   every supervisor the caller started and returns unit. `main` therefore
+   finishes normally and the boot module's existing sync-then-halt path
+   runs unchanged, after the trees are gone. The program's source, not
+   its invocation, says that it stands.
+
+2. **`stand` carries the checker-known bare effect `Stand`.** The
+   `Install`/`Supervise` precedent: no user declaration, and the row
+   records that the function parks its process for the life of the node.
+   `hird run`'s entry check is unchanged.
+
+3. **Shutdown follows the OTP parent protocol.** The supervisors a
+   process started are its linked children whose initial call is
+   `supervisor` — exactly what `supervise` produces, since it calls
+   `start_link/0` in the caller. `hird_stand:await/0` stops them in
+   reverse start order with a `shutdown` exit signal from their parent,
+   so each supervisor terminates its children within their shutdown
+   timeouts before exiting. No registry of started trees, no coupling
+   between the `supervise` and `stand` lowerings.
+
+4. **SIGTERM is the runtime's shutdown signal; `hird run` relays Ctrl-C.**
+   The BEAM does not expose SIGINT to Erlang code (its break handler owns
+   it), so `hird run` starts the emulator with `+Bi` and translates
+   SIGINT/SIGTERM/SIGHUP to itself into SIGTERM for the emulator. A build
+   run on plain `erl` stands and shuts down on SIGTERM alike; Ctrl-C there
+   is the ordinary Erlang break menu. `hird_stand` replaces OTP's default
+   signal handler for the node's lifetime, keeping its halting behaviour
+   for the signals it does not repurpose.
+
+### Alternatives considered
+
+- **A `hird run --standing` flag.** Rejected: the same `main` would
+  behave differently by invocation, and the source would not say the
+  program is a daemon — implicit where the row can be explicit.
+- **`init:stop()` on SIGTERM (OTP's default).** Rejected: it takes the
+  node down as a whole with no hook after the trees stop, so the audit
+  sink is killed alongside them and the tail of the stream can be lost.
+- **Registering started supervisors from the `supervise` lowering.**
+  Rejected: hidden global state duplicating what process links and
+  `proc_lib:initial_call/1` already record.
+
+### Consequences
+
+- A program stands only if `main` says so; forgetting `stand()` halts
+  as before. The row shows it: `fn main() ! {…, Stand}`.
+- Directly `spawn`ed actors are not in a tree and still die with the
+  halt; a stop path for them is a separate decision.
+- `stand` is rejected inside actor `init` and handler bodies (C0054):
+  there it would park the actor's process, which started no trees. It is
+  otherwise unrestricted — a helper carrying `Stand` called from `main`
+  stands `main`'s process, and its row says so.
+- `hird-cli` depends on `ctrlc` and `nix` for the relay; core crates are
+  untouched.
+- `stand` claims identifier space — acceptable pre-publish.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here
