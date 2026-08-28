@@ -1,0 +1,26 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go(clock: Clock) = f(clock)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "clock"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Clock"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    APP_EXPR
+      WHITESPACE " "
+      IDENT "f"
+      PAREN_EXPR
+        L_PAREN "("
+        IDENT "clock"
+        R_PAREN ")"

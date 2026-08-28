@@ -49,6 +49,10 @@ pub enum SyntaxKind {
     SUPERVISE_KW,
     /// `stand`
     STAND_KW,
+    /// `schedule`
+    SCHEDULE_KW,
+    /// `self`
+    SELF_KW,
     /// `child`
     CHILD_KW,
     /// `send`
@@ -245,11 +249,17 @@ pub enum SyntaxKind {
     SUPERVISE_EXPR,
     /// Stand expression (`stand()`).
     STAND_EXPR,
+    /// Clock expression (`clock()`; `clock` is contextual, an `IDENT`).
+    CLOCK_EXPR,
+    /// Schedule expression (`schedule(clock, pid, msg, delay_ms)`).
+    SCHEDULE_EXPR,
+    /// Self expression (`self()`).
+    SELF_EXPR,
     /// Child-lookup expression (`child(SupName, child_id)`).
     CHILD_EXPR,
     /// Send expression (`send(pid, msg)`).
     SEND_EXPR,
-    /// Request expression (`request(pid, ctor)`).
+    /// Request expression (`request(pid, ctor)` or `request(pid, ctor, timeout_ms)`).
     REQUEST_EXPR,
     /// Reply expression (`reply(reply_to, value)`).
     REPLY_EXPR,
@@ -317,6 +327,8 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Spawn => Self::SPAWN_KW,
             TokenKind::Supervise => Self::SUPERVISE_KW,
             TokenKind::Stand => Self::STAND_KW,
+            TokenKind::Schedule => Self::SCHEDULE_KW,
+            TokenKind::SelfKw => Self::SELF_KW,
             TokenKind::Child => Self::CHILD_KW,
             TokenKind::Send => Self::SEND_KW,
             TokenKind::Request => Self::REQUEST_KW,
@@ -412,6 +424,8 @@ impl cstree::Syntax for SyntaxKind {
             Self::SPAWN_KW => Some("spawn"),
             Self::SUPERVISE_KW => Some("supervise"),
             Self::STAND_KW => Some("stand"),
+            Self::SCHEDULE_KW => Some("schedule"),
+            Self::SELF_KW => Some("self"),
             Self::CHILD_KW => Some("child"),
             Self::SEND_KW => Some("send"),
             Self::REQUEST_KW => Some("request"),

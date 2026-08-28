@@ -1,0 +1,32 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "behaviour_module(program(\"Timed\"), \"Timed\", \"hird_heart\")"
+---
+%% Generated from src/timed.hird by the Hirð compiler. Do not edit.
+%% src/timed.hird:6
+-module(hird_heart).
+-behaviour(gen_server).
+-export([start_link/1]).
+-export([init/1, handle_call/3, handle_cast/2]).
+
+start_link(C) ->
+    gen_server:start_link(?MODULE, C, []).
+
+init(C) ->
+    {ok, case C of
+        {cfg, Clock, Period} ->
+            First = hird_clock:schedule(Clock, self(), beat, Period),
+            C
+    end}.
+
+handle_call(get, R, St) ->
+    {noreply, begin
+        Sent = gen_server:reply(R, {status, 1}),
+        St
+    end}.
+
+handle_cast(beat, {cfg, Clock, Period}) ->
+    {noreply, begin
+        Next = hird_clock:schedule(Clock, self(), beat, Period),
+        {cfg, Clock, Period}
+    end}.

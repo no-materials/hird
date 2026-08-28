@@ -934,3 +934,38 @@ fn reply_expr_projection() {
     assert!(matches!(reply.reply_to(), Some(Expr::Name(n)) if n.text() == "r"));
     assert!(matches!(reply.value(), Some(Expr::App(_))));
 }
+
+#[test]
+fn clock_expr_projection() {
+    assert!(matches!(body("clock()"), Expr::Clock(_)));
+    // `clock` is contextual: applied to arguments it is an ordinary name.
+    assert!(matches!(body("clock(1)"), Expr::App(_)));
+}
+
+#[test]
+fn self_expr_projection() {
+    assert!(matches!(body("self()"), Expr::SelfRef(_)));
+}
+
+#[test]
+fn schedule_expr_projection() {
+    let Expr::Schedule(schedule) = body("schedule(c, pid, Tick, 1000)") else {
+        panic!("expected a schedule expression");
+    };
+    assert!(matches!(schedule.clock(), Some(Expr::Name(_))));
+    assert!(matches!(schedule.pid(), Some(Expr::Name(_))));
+    assert!(matches!(schedule.message(), Some(Expr::Name(_))));
+    assert!(matches!(schedule.delay(), Some(Expr::Literal(_))));
+}
+
+#[test]
+fn request_expr_timeout_projection() {
+    let Expr::Request(request) = body("request(pid, Get)") else {
+        panic!("expected a request expression");
+    };
+    assert!(request.timeout().is_none());
+    let Expr::Request(request) = body("request(pid, Get, 60000)") else {
+        panic!("expected a request expression");
+    };
+    assert!(matches!(request.timeout(), Some(Expr::Literal(_))));
+}

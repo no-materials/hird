@@ -5,11 +5,14 @@
 //! specs, and a derived effect row.
 //!
 //! A supervisor declares a restart `strategy`, an `intensity`/`period` restart
-//! budget, and a list of `children`. Each child names a declared actor, a pure
+//! budget, and a list of `children`. Each child names a declared actor, a
 //! `start_args` expression checked against that actor's sole init parameter,
-//! and a restart disposition. The supervisor performs no effects of its own;
-//! its effect row is derived as the union of its children's per-actor effect
-//! summaries and recorded for the IR.
+//! and a restart disposition. Start arguments are pure but for acquiring the
+//! clock capability (`clock()`, effect `Clock`): a child spec is where a
+//! supervised actor is handed its capabilities. The supervisor performs no
+//! other effects of its own; its effect row is derived as the union of its
+//! children's per-actor effect summaries plus what their start arguments
+//! acquire, and recorded for the IR.
 //!
 //! Only `one_for_one` is implemented in v0.1: `one_for_all` and `rest_for_one`
 //! parse and type-check but raise a warning ([`CheckCode::C0050`]).
@@ -341,9 +344,14 @@ impl Checker {
         let label = id.clone().unwrap_or_else(|| String::from("<child>"));
         let actor = self.resolve_child_actor(sup, &label, fields.get("actor"));
         self.check_restart(sup, &label, fields.get("restart"));
-        self.check_start_args(sup, &label, fields.get("start_args"), actor.as_ref());
+        let acquired = self.check_start_args(sup, &label, fields.get("start_args"), actor.as_ref());
 
-        actor.and_then(|(_, info)| info.summary)
+        actor.and_then(|(_, info)| info.summary).map(|mut row| {
+            for effect in acquired.effects() {
+                row.insert(effect.clone());
+            }
+            row
+        })
     }
 
     /// Checks a child's `id` is a bare lowercase identifier, unique within the
@@ -442,18 +450,21 @@ impl Checker {
     }
 
     /// Checks a child's `start_args` against the actor's sole init parameter and
-    /// that it is pure. Always infers the expression (recording its node types
-    /// for the IR); the match and purity checks apply only once the actor
-    /// resolves with a single init parameter.
+    /// that it is pure but for acquiring the clock (`Clock` is the one effect
+    /// allowed: it needs no handler, and a child spec is where a supervised
+    /// actor gets its capabilities). Returns the acquired row for the
+    /// supervisor's derived row. Always infers the expression (recording its
+    /// node types for the IR); the match and purity checks apply only once the
+    /// actor resolves with a single init parameter.
     fn check_start_args(
         &mut self,
         sup: &str,
         child: &str,
         field: Option<&RecordField>,
         actor: Option<&(String, crate::actors::ActorInfo)>,
-    ) {
+    ) -> EffectRow {
         let Some(value) = field.and_then(RecordField::value) else {
-            return;
+            return EffectRow::empty();
         };
         let span = expr_span(&value, self.source_id);
         self.begin_effect_scope();
@@ -461,7 +472,7 @@ impl Checker {
         let row = self.take_effect_row();
 
         let Some((actor_name, info)) = actor else {
-            return;
+            return EffectRow::empty();
         };
         if info.init_params.len() != 1 {
             self.error(
@@ -473,21 +484,29 @@ impl Checker {
                     info.init_params.len()
                 ),
             );
-            return;
+            return EffectRow::empty();
         }
         if let Ok(ty) = inferred {
             let expected = info.init_params[0].clone();
             let _ = self.unify_at(&expected, &ty, span);
         }
-        if !self.subst.resolve_row(&row).is_empty() {
+        let row = self.subst.resolve_row(&row);
+        let acquires_only = row.tail().is_none()
+            && row
+                .effects()
+                .all(|e| e.head().as_str() == "Clock" && e.args().is_empty());
+        if !acquires_only {
             self.error(
                 CheckCode::C0049,
                 span,
                 format!(
                     "supervisor `{sup}`'s child `{child}` has effectful `start_args`; \
-                     start arguments run during supervisor init and must be pure"
+                     start arguments run during supervisor init and must be pure \
+                     (acquiring the clock with `clock()` is the one exception)"
                 ),
             );
+            return EffectRow::empty();
         }
+        row
     }
 }

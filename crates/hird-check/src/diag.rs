@@ -164,6 +164,9 @@ pub enum CheckCode {
     /// would park the actor's process, and that process started no trees to
     /// shut down.
     C0054,
+    /// A `self` expression outside an actor's `init` or handler body; only
+    /// an actor has an own typed pid.
+    C0055,
 }
 
 /// A secondary source location attached to a diagnostic.

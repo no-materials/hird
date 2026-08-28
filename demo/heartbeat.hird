@@ -1,0 +1,75 @@
+// A standing heartbeat: an actor that ticks itself on a schedule.
+//
+// Heart is handed a Clock at init — time is a capability, never ambient —
+// and schedules its own next Beat from init and from every Beat it
+// handles, logging each through Tool<Log>. HeartSup supervises it
+// one_for_one and acquires the clock in the child spec (the one effect a
+// start argument may perform); main installs the log handler, starts the
+// tree, and stands. Run `hird run demo/heartbeat.hird` and watch the audit
+// stream beat once a second until Ctrl-C.
+
+module Heartbeat
+
+effect Tool<t>
+effect Schedule<t>
+
+// ── domain types ─────────────────────────────────────────────────
+
+// The clock to schedule through and the beat period in milliseconds.
+type HeartConfig = HeartConfig(Clock, Int)
+
+// The config plus the number of beats so far.
+type HeartState = HeartState(Clock, Int, Int)
+
+// ── tools ────────────────────────────────────────────────────────
+
+tool Log : { message: String } → ()
+
+// ── the heart actor ──────────────────────────────────────────────
+
+actor Heart {
+  state: HeartState,
+
+  message: HeartMsg = | Beat,
+
+  // The first beat is scheduled here, so a restarted heart starts beating
+  // again on its own: a timer aimed at the old process is dropped.
+  init: fn(config: HeartConfig) → HeartState ! {Schedule<HeartMsg>} =
+    match config {
+      HeartConfig(clock, period) →
+        let first = schedule(clock, self(), Beat, period) in
+        HeartState(clock, period, 0),
+    },
+
+  handle Beat, HeartState(clock, period, beats) → HeartState
+    ! {Tool<Log>, Schedule<HeartMsg>} =
+    let logged = log({ message: "beat" }) in
+    let next = schedule(clock, self(), Beat, period) in
+    HeartState(clock, period, beats + 1),
+} ! {Tool<Log>, Schedule<HeartMsg>}
+
+// ── supervision ──────────────────────────────────────────────────
+
+supervisor HeartSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: heart, actor: Heart, start_args: HeartConfig(clock(), 1000), restart: permanent },
+  ]
+}
+
+// ── demo handler (registry default) ──────────────────────────────
+
+// The audit stream is the visible heartbeat; the handler itself does
+// nothing.
+fn demo_log(args: { message: String }) → () = ()
+
+// ── entry point ──────────────────────────────────────────────────
+
+// Handler maps never cross the supervision boundary: the install block is
+// what the supervised heart's log calls resolve through.
+fn main() → () ! {Install, Supervise, Stand} =
+  install { Tool<Log> → demo_log } in
+  let started = supervise(HeartSup) in
+  stand()

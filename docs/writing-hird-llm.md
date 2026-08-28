@@ -30,10 +30,10 @@ effectful function *must* be annotated. Effect polymorphism is
 expressed with a row tail (`! {r}` or `! {Log, r}`), never by
 subsumption.
 
-**Effect heads need declarations.** Only `Install`, `Supervise`, and
-`Stand` are built in. Before a row can name `Tool<…>`, `Send<…>`, `Await<…>`,
-`Spawn<…>`, or `Exn<…>`, the program must declare them:
-`effect Tool<t>`, `effect Send<t>`, etc.
+**Effect heads need declarations.** Only `Install`, `Supervise`,
+`Stand`, and `Clock` are built in. Before a row can name `Tool<…>`,
+`Send<…>`, `Await<…>`, `Spawn<…>`, `Schedule<…>`, or `Exn<…>`, the program
+must declare them: `effect Tool<t>`, `effect Send<t>`, etc.
 
 **Expression-oriented, no blocks.** Every body is one bare expression
 after `=`; sequence with `let x = e in …`. Braces in expression
@@ -43,7 +43,16 @@ position are always record literals. `if` always has `then` and
 **No ambient state.** There is no global `now()`, `random()`,
 `print()`, or logging. Non-determinism and I/O enter a function only
 through capability parameters (typed opaque handles) and tool calls,
-and both show up in the effect row. Opaque types cannot be
+and both show up in the effect row. Time is the built-in case: `Clock`
+is an opaque type, `clock()` is the only way to obtain one and carries
+the effect `Clock`, and `schedule(clock, pid, msg, delay_ms)` (effect
+`Schedule<Msg>`) is the only way to have a message delivered later.
+Delays and `request` timeouts are plain `Int` milliseconds. Inside an
+actor's `init` or handlers, `self()` is the actor's own `Pid<Msg>`; a
+periodic actor schedules `Beat` to `self()` from `init` and from its
+`Beat` handler. A supervised actor is handed its clock through the child
+spec — `start_args: Cfg(clock(), 1000)` is the one effect `start_args`
+may perform. Opaque types cannot be
 constructed or destructured outside their declaring module — do not
 try to work around a capability by pattern-matching it open.
 
@@ -59,7 +68,7 @@ the spawned actor — use `install`.
 
 **Entry point.** `hird run` requires exactly one `fn main() → ()`
 with no parameters and no residual `Tool<…>` in its row. `Install`,
-`Supervise`, `Stand`, `Send`, `Await` may remain. A program halts when
+`Supervise`, `Stand`, `Clock`, `Send`, `Await` may remain. A program halts when
 `main` returns, supervision trees included; end `main` with `stand()`
 (effect `Stand`) to keep it up until SIGTERM or Ctrl-C, which shuts the
 trees down and syncs the audit stream first.
@@ -121,6 +130,8 @@ not something visible in any one signature.
 | Handler whose type does not match the tool's signature | C0034 (non-function handler: C0031) |
 | Effectful handler in an `install` block | C0051 — installed handlers must be pure |
 | `stand()` inside an actor's `init` or handler | C0054 — it would park the actor's process; stand from `main` |
+| `self()` outside an actor's `init` or handler | C0055 — only an actor has an own pid |
+| Effectful `start_args` other than `clock()` | C0049 — start arguments run in the supervisor; acquiring the clock is the one exception |
 | Function or capability types in a tool signature | C0032 — not wire-representable |
 | `f { a: 1 }` instead of `f({ a: 1 })` | parse error — `{` never starts an application argument |
 | Chained comparisons `a == b == c` | P0005 — relational operators do not associate |
@@ -132,10 +143,13 @@ Two semantic traps that type-check but behave unexpectedly:
 
 - `install` does not discharge the body's `Tool<…>` effects; only
   `handle` does. A `main` that calls tools directly needs `handle`.
-- `request` blocks with a fixed 5000ms timeout and a timeout *crashes
-  the caller* (no `Exn` in the row); dropped or double `reply` also
-  surfaces as a timeout. Crash handling belongs to supervisors, never
-  to the caller.
+- `request` blocks for its timeout (an optional third `Int` argument in
+  milliseconds, 5000 by default) and a timeout *crashes the caller* (no
+  `Exn` in the row); dropped or double `reply` also surfaces as a
+  timeout. Crash handling belongs to supervisors, never to the caller.
+- A scheduled message cannot be cancelled, and one aimed at a process
+  that has exited is dropped: a restarted actor's pending ticks are
+  gone, so schedule the first tick in `init`, not only in a handler.
 
 ## Checklist before emitting a program
 

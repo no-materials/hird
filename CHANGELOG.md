@@ -12,6 +12,22 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **Time as a capability.** `Clock` is a built-in opaque type; `clock()`
+  acquires the runtime clock with the checker-known bare effect `Clock`,
+  and `schedule(clock, pid, msg, delay_ms)` delivers a message to a typed
+  reference after a delay (an `Int` of milliseconds) with the effect
+  `Schedule<Msg>` — a head of its own, so the row tells a self-driving
+  actor from one that merely sends. `self()` is the enclosing actor's own
+  `Pid<Msg>` (C0055 outside actor bodies), so an actor can schedule its
+  own next tick. A supervisor child's `start_args` may acquire the clock
+  — the one effect it is allowed — and the supervisor's derived row
+  records it. Scheduled messages cannot be cancelled. `clock` is
+  contextual (only `clock()` is the form); `schedule` and `self` are
+  reserved. Lowers through the new `hird_clock` runtime module.
+  `demo/heartbeat.hird` is a standing actor that beats once a second.
+- **Request timeouts.** `request(pid, Ctor, timeout_ms)` overrides the
+  5000 ms default with an `Int` of milliseconds; the row is unchanged, a
+  timeout still exits the caller.
 - **Standing programs.** The `stand()` keyword form keeps a program up
   after `main`'s setup: it blocks until the node receives SIGTERM, then
   shuts down every supervisor the caller started (OTP parent shutdown,

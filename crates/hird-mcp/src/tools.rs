@@ -151,7 +151,8 @@ pub(crate) fn descriptors() -> Value {
         {
             "name": "emit_actor_effect_graph",
             "description": "Emit the actor/effect graph rooted at an actor: reachable actors \
-                            (via Send/Await/Spawn message types), supervisor relationships, \
+                            (via Send/Await/Spawn/Schedule message types), supervisor \
+                            relationships, \
                             and transitive tool effects.",
             "inputSchema": {
                 "type": "object",
@@ -381,7 +382,8 @@ fn explain_actor_protocol(query: Query<'_>, args: &Value) -> Result<Value, ToolE
 }
 
 /// `emit_actor_effect_graph(file, actor_name)` — the subgraph reachable from
-/// one actor: actors (following `Send`/`Await`/`Spawn` message types),
+/// one actor: actors (following `Send`/`Await`/`Spawn`/`Schedule` message
+/// types),
 /// supervisors of included actors (and their whole child sets), and every
 /// tool named by an included actor's effect summary.
 fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
@@ -409,7 +411,7 @@ fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, Tool
                             tools.insert(&tool.name);
                         }
                     }
-                    "Send" | "Await" | "Spawn" => {
+                    "Send" | "Await" | "Spawn" | "Schedule" => {
                         if let Some(target) = graph
                             .actors
                             .iter()
@@ -953,7 +955,13 @@ fn expr_refs(expr: &IrExpr, out: &mut BTreeSet<String>) {
         IrExpr::Supervise(e) => {
             out.insert(e.supervisor.clone());
         }
-        IrExpr::Stand(_) => {}
+        IrExpr::Stand(_) | IrExpr::Clock(_) | IrExpr::SelfRef(_) => {}
+        IrExpr::Schedule(e) => {
+            expr_refs(&e.clock, out);
+            expr_refs(&e.pid, out);
+            expr_refs(&e.message, out);
+            expr_refs(&e.delay, out);
+        }
         IrExpr::Child(e) => {
             out.insert(e.supervisor.clone());
         }
@@ -964,6 +972,9 @@ fn expr_refs(expr: &IrExpr, out: &mut BTreeSet<String>) {
         IrExpr::Request(e) => {
             expr_refs(&e.pid, out);
             expr_refs(&e.message_fn, out);
+            if let Some(timeout) = &e.timeout {
+                expr_refs(timeout, out);
+            }
         }
         IrExpr::Reply(e) => {
             expr_refs(&e.reply_to, out);
@@ -1009,6 +1020,10 @@ fn explain_effect(head: &str, arg: Option<String>) -> String {
         "Send" => format!("sends messages of type `{arg}` to another process (fire-and-forget)"),
         "Await" => format!("blocks awaiting a reply of type `{arg}` to a `request`"),
         "Spawn" => format!("spawns an actor whose mailbox accepts `{arg}`"),
+        "Schedule" => format!(
+            "schedules messages of type `{arg}` for later delivery through a clock capability"
+        ),
+        "Clock" => String::from("acquires the runtime clock capability (real time)"),
         "Install" => {
             String::from("installs registry-backed default tool handlers for the extent of a block")
         }

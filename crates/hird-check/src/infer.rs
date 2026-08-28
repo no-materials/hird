@@ -17,9 +17,9 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Expr, FieldExpr, HandleArm, HandleBlock,
-    IfExpr, InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit, ReplyExpr,
-    RequestExpr, SendExpr, SpawnExpr, StandExpr, SuperviseExpr,
+    AppExpr, AstNode, BinOpExpr, ChildExpr, ClockExpr, CrashExpr, Expr, FieldExpr, HandleArm,
+    HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit,
+    ReplyExpr, RequestExpr, ScheduleExpr, SelfExpr, SendExpr, SpawnExpr, StandExpr, SuperviseExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -103,6 +103,9 @@ impl Checker {
             Expr::Spawn(spawn) => self.infer_spawn(spawn),
             Expr::Supervise(supervise) => self.infer_supervise(supervise),
             Expr::Stand(stand) => self.infer_stand(stand),
+            Expr::Clock(clock) => self.infer_clock(clock),
+            Expr::SelfRef(this) => self.infer_self(this),
+            Expr::Schedule(schedule) => self.infer_schedule(schedule),
             Expr::Child(child) => self.infer_child(child),
             Expr::Send(send) => self.infer_send(send),
             Expr::Request(request) => self.infer_request(request),
@@ -540,6 +543,80 @@ impl Checker {
         Ok(Type::tuple(Vec::new()))
     }
 
+    /// `clock()` — acquires the runtime clock capability.
+    ///
+    /// The one root of time in a program: a `Clock` is otherwise only ever
+    /// passed in. Acquiring it carries the checker-known bare effect `Clock`
+    /// (the `Supervise` precedent), so every function or actor that reaches
+    /// for real time rather than being handed a clock says so in its row.
+    fn infer_clock(&mut self, clock: &ClockExpr) -> Checked<Type> {
+        let span = node_span(clock.syntax(), self.source_id);
+        let row = EffectRow::closed([Effect::named("Clock")]);
+        self.add_effects(&row, span);
+        Ok(Type::con("Clock", Vec::new()))
+    }
+
+    /// `self()` — the enclosing actor's own typed pid.
+    ///
+    /// Types as `Pid<Msg>` for the actor whose `init` or handler body is
+    /// being inferred, with the empty effect row: reading one's own address
+    /// creates and communicates nothing. Outside an actor body there is no
+    /// actor to refer to, so the form is rejected.
+    fn infer_self(&mut self, this: &SelfExpr) -> Checked<Type> {
+        let span = node_span(this.syntax(), self.source_id);
+        let Some(actor) = &self.current_actor else {
+            return Err(self.error(
+                CheckCode::C0055,
+                span,
+                String::from("`self` can only be used inside an actor's `init` or handler body"),
+            ));
+        };
+        let Some(info) = self.actors.get(actor) else {
+            return Err(Aborted);
+        };
+        let message = Type::con(info.message.as_str(), Vec::new());
+        Ok(Type::con("Pid", Vec::from([message])))
+    }
+
+    /// `schedule(clock, pid, msg, delay_ms)` — delivery to a typed reference
+    /// after a delay, through a clock capability.
+    ///
+    /// The clock must be a `Clock`, the destination a `Pid<Msg>`, the message
+    /// a `Msg`, and the delay an `Int` of milliseconds; the expression is unit
+    /// with a `Schedule<Msg>` effect — a head of its own, so the row tells a
+    /// self-driving actor from one that merely sends. The timer is not
+    /// returned: a scheduled message cannot be cancelled.
+    fn infer_schedule(&mut self, schedule: &ScheduleExpr) -> Checked<Type> {
+        let span = node_span(schedule.syntax(), self.source_id);
+        let (Some(clock), Some(pid), Some(message), Some(delay)) = (
+            schedule.clock(),
+            schedule.pid(),
+            schedule.message(),
+            schedule.delay(),
+        ) else {
+            return Err(Aborted);
+        };
+        let clock_span = expr_span(&clock, self.source_id);
+        let clock_ty = self.infer_expr(&clock)?;
+        self.unify_at(&Type::con("Clock", Vec::new()), &clock_ty, clock_span)?;
+        let msg_ty = self.check_pid(&pid)?;
+        let message_span = expr_span(&message, self.source_id);
+        let message_ty = self.infer_expr(&message)?;
+        self.unify_at(&msg_ty, &message_ty, message_span)?;
+        self.check_millis(&delay)?;
+        let row = EffectRow::closed([Effect::parametric("Schedule", Vec::from([msg_ty]))]);
+        self.add_effects(&row, span);
+        Ok(Type::tuple(Vec::new()))
+    }
+
+    /// Infers a millisecond count — a `request` timeout or a `schedule`
+    /// delay — and pins it to `Int`.
+    fn check_millis(&mut self, millis: &Expr) -> Checked<()> {
+        let span = expr_span(millis, self.source_id);
+        let ty = self.infer_expr(millis)?;
+        self.unify_at(&Type::int(), &ty, span)
+    }
+
     /// `child(SupName, child_id)` — typed lookup of a supervised child's pid.
     ///
     /// The supervisor name resolves in its namespace and the child id against
@@ -603,14 +680,17 @@ impl Checker {
         Ok(Type::tuple(Vec::new()))
     }
 
-    /// `request(pid, ctor)` — send with an embedded reply channel, then await.
+    /// `request(pid, ctor[, timeout_ms])` — send with an embedded reply
+    /// channel, then await.
     ///
     /// The second argument builds the message around a fresh reply channel:
     /// it must be a `ReplyTo<T> → Msg` function (typically a message
     /// constructor). The expression's type is the reply type `T`, and its
     /// effects are `Send<Msg>` for the send plus `Await<T>` for the blocking
-    /// wait — two distinct effects, never a combined head. The wait has a
-    /// fixed timeout whose expiry exits the caller, so no `Exn` joins the row.
+    /// wait — two distinct effects, never a combined head. The wait's timeout
+    /// (an `Int` of milliseconds, 5000 when omitted) expires by exiting the
+    /// caller, so no `Exn` joins the row; how long a process waits is not an
+    /// effect, so the timeout leaves the row untouched too.
     fn infer_request(&mut self, request: &RequestExpr) -> Checked<Type> {
         let span = node_span(request.syntax(), self.source_id);
         let (Some(pid), Some(message_fn)) = (request.pid(), request.message_fn()) else {
@@ -631,6 +711,9 @@ impl Checker {
         );
         self.unify_at(&expected, &fn_ty, fn_span)?;
         self.add_effects(&builder_row, span);
+        if let Some(timeout) = request.timeout() {
+            self.check_millis(&timeout)?;
+        }
         let row = EffectRow::closed([
             Effect::parametric("Send", Vec::from([msg_ty])),
             Effect::parametric("Await", Vec::from([reply_ty.clone()])),

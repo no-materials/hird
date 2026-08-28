@@ -245,6 +245,7 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
           "args": [],
           "result_type": "ReplyTo<Status> → Msg"
         },
+        "timeout": null,
         "result_type": "Status"
       }
     }

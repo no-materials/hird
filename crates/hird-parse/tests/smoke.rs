@@ -894,3 +894,28 @@ fn recovery_terminates_and_stays_lossless() {
         );
     }
 }
+
+#[test]
+fn clock_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = clock()"));
+}
+
+#[test]
+fn clock_is_contextual() {
+    insta::assert_snapshot!(render_cst("fn go(clock: Clock) = f(clock)"));
+}
+
+#[test]
+fn self_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = self()"));
+}
+
+#[test]
+fn schedule_expr() {
+    insta::assert_snapshot!(render_cst("fn go() = schedule(c, pid, Tick, 1000)"));
+}
+
+#[test]
+fn request_expr_with_timeout() {
+    insta::assert_snapshot!(render_cst("fn go() = request(pid, Get, 60000)"));
+}

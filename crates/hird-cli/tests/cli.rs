@@ -480,9 +480,14 @@ fn wait_for_content(child: &mut Child, path: &Path, needle: &str, timeout: Durat
 
 /// A `main` that stands keeps its supervised actor serving after its own
 /// setup is done, and Ctrl-C to `hird run` shuts the tree down cleanly:
-/// exit status 0 with the audit stream synced.
+/// exit status 0 with the audit stream synced. Unix only: the interrupt
+/// relay it exercises has no counterpart elsewhere.
 #[test]
 fn run_stands_until_interrupted_then_exits_cleanly() {
+    if !cfg!(unix) {
+        eprintln!("skipping: the interrupt relay is Unix-only");
+        return;
+    }
     if !erlang_available() {
         eprintln!("skipping: erlc not found on PATH");
         return;
@@ -540,4 +545,125 @@ fn run_stands_until_interrupted_then_exits_cleanly() {
         "audit log: {log}"
     );
     assert!(lines[0].ends_with('}'), "audit log: {log}");
+}
+
+// ── time: scheduled sends and request timeouts ─────────────────
+
+/// An actor that swallows its requests: the handler never replies.
+const MUTE: &str = "effect Spawn<t>\n\
+     effect Send<t>\n\
+     effect Await<t>\n\
+     type St = St(Int)\n\
+     actor Mute {\n\
+       state: St,\n\
+       message: MuteMsg = | Get(ReplyTo<Int>),\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Get(r), st -> St ! {} = st,\n\
+     }\n\
+     fn main() ! {Spawn<MuteMsg>, Send<MuteMsg>, Await<Int>} =\n\
+       let p = spawn(Mute, St(0)) in\n\
+       match request(p, Get, 200) { _ -> () }";
+
+/// The heartbeat demo beats on its own: handed a clock at init, the
+/// supervised actor schedules its own next tick, so the audit stream keeps
+/// recording `Log` calls after `main` has stood, and Ctrl-C still ends the
+/// run cleanly. Unix only, like every standing test.
+#[test]
+fn run_heartbeat_ticks_itself_until_interrupted() {
+    if !cfg!(unix) {
+        eprintln!("skipping: the interrupt relay is Unix-only");
+        return;
+    }
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_heartbeat");
+    let demo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/heartbeat.hird");
+    let audit = dir.join("audit.jsonl");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args([
+            "run",
+            demo.to_str().expect("utf-8 path"),
+            "-o",
+            dir.join("out").to_str().expect("utf-8 path"),
+            "--audit-file",
+            audit.to_str().expect("utf-8 path"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the hird binary");
+
+    // The first beat lands about a second in; a second one follows without
+    // anything but the clock driving the actor.
+    wait_for_content(
+        &mut child,
+        &audit,
+        "\"message\":\"beat\"",
+        Duration::from_secs(60),
+    );
+    thread::sleep(Duration::from_millis(1500));
+    assert!(
+        child.try_wait().expect("poll the hird binary").is_none(),
+        "the program halted instead of standing"
+    );
+    let interrupt = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send SIGINT");
+    assert!(interrupt.success());
+    let output = child.wait_with_output().expect("wait for the hird binary");
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        stderr(&output)
+    );
+
+    let log = fs::read_to_string(&audit).expect("read the audit log");
+    let beats: Vec<&str> = log.lines().collect();
+    assert!(
+        beats.len() >= 2,
+        "expected repeated beats, audit log: {log}"
+    );
+    for beat in &beats {
+        assert!(
+            beat.contains("\"tool\":\"Log\"") && beat.contains("\"args\":{\"message\":\"beat\"}"),
+            "audit log: {log}"
+        );
+    }
+}
+
+/// A `request` timeout override is what the runtime waits for: against an
+/// actor that never replies, `request(p, Get, 200)` exits the caller well
+/// inside the 5000 ms default, and the crash names the timeout.
+#[test]
+fn run_request_timeout_override_is_honoured() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_request_timeout");
+    let file = write(&dir, "swallow.hird", MUTE);
+    let out_dir = dir.join("out");
+    // Build first so the timing below measures the run alone.
+    let build = hird(["build", &file, "-o", out_dir.to_str().expect("utf-8 path")].as_slice());
+    assert!(build.status.success(), "stderr: {}", stderr(&build));
+    let started = Instant::now();
+    let output = hird(["run", &file, "-o", out_dir.to_str().expect("utf-8 path")].as_slice());
+    let elapsed = started.elapsed();
+    assert!(
+        !output.status.success(),
+        "a swallowed request must crash the caller"
+    );
+    assert!(
+        stderr(&output).contains("timeout"),
+        "stderr: {}",
+        stderr(&output)
+    );
+    assert!(
+        elapsed < Duration::from_secs(4),
+        "the run took {elapsed:?}; the 200 ms timeout was not applied"
+    );
 }

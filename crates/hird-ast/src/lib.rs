@@ -896,6 +896,48 @@ ast_node! {
 }
 
 ast_node! {
+    /// A `clock()` expression: acquires the runtime clock capability.
+    ClockExpr => CLOCK_EXPR
+}
+
+ast_node! {
+    /// A `self()` expression: the enclosing actor's own typed pid.
+    SelfExpr => SELF_EXPR
+}
+
+ast_node! {
+    /// A `schedule(clock, pid, msg, delay_ms)` expression: delivers a message
+    /// to a typed reference after a delay, through a clock capability.
+    ScheduleExpr => SCHEDULE_EXPR
+}
+
+impl ScheduleExpr {
+    /// The clock capability expression (a `Clock`).
+    #[must_use]
+    pub fn clock(&self) -> Option<Expr> {
+        exprs(&self.0).next()
+    }
+
+    /// The destination expression (a `Pid<Msg>`).
+    #[must_use]
+    pub fn pid(&self) -> Option<Expr> {
+        exprs(&self.0).nth(1)
+    }
+
+    /// The message expression.
+    #[must_use]
+    pub fn message(&self) -> Option<Expr> {
+        exprs(&self.0).nth(2)
+    }
+
+    /// The delay expression, in milliseconds (an `Int`).
+    #[must_use]
+    pub fn delay(&self) -> Option<Expr> {
+        exprs(&self.0).nth(3)
+    }
+}
+
+ast_node! {
     /// A `child(SupName, child_id)` expression: typed lookup of a supervised
     /// child's pid. Both arguments are namespace references, not expressions.
     ChildExpr => CHILD_EXPR
@@ -951,8 +993,8 @@ impl SendExpr {
 }
 
 ast_node! {
-    /// A `request(pid, ctor)` expression: send with an embedded reply channel,
-    /// awaiting the reply.
+    /// A `request(pid, ctor[, timeout_ms])` expression: send with an embedded
+    /// reply channel, awaiting the reply.
     RequestExpr => REQUEST_EXPR
 }
 
@@ -968,6 +1010,12 @@ impl RequestExpr {
     #[must_use]
     pub fn message_fn(&self) -> Option<Expr> {
         exprs(&self.0).nth(1)
+    }
+
+    /// The optional timeout expression, in milliseconds (an `Int`).
+    #[must_use]
+    pub fn timeout(&self) -> Option<Expr> {
+        exprs(&self.0).nth(2)
     }
 }
 
@@ -1203,11 +1251,17 @@ pub enum Expr {
     Supervise(SuperviseExpr),
     /// `stand()`
     Stand(StandExpr),
+    /// `clock()`
+    Clock(ClockExpr),
+    /// `self()`
+    SelfRef(SelfExpr),
+    /// `schedule(clock, pid, msg, delay_ms)`
+    Schedule(ScheduleExpr),
     /// `child(SupName, child_id)`
     Child(ChildExpr),
     /// `send(pid, msg)`
     Send(SendExpr),
-    /// `request(pid, ctor)`
+    /// `request(pid, ctor[, timeout_ms])`
     Request(RequestExpr),
     /// `reply(reply_to, value)`
     Reply(ReplyExpr),
@@ -1246,6 +1300,9 @@ impl Expr {
             SyntaxKind::SPAWN_EXPR => Self::Spawn(SpawnExpr(node)),
             SyntaxKind::SUPERVISE_EXPR => Self::Supervise(SuperviseExpr(node)),
             SyntaxKind::STAND_EXPR => Self::Stand(StandExpr(node)),
+            SyntaxKind::CLOCK_EXPR => Self::Clock(ClockExpr(node)),
+            SyntaxKind::SELF_EXPR => Self::SelfRef(SelfExpr(node)),
+            SyntaxKind::SCHEDULE_EXPR => Self::Schedule(ScheduleExpr(node)),
             SyntaxKind::CHILD_EXPR => Self::Child(ChildExpr(node)),
             SyntaxKind::SEND_EXPR => Self::Send(SendExpr(node)),
             SyntaxKind::REQUEST_EXPR => Self::Request(RequestExpr(node)),
@@ -1297,6 +1354,9 @@ impl Expr {
             Self::Spawn(n) => Some(n.syntax()),
             Self::Supervise(n) => Some(n.syntax()),
             Self::Stand(n) => Some(n.syntax()),
+            Self::Clock(n) => Some(n.syntax()),
+            Self::SelfRef(n) => Some(n.syntax()),
+            Self::Schedule(n) => Some(n.syntax()),
             Self::Child(n) => Some(n.syntax()),
             Self::Send(n) => Some(n.syntax()),
             Self::Request(n) => Some(n.syntax()),

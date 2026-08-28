@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = schedule(c, pid, Tick, 1000)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    SCHEDULE_EXPR
+      WHITESPACE " "
+      SCHEDULE_KW "schedule"
+      L_PAREN "("
+      IDENT "c"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "pid"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "Tick"
+      COMMA ","
+      WHITESPACE " "
+      INT "1000"
+      R_PAREN ")"

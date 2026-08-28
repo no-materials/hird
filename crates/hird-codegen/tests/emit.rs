@@ -41,7 +41,37 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Drift", DRIFT),
     ("Idle", IDLE),
     ("Wire", WIRE),
+    ("Timed", TIMED),
 ];
+
+/// A self-driving actor: handed a clock at init, it schedules its own next
+/// beat from `init` and from a handler; `main` acquires the clock in the
+/// child spec and requests with an explicit timeout.
+const TIMED: &str = "effect Send<t>\n\
+     effect Await<t>\n\
+     effect Schedule<t>\n\
+     type Status = Status(Int)\n\
+     type Cfg = Cfg(Clock, Int)\n\
+     actor Heart {\n\
+       state: Cfg,\n\
+       message: HeartMsg = | Beat | Get(ReplyTo<Status>),\n\
+       init: fn(c: Cfg) -> Cfg ! {Schedule<HeartMsg>} =\n\
+         match c { Cfg(clock, period) -> let first = schedule(clock, self(), Beat, period) in c },\n\
+       handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =\n\
+         let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),\n\
+       handle Get(r), st -> Cfg ! {Send<Status>} = let sent = reply(r, Status(1)) in st,\n\
+     } ! {Schedule<HeartMsg>, Send<Status>}\n\
+     supervisor HeartSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: heart, actor: Heart, start_args: Cfg(clock(), 1000), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn patient(p: Pid<HeartMsg>) -> Status ! {Send<HeartMsg>, Await<Status>} = request(p, Get, 60000)\n\
+     fn prompt(p: Pid<HeartMsg>) -> Status ! {Send<HeartMsg>, Await<Status>} = request(p, Get)\n\
+     fn kick(p: Pid<HeartMsg>) ! {Clock, Schedule<HeartMsg>} = schedule(clock(), p, Beat, 10)";
 
 const MATH: &str = "fn add(x: Int, y: Int) -> Int = x + y\n\
      fn precedence(a: Int, b: Int) -> Bool = (a + b) * 2 - 1 == b / 2\n\
@@ -502,6 +532,31 @@ fn snapshot_supervisor_single_child() {
 #[test]
 fn snapshot_supervise_and_child_lookup() {
     insta::assert_snapshot!(emit(program("Tree"), "Tree"));
+}
+
+/// `clock()` is `hird_clock:real()`, `schedule` a `hird_clock:schedule` call,
+/// and a `request` timeout replaces the 5000 ms default.
+#[test]
+fn snapshot_clock_schedule_and_request_timeout() {
+    insta::assert_snapshot!(emit(program("Timed"), "Timed"));
+}
+
+/// Inside the actor module, `self()` is the process's own pid, in `init` and
+/// in a cast clause alike.
+#[test]
+fn snapshot_actor_schedules_itself() {
+    insta::assert_snapshot!(behaviour_module(program("Timed"), "Timed", "hird_heart"));
+}
+
+/// A child spec acquiring the clock renders the acquisition inline in the
+/// start argument.
+#[test]
+fn snapshot_supervisor_start_args_acquire_clock() {
+    insta::assert_snapshot!(behaviour_module(
+        program("Timed"),
+        "Timed",
+        "hird_heart_sup"
+    ));
 }
 
 #[test]

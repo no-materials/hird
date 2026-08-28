@@ -48,6 +48,11 @@ dispatcher.
   the OTP parent-shutdown protocol) and returns, so the boot module's
   audit sync runs after the trees are gone. It replaces OTP's default
   signal handler for the node's lifetime.
+- `hird_clock.erl` — the clock capability: `real/0` is what `clock()`
+  lowers to, and `schedule/4` is `schedule(clock, pid, msg, delay_ms)`:
+  `erlang:send_after` into the destination's cast path. The clock value
+  carries its implementation; a scheduled message is not cancellable,
+  and one aimed at an exited pid is dropped.
 
 ## Tests
 

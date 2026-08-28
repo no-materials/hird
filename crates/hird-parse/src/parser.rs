@@ -1106,8 +1106,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// A prefix-position expression: `let`, `λ`, `if`, `match`, `handle`, or
-    /// one of the keyword forms (`spawn`, `supervise`, `stand`, `child`,
-    /// `send`, `request`, `reply`, `crash!`/`panic!`), otherwise an atom.
+    /// one of the keyword forms (`spawn`, `supervise`, `stand`, `clock`,
+    /// `self`, `child`, `send`, `request`, `schedule`, `reply`,
+    /// `crash!`/`panic!`), otherwise an atom.
     fn parse_prefix_expr(&mut self) {
         match self.current() {
             SyntaxKind::LET_KW => self.parse_let_expr(),
@@ -1118,11 +1119,23 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             SyntaxKind::INSTALL_KW => self.parse_install_expr(),
             SyntaxKind::SPAWN_KW => self.parse_spawn_expr(),
             SyntaxKind::SUPERVISE_KW => self.parse_supervise_expr(),
-            SyntaxKind::STAND_KW => self.parse_stand_expr(),
+            SyntaxKind::STAND_KW => self.parse_nullary_form(SyntaxKind::STAND_EXPR),
+            // `clock` is contextual (like `as`): the form only as `clock()`,
+            // an ordinary identifier elsewhere, so `clock: Clock` stays a
+            // natural parameter name.
+            SyntaxKind::IDENT
+                if self.at_contextual("clock")
+                    && self.nth(1) == SyntaxKind::L_PAREN
+                    && self.nth(2) == SyntaxKind::R_PAREN =>
+            {
+                self.parse_nullary_form(SyntaxKind::CLOCK_EXPR);
+            }
+            SyntaxKind::SELF_KW => self.parse_nullary_form(SyntaxKind::SELF_EXPR),
             SyntaxKind::CHILD_KW => self.parse_child_expr(),
-            SyntaxKind::SEND_KW => self.parse_message_expr(SyntaxKind::SEND_EXPR),
-            SyntaxKind::REQUEST_KW => self.parse_message_expr(SyntaxKind::REQUEST_EXPR),
-            SyntaxKind::REPLY_KW => self.parse_message_expr(SyntaxKind::REPLY_EXPR),
+            SyntaxKind::SEND_KW => self.parse_call_form(SyntaxKind::SEND_EXPR, 2, 0),
+            SyntaxKind::REQUEST_KW => self.parse_call_form(SyntaxKind::REQUEST_EXPR, 2, 1),
+            SyntaxKind::SCHEDULE_KW => self.parse_call_form(SyntaxKind::SCHEDULE_EXPR, 4, 0),
+            SyntaxKind::REPLY_KW => self.parse_call_form(SyntaxKind::REPLY_EXPR, 2, 0),
             SyntaxKind::CRASH_KW | SyntaxKind::PANIC_KW => self.parse_crash_expr(),
             _ => self.parse_atom_expr(),
         }
@@ -1273,10 +1286,12 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `stand()` — a keyword form taking no arguments.
-    fn parse_stand_expr(&mut self) {
-        self.start_node(SyntaxKind::STAND_EXPR);
-        self.expect(SyntaxKind::STAND_KW);
+    /// `stand()`, `clock()`, or `self()` — a keyword form taking no
+    /// arguments, wrapped in `node`. The head token is consumed as is
+    /// (`clock` is an `IDENT`).
+    fn parse_nullary_form(&mut self, node: SyntaxKind) {
+        self.start_node(node);
+        self.bump();
         self.expect(SyntaxKind::L_PAREN);
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
@@ -1296,15 +1311,26 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `send(pid, msg)`, `request(pid, ctor)`, or `reply(reply_to, value)` —
-    /// keyword forms taking exactly two expression arguments.
-    fn parse_message_expr(&mut self, node: SyntaxKind) {
+    /// A keyword form over expression arguments — `send(pid, msg)`,
+    /// `request(pid, ctor[, timeout_ms])`, `schedule(clock, pid, msg,
+    /// delay_ms)`, `reply(reply_to, value)` — with `required` arguments and up
+    /// to `optional` more, wrapped in `node`.
+    fn parse_call_form(&mut self, node: SyntaxKind, required: usize, optional: usize) {
         self.start_node(node);
         self.bump();
         self.expect(SyntaxKind::L_PAREN);
-        self.parse_expr();
-        self.expect(SyntaxKind::COMMA);
-        self.parse_expr();
+        for i in 0..required {
+            if i > 0 {
+                self.expect(SyntaxKind::COMMA);
+            }
+            self.parse_expr();
+        }
+        for _ in 0..optional {
+            if !self.eat(SyntaxKind::COMMA) {
+                break;
+            }
+            self.parse_expr();
+        }
         self.expect(SyntaxKind::R_PAREN);
         self.finish_node();
     }

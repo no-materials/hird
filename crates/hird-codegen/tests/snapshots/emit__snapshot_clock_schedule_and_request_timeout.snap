@@ -1,0 +1,19 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Timed\"), \"Timed\")"
+---
+%% Generated from src/timed.hird by the Hirð compiler. Do not edit.
+-module(hird_timed).
+-export([patient/2, prompt/2, kick/2]).
+
+%% src/timed.hird:23
+patient(P, _Handlers@) ->
+    gen_server:call(P, get, 60000).
+
+%% src/timed.hird:24
+prompt(P, _Handlers@) ->
+    gen_server:call(P, get, 5000).
+
+%% src/timed.hird:25
+kick(P, _Handlers@) ->
+    hird_clock:schedule(hird_clock:real(), P, beat, 10).

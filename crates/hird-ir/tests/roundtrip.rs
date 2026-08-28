@@ -19,11 +19,11 @@
 use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
-    IrConstructor, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField, IrFnDef,
-    IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat, IrMatch,
-    IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSend, IrSpan,
-    IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat, IrVar, IrWildcardPat,
-    lower_module, pretty_print,
+    IrClock, IrConstructor, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField,
+    IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat,
+    IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSchedule,
+    IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat,
+    IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -396,6 +396,19 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
         IrExpr::Stand(stand) => IrExpr::Stand(IrStand {
             result_type: canon_type(&stand.result_type, map),
         }),
+        IrExpr::Clock(clock) => IrExpr::Clock(IrClock {
+            result_type: canon_type(&clock.result_type, map),
+        }),
+        IrExpr::SelfRef(this) => IrExpr::SelfRef(IrSelf {
+            result_type: canon_type(&this.result_type, map),
+        }),
+        IrExpr::Schedule(schedule) => IrExpr::Schedule(IrSchedule {
+            clock: Box::new(canon_expr(&schedule.clock, map)),
+            pid: Box::new(canon_expr(&schedule.pid, map)),
+            message: Box::new(canon_expr(&schedule.message, map)),
+            delay: Box::new(canon_expr(&schedule.delay, map)),
+            result_type: canon_type(&schedule.result_type, map),
+        }),
         IrExpr::Child(child) => IrExpr::Child(IrChild {
             supervisor: child.supervisor.clone(),
             child_id: child.child_id.clone(),
@@ -409,6 +422,10 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
         IrExpr::Request(request) => IrExpr::Request(IrRequest {
             pid: Box::new(canon_expr(&request.pid, map)),
             message_fn: Box::new(canon_expr(&request.message_fn, map)),
+            timeout: request
+                .timeout
+                .as_ref()
+                .map(|timeout| Box::new(canon_expr(timeout, map))),
             result_type: canon_type(&request.result_type, map),
         }),
         IrExpr::Reply(reply) => IrExpr::Reply(IrReply {
@@ -796,7 +813,33 @@ fn messaging_round_trips() {
            handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),\n\
          } ! {Send<Status>}\n\
          fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)\n\
-         fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)",
+         fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)\n\
+         fn patient(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get, 60000)",
+    );
+}
+
+#[test]
+fn time_round_trips() {
+    assert_roundtrips(
+        "effect Schedule<t>\n\
+         type Cfg = Cfg(Clock, Int)\n\
+         actor Heart {\n\
+           state: Cfg,\n\
+           message: HeartMsg = | Beat,\n\
+           init: fn(c: Cfg) -> Cfg ! {Schedule<HeartMsg>} =\n\
+             match c { Cfg(clock, period) -> let first = schedule(clock, self(), Beat, period) in c },\n\
+           handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =\n\
+             let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),\n\
+         } ! {Schedule<HeartMsg>}\n\
+         supervisor HeartSup {\n\
+           strategy: one_for_one,\n\
+           intensity: 5,\n\
+           period: 60,\n\
+           children: [\n\
+             { id: heart, actor: Heart, start_args: Cfg(clock(), 1000), restart: permanent },\n\
+           ]\n\
+         }\n\
+         fn kick(p: Pid<HeartMsg>) ! {Clock, Schedule<HeartMsg>} = schedule(clock(), p, Beat, 10)",
     );
 }
 

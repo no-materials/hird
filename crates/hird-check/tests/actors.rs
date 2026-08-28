@@ -713,3 +713,113 @@ fn handler_can_spawn() {
          } ! {Spawn<WorkerMsg>}"
     ));
 }
+
+// ── time: clock, schedule, self, request timeouts ───────────────
+
+/// The messaging fixture plus the `Schedule` head: what a self-driving actor
+/// declares.
+const TIMED: &str = "\
+effect Send<t>
+effect Await<t>
+effect Schedule<t>
+type Status = Status(Int)
+type St = St(Int)
+actor Counter {
+  state: St,
+  message: Msg = | Inc | Get(ReplyTo<Status>),
+  init: fn(s: St) -> St ! {} = s,
+  handle Inc, St(n) -> St ! {} = St(n + 1),
+  handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),
+} ! {Send<Status>}
+";
+
+/// A `request` may carry a timeout in milliseconds; the timeout is not an
+/// effect, so the row is the same as without it.
+#[test]
+fn request_timeout_override_leaves_row_unchanged() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn patient(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, Get, 60000)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// The timeout is an `Int`: anything else is a type error at the argument.
+#[test]
+fn request_timeout_must_be_int() {
+    let source = format!(
+        "{MESSAGING}\n\
+         fn hasty(p: Pid<Msg>) -> Status ! {{Send<Msg>, Await<Status>}} = request(p, Get, \"soon\")"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// `clock()` types as the built-in `Clock` and contributes the checker-known
+/// bare `Clock` effect; `schedule` through it contributes `Schedule<Msg>`
+/// for the destination's message type. A row omitting either fails.
+#[test]
+fn clock_and_schedule_contribute_their_effects() {
+    let source = format!(
+        "{TIMED}\n\
+         fn tick(p: Pid<Msg>) ! {{Clock, Schedule<Msg>}} = schedule(clock(), p, Inc, 1000)\n\
+         fn handed(c: Clock, p: Pid<Msg>) ! {{Schedule<Msg>}} = schedule(c, p, Inc, 1000)\n\
+         fn quiet(p: Pid<Msg>) ! {{Schedule<Msg>}} = schedule(clock(), p, Inc, 1000)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// Each `schedule` argument is pinned: the clock to `Clock`, the message to
+/// the pid's message type, the delay to `Int`.
+#[test]
+fn schedule_arguments_are_typed() {
+    let source = format!(
+        "{TIMED}\n\
+         fn bad_clock(p: Pid<Msg>) ! {{Schedule<Msg>}} = schedule(1, p, Inc, 1000)\n\
+         fn bad_message(c: Clock, p: Pid<Msg>) ! {{Schedule<Msg>}} = schedule(c, p, Status(1), 1000)\n\
+         fn bad_delay(c: Clock, p: Pid<Msg>) ! {{Schedule<Msg>}} = schedule(c, p, Inc, \"later\")"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// A call constructor cannot be scheduled: like `send`, the form carries no
+/// reply channel, so the constructor is barred from the message position.
+#[test]
+fn schedule_rejects_call_constructor() {
+    let source = format!(
+        "{TIMED}\n\
+         fn later(c: Clock, p: Pid<Msg>, r: ReplyTo<Status>) ! {{Schedule<Msg>}} =\n\
+           schedule(c, p, Get(r), 1000)"
+    );
+    insta::assert_snapshot!(check_str(&source));
+}
+
+/// Inside an actor, `self()` is its own `Pid<Msg>` with the empty row: an
+/// actor handed a clock at init can schedule its own next tick from `init`
+/// and from a handler.
+#[test]
+fn self_is_the_actors_own_pid() {
+    insta::assert_snapshot!(check_str(
+        "effect Schedule<t>\n\
+         type Cfg = Cfg(Clock, Int)\n\
+         type St = St(Clock, Int)\n\
+         actor Heart {\n\
+           state: St,\n\
+           message: HeartMsg = | Beat,\n\
+           init: fn(c: Cfg) -> St ! {Schedule<HeartMsg>} =\n\
+             match c { Cfg(clock, period) ->\n\
+               let first = schedule(clock, self(), Beat, period) in St(clock, period) },\n\
+           handle Beat, St(clock, period) -> St ! {Schedule<HeartMsg>} =\n\
+             let next = schedule(clock, self(), Beat, period) in St(clock, period),\n\
+         } ! {Schedule<HeartMsg>}\n\
+         fn me() -> Pid<HeartMsg> = self()"
+    ));
+}
+
+/// `Clock` is an opaque capability: it cannot cross the tool wire boundary.
+#[test]
+fn clock_is_not_wire_representable() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         tool Now : { clock: Clock } -> Int"
+    ));
+}

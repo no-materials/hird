@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         tool Now : { clock: Clock } -> Int\")"
+---
+error[C0032] 20..23: tool `Now` args are not wire-representable: `Clock` is an opaque capability

@@ -1676,6 +1676,113 @@ clean as its start: trees shut down, audit stream synced, then halt.
 
 ---
 
+## ADR-026: Time as a capability — `clock`, `schedule`, `self`, and request timeouts
+
+**Date**: 2026-08-28
+**Status**: Accepted (applies ADR-006 to time; builds on ADR-019/020/024)
+
+### Context
+
+No timer existed anywhere in the language or runtime, and `request`
+lowered to a hardcoded 5000 ms `gen_server:call`. A periodic, self-driving
+actor — the heartbeat of any standing system (ADR-025) — was
+inexpressible, and any request slower than five seconds killed its
+caller. ADR-006 already names `Clock` among the resources that must be
+capabilities rather than ambient effects; this decision is the first
+built-in capability and fixes how such a capability enters a program
+whose supervisors are declared statically.
+
+### Decision
+
+1. **`Clock` is a built-in opaque type; `clock()` is the one way to
+   obtain it, with the checker-known bare effect `Clock`.** There is no
+   `Clock` constructor and no other producer, so a function that has a
+   clock was either handed one or acquired it — and acquiring it is in the
+   row. A function that is handed a clock carries no `Clock` effect. The
+   type is opaque for the wire (C0032): a clock never crosses a tool
+   signature. `clock` is a *contextual* keyword (the `as` precedent): only
+   `clock()` is the form, so `clock: Clock` remains the natural parameter
+   name the discipline wants.
+
+2. **`schedule(clock, pid, msg, delay_ms)` is a keyword form carrying
+   `Schedule<Msg>`.** It delivers `msg` to `pid` after `delay_ms`
+   milliseconds, lowering to `hird_clock:schedule/4` — `erlang:send_after`
+   into the destination's cast path, so a scheduled message is received by
+   the same `handle_cast` clause a `send` would reach. The effect is a head
+   of its own rather than `Send<Msg>`: the row, and the effect graph, can
+   then tell a self-driving actor from one that merely sends, which is
+   what the standing-system story needs to read off the org chart. The
+   timer reference is not returned and there is no cancel form; a message
+   aimed at an exited pid is dropped by the runtime, so a restarted actor
+   schedules its first tick again from `init`.
+
+3. **`self()` is the enclosing actor's own `Pid<Msg>`, effect-free, and
+   rejected outside actor bodies (C0055).** Reading one's own address
+   creates and communicates nothing (the ADR-024 §4 argument for `child`),
+   and it is the only way an actor can address itself, since supervised
+   children are unregistered and their pids are never in scope at
+   declaration time. The check uses the same current-actor tracking as
+   C0054.
+
+4. **A supervisor child's `start_args` may acquire the clock — the one
+   effect allowed — and the supervisor's derived row records it.**
+   Supervisors are static declarations (ADR-024), so a child's
+   capabilities have nowhere else to come from; the child spec is the
+   grant. `Clock` needs no handler map, so the reason start arguments must
+   otherwise be pure (they run in the supervisor's `init`, against no
+   handlers) does not apply to it.
+
+5. **`request(pid, Ctor, timeout_ms)` overrides the default 5000 ms
+   timeout with an `Int` of milliseconds; the row is unchanged.** Rows say
+   what a process does, not how long it waits (ADR-005), and a timeout
+   still exits the caller (ADR-019/021). There is no `infinity`: a
+   standing system's health depends on every wait ending.
+
+6. **Milliseconds are bare `Int`s.** No duration type or literal; the unit
+   is documented at each form and in the phrasebook. A `Duration` type
+   later is additive.
+
+### Alternatives considered
+
+- **An ambient `Schedule<Msg>` effect with no capability.** Rejected: it
+  is honest about *what* is scheduled but says nothing about who is
+  allowed to reach for time, and a clock value is what a later fake or
+  virtual clock has to hang off (the value carries its implementation in
+  the runtime already).
+- **Effect argument as the capability type (`Schedule<Clock>`).** The
+  ADR-006 shape, but `Clock` is monomorphic so the argument would carry
+  no information; `Schedule<Msg>` parallels `Send<Msg>` and is what the
+  graph wants.
+- **`clock()` pure, forbidden inside actor bodies.** Simpler than an
+  effect, but a pure helper returning `Clock` would smuggle it past the
+  check silently; with `Clock` an effect the helper's row shows it and
+  the actor's summary must too.
+- **`fn main(clock: Clock)` as the root.** Principled, but a statically
+  declared supervisor child could never be handed one.
+- **`request(pid, Ctor) within 60000` and other suffix spellings.**
+  Rejected for a trailing argument, consistent across both time-annotated
+  forms.
+- **Cancellation (`TimerRef`, `cancel`).** Deferred: no periodic actor
+  needs it, cancel races delivery so a late tick must be handled anyway,
+  and it costs a new builtin type. Tracked separately.
+
+### Consequences
+
+- The row is the whole story: `! {Clock, …}` acquires time, `!
+  {Schedule<Msg>, …}` drives an actor, an init parameter of type `Clock`
+  is handed time. The effect graph renders `Schedule` edges like `Send`.
+- A `Clock` may travel in a message: capability passing between actors is
+  ordinary and useful, and the runtime term is plain data.
+- `schedule` and `self` claim identifier space; `clock` does not.
+  Acceptable pre-publish.
+- Two same-typed clocks are one row element (ADR-012 §2); no v0.1 program
+  has two clocks.
+- The runtime grows `hird_clock`; generated code calls `real/0` and
+  `schedule/4` and nothing else, so a virtual clock later is a runtime
+  change, not a language one.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here

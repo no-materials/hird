@@ -87,6 +87,10 @@ pub enum TokenKind {
     Supervise,
     /// `stand`
     Stand,
+    /// `schedule`
+    Schedule,
+    /// `self`
+    SelfKw,
     /// `child`
     Child,
     /// `send`
@@ -235,6 +239,8 @@ impl TokenKind {
                 | Self::Spawn
                 | Self::Supervise
                 | Self::Stand
+                | Self::Schedule
+                | Self::SelfKw
                 | Self::Child
                 | Self::Send
                 | Self::Request

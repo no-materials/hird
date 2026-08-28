@@ -33,9 +33,9 @@ use alloc::vec::Vec;
 use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Decl,
     Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr,
-    Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, SendExpr,
-    SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField, ToolDecl, TupleLit,
-    TypeDecl,
+    Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, ScheduleExpr,
+    SendExpr, SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField, ToolDecl,
+    TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -43,11 +43,11 @@ use hird_types::{Effect, EffectRow, Type};
 
 use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
-    IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef,
-    IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral,
-    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply,
-    IrRequest, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrToolDef, IrTuple,
-    IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrClock, IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr,
+    IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
+    IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField,
+    IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise,
+    IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -365,6 +365,13 @@ impl Lowerer<'_> {
             Expr::Stand(stand) => IrExpr::Stand(IrStand {
                 result_type: self.node_type(stand.syntax()),
             }),
+            Expr::Clock(clock) => IrExpr::Clock(IrClock {
+                result_type: self.node_type(clock.syntax()),
+            }),
+            Expr::SelfRef(this) => IrExpr::SelfRef(IrSelf {
+                result_type: self.node_type(this.syntax()),
+            }),
+            Expr::Schedule(schedule) => self.lower_schedule(schedule),
             Expr::Child(child) => self.lower_child_lookup(child),
             Expr::Send(send) => self.lower_send(send),
             Expr::Request(request) => self.lower_request(request),
@@ -593,14 +600,33 @@ impl Lowerer<'_> {
         })
     }
 
-    /// `request(pid, ctor)`. The recorded type is the reply type.
+    /// `request(pid, ctor[, timeout_ms])`. The recorded type is the reply
+    /// type.
     fn lower_request(&self, request: &RequestExpr) -> IrExpr {
         let pid = request.pid().expect("request has a pid");
         let message_fn = request.message_fn().expect("request has a message builder");
         IrExpr::Request(IrRequest {
             pid: Box::new(self.lower_expr(&pid)),
             message_fn: Box::new(self.lower_expr(&message_fn)),
+            timeout: request
+                .timeout()
+                .map(|timeout| Box::new(self.lower_expr(&timeout))),
             result_type: self.node_type(request.syntax()),
+        })
+    }
+
+    /// `schedule(clock, pid, msg, delay_ms)`. The recorded type is unit.
+    fn lower_schedule(&self, schedule: &ScheduleExpr) -> IrExpr {
+        let clock = schedule.clock().expect("schedule has a clock");
+        let pid = schedule.pid().expect("schedule has a pid");
+        let message = schedule.message().expect("schedule has a message");
+        let delay = schedule.delay().expect("schedule has a delay");
+        IrExpr::Schedule(IrSchedule {
+            clock: Box::new(self.lower_expr(&clock)),
+            pid: Box::new(self.lower_expr(&pid)),
+            message: Box::new(self.lower_expr(&message)),
+            delay: Box::new(self.lower_expr(&delay)),
+            result_type: self.node_type(schedule.syntax()),
         })
     }
 

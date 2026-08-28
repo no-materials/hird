@@ -119,9 +119,12 @@ fn expr_prec(expr: &IrExpr) -> u8 {
         IrExpr::Spawn(_)
         | IrExpr::Supervise(_)
         | IrExpr::Stand(_)
+        | IrExpr::Clock(_)
+        | IrExpr::SelfRef(_)
         | IrExpr::Child(_)
         | IrExpr::Send(_)
         | IrExpr::Request(_)
+        | IrExpr::Schedule(_)
         | IrExpr::Reply(_) => PREC_ATOM,
         IrExpr::Crash(_) => PREC_ATOM,
         IrExpr::Constructor(ctor) => {
@@ -463,6 +466,18 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
         IrExpr::Stand(_) => {
             out.insert(String::from("Stand"), 0);
         }
+        IrExpr::Clock(_) => {
+            out.insert(String::from("Clock"), 0);
+        }
+        // Reading one's own pid is effect-free.
+        IrExpr::SelfRef(_) => {}
+        IrExpr::Schedule(schedule) => {
+            out.insert(String::from("Schedule"), 1);
+            collect_expr_effects(&schedule.clock, out);
+            collect_expr_effects(&schedule.pid, out);
+            collect_expr_effects(&schedule.message, out);
+            collect_expr_effects(&schedule.delay, out);
+        }
         // A child lookup is effect-free.
         IrExpr::Child(_) => {}
         IrExpr::Send(send) => {
@@ -476,6 +491,9 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             out.insert(String::from("Await"), 1);
             collect_expr_effects(&request.pid, out);
             collect_expr_effects(&request.message_fn, out);
+            if let Some(timeout) = &request.timeout {
+                collect_expr_effects(timeout, out);
+            }
             collect_type_effects(&request.result_type, out);
         }
         IrExpr::Reply(reply) => {
@@ -900,6 +918,19 @@ impl Printer {
                 self.push(")");
             }
             IrExpr::Stand(_) => self.push("stand()"),
+            IrExpr::Clock(_) => self.push("clock()"),
+            IrExpr::SelfRef(_) => self.push("self()"),
+            IrExpr::Schedule(schedule) => {
+                self.push("schedule(");
+                self.expr(&schedule.clock, PREC_LOW);
+                self.push(", ");
+                self.expr(&schedule.pid, PREC_LOW);
+                self.push(", ");
+                self.expr(&schedule.message, PREC_LOW);
+                self.push(", ");
+                self.expr(&schedule.delay, PREC_LOW);
+                self.push(")");
+            }
             IrExpr::Child(child) => {
                 self.push("child(");
                 self.push(&child.supervisor);
@@ -909,7 +940,15 @@ impl Printer {
             }
             IrExpr::Send(send) => self.message_form("send", &send.pid, &send.message),
             IrExpr::Request(request) => {
-                self.message_form("request", &request.pid, &request.message_fn);
+                self.push("request(");
+                self.expr(&request.pid, PREC_LOW);
+                self.push(", ");
+                self.expr(&request.message_fn, PREC_LOW);
+                if let Some(timeout) = &request.timeout {
+                    self.push(", ");
+                    self.expr(timeout, PREC_LOW);
+                }
+                self.push(")");
             }
             IrExpr::Reply(reply) => self.message_form("reply", &reply.reply_to, &reply.value),
             IrExpr::Crash(crash) => {

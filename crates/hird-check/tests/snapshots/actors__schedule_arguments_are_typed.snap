@@ -1,0 +1,14 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+bad_clock : ∀a. a
+bad_delay : ∀a. a
+bad_message : ∀a. a
+error[C0001] 412..413: type mismatch: expected `Clock`, got `Int`
+error[C0001] 501..511: type mismatch: expected `Msg`, got `Status`
+error[C0001] 595..602: type mismatch: expected `Int`, got `String`

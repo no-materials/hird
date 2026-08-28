@@ -837,3 +837,117 @@ fn lambda_carries_its_effect_row() {
     };
     assert_eq!(format!("{}", lambda.effect_row), "{Log}");
 }
+
+/// A self-driving actor: `clock`, `self`, and `schedule` lower to their own
+/// nodes with the checked types, `request` carries its optional timeout, and
+/// the rows record `Clock` and `Schedule<Msg>`.
+const TIMED: &str = "\
+effect Send<t>
+effect Await<t>
+effect Schedule<t>
+type Status = Status(Int)
+type Cfg = Cfg(Clock, Int)
+actor Heart {
+  state: Cfg,
+  message: HeartMsg = | Beat | Get(ReplyTo<Status>),
+  init: fn(c: Cfg) -> Cfg ! {} = c,
+  handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =
+    let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),
+  handle Get(r), st -> Cfg ! {Send<Status>} = let sent = reply(r, Status(1)) in st,
+} ! {Schedule<HeartMsg>, Send<Status>}
+supervisor HeartSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: heart, actor: Heart, start_args: Cfg(clock(), 1000), restart: permanent },
+  ]
+}
+fn acquire() -> Clock ! {Clock} = clock()
+fn patient(p: Pid<HeartMsg>) -> Status ! {Send<HeartMsg>, Await<Status>} = request(p, Get, 60000)
+fn prompt(p: Pid<HeartMsg>) -> Status ! {Send<HeartMsg>, Await<Status>} = request(p, Get)
+";
+
+#[test]
+fn clock_lowers_to_clock_node() {
+    let module = lower(TIMED, "Timed");
+    let acquire = fn_named(&module, "acquire");
+    let IrExpr::Clock(clock) = &acquire.body else {
+        panic!("body should be a clock, got {:?}", acquire.body);
+    };
+    assert_eq!(ty_str(&clock.result_type), "Clock");
+    assert_eq!(format!("{}", acquire.effect_row), "{Clock}");
+}
+
+#[test]
+fn request_carries_optional_timeout() {
+    let module = lower(TIMED, "Timed");
+    let patient = fn_named(&module, "patient");
+    let IrExpr::Request(request) = &patient.body else {
+        panic!("body should be a request, got {:?}", patient.body);
+    };
+    let Some(IrExpr::Literal(timeout)) = request.timeout.as_deref() else {
+        panic!("the timeout should be a literal, got {:?}", request.timeout);
+    };
+    assert_eq!(timeout.value, LiteralValue::Int(Box::from("60000")));
+    // The timeout is not an effect: the row is the plain request row.
+    assert_eq!(
+        format!("{}", patient.effect_row),
+        "{Await<Status>, Send<HeartMsg>}"
+    );
+    let prompt = fn_named(&module, "prompt");
+    let IrExpr::Request(request) = &prompt.body else {
+        panic!("body should be a request, got {:?}", prompt.body);
+    };
+    assert!(request.timeout.is_none());
+}
+
+#[test]
+fn schedule_and_self_lower_inside_actor() {
+    let module = lower(TIMED, "Timed");
+    let actor = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Actor(a) => Some(a),
+            _ => None,
+        })
+        .expect("actor declaration is present");
+    let beat = actor
+        .handlers
+        .iter()
+        .find(|h| matches!(&h.message, IrPattern::Constructor(c) if c.name == "Beat"))
+        .expect("the Beat handler is present");
+    let IrExpr::Let(binding) = &beat.body else {
+        panic!("handler body should be a let, got {:?}", beat.body);
+    };
+    let IrExpr::Schedule(schedule) = binding.value.as_ref() else {
+        panic!(
+            "the bound value should be a schedule, got {:?}",
+            binding.value
+        );
+    };
+    assert_eq!(ty_str(&schedule.result_type), "()");
+    let IrExpr::SelfRef(this) = schedule.pid.as_ref() else {
+        panic!("the destination should be self, got {:?}", schedule.pid);
+    };
+    assert_eq!(ty_str(&this.result_type), "Pid<HeartMsg>");
+    assert_eq!(format!("{}", beat.effect_row), "{Schedule<HeartMsg>}");
+    // The supervisor's derived row records the clock its child spec acquires.
+    let sup = module
+        .declarations
+        .iter()
+        .find_map(|d| match d {
+            IrDecl::Supervisor(s) => Some(s),
+            _ => None,
+        })
+        .expect("supervisor declaration is present");
+    assert_eq!(
+        format!("{}", sup.effect_row),
+        "{Clock, Schedule<HeartMsg>, Send<Status>}"
+    );
+    assert!(matches!(
+        &sup.children[0].start_args,
+        IrExpr::Constructor(c) if matches!(c.args.as_slice(), [IrExpr::Clock(_), _])
+    ));
+}

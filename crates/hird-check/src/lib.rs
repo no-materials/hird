@@ -47,10 +47,19 @@
 //!
 //! The messaging primitives are keyword forms with per-process, local
 //! effects: `send(pid, msg)` types as `() ! {Send<Msg>}` against the pid's
-//! message type; `request(pid, ctor)` builds a message around a fresh
-//! `ReplyTo<T>`, types as `T ! {Send<Msg>, Await<T>}`, and blocks with a
-//! fixed timeout whose expiry exits the caller; `reply(reply_to, value)` —
-//! the only operation on `ReplyTo<T>` — types as `() ! {Send<T>}`.
+//! message type; `request(pid, ctor[, timeout_ms])` builds a message around
+//! a fresh `ReplyTo<T>`, types as `T ! {Send<Msg>, Await<T>}`, and blocks
+//! for the timeout (an `Int` of milliseconds, 5000 by default) whose expiry
+//! exits the caller; `reply(reply_to, value)` — the only operation on
+//! `ReplyTo<T>` — types as `() ! {Send<T>}`.
+//!
+//! Time is a capability. `clock()` acquires the built-in opaque `Clock` with
+//! the checker-known bare effect `Clock`; `schedule(clock, pid, msg,
+//! delay_ms)` types as `() ! {Schedule<Msg>}` and delivers the message after
+//! the delay; `self()` is the enclosing actor's own `Pid<Msg>`, rejected
+//! outside actor bodies ([`CheckCode::C0055`]). A supervisor child's
+//! `start_args` may acquire the clock — the one effect it is allowed — so a
+//! supervised actor can be handed one.
 //!
 //! # Quick start
 //!

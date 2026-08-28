@@ -22,7 +22,7 @@ use crate::{Failure, fail};
 
 /// The hand-written Erlang runtime library, embedded so the compiled binary
 /// is self-contained.
-const RUNTIME: [(&str, &str); 7] = [
+const RUNTIME: [(&str, &str); 8] = [
     (
         "hird_audit",
         include_str!(concat!(
@@ -32,6 +32,13 @@ const RUNTIME: [(&str, &str); 7] = [
     ),
     (
         "hird_handlers",
+    (
+        "hird_clock",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../runtime/hird_clock.erl"
+        )),
+    ),
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_handlers.erl"

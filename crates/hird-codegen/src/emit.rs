@@ -44,8 +44,9 @@
 //! `begin … end` when it sits in expression position. The messaging
 //! primitives lower per the actor mapping: `spawn` to the actor module's
 //! `start_link`, `send` to `gen_server:cast`, `request` to `gen_server:call`
-//! with the fixed 5000 ms timeout, `reply` to `gen_server:reply`, and
-//! `crash!` to `erlang:error`.
+//! with its timeout (5000 ms unless given), `reply` to `gen_server:reply`,
+//! `clock` to `hird_clock:real`, `schedule` to `hird_clock:schedule` (a
+//! delayed cast), `self` to `self()`, and `crash!` to `erlang:error`.
 //!
 //! # Actor modules
 //!
@@ -848,6 +849,15 @@ impl<'a> Emitter<'a> {
                 indent,
                 ctx,
             ),
+            IrExpr::Clock(_) => String::from("hird_clock:real()"),
+            IrExpr::SelfRef(_) => String::from("self()"),
+            IrExpr::Schedule(schedule) => {
+                let clock = self.expr(&schedule.clock, env, cx, indent, Ctx::Expr);
+                let pid = self.expr(&schedule.pid, env, cx, indent, Ctx::Expr);
+                let msg = self.expr(&schedule.message, env, cx, indent, Ctx::Expr);
+                let delay = self.expr(&schedule.delay, env, cx, indent, Ctx::Expr);
+                format!("hird_clock:schedule({clock}, {pid}, {msg}, {delay})")
+            }
             IrExpr::Child(child) => {
                 // The runtime lookup yields `{ok, Pid} | error`; the miss is a
                 // crash (a missing or restarting child is supervision's
@@ -880,7 +890,11 @@ impl<'a> Emitter<'a> {
                     IrExpr::Constructor(ctor) => atom(&snake_case(&ctor.name)),
                     other => self.expr(other, env, cx, indent, Ctx::Expr),
                 };
-                format!("gen_server:call({pid}, {msg}, 5000)")
+                let timeout = match &request.timeout {
+                    Some(timeout) => self.expr(timeout, env, cx, indent, Ctx::Expr),
+                    None => String::from("5000"),
+                };
+                format!("gen_server:call({pid}, {msg}, {timeout})")
             }
             IrExpr::Reply(reply) => {
                 let to = self.expr(&reply.reply_to, env, cx, indent, Ctx::Expr);
@@ -1586,6 +1600,9 @@ fn expr_type(expr: &IrExpr) -> Type {
         IrExpr::Spawn(s) => s.result_type.clone(),
         IrExpr::Supervise(s) => s.result_type.clone(),
         IrExpr::Stand(s) => s.result_type.clone(),
+        IrExpr::Clock(c) => c.result_type.clone(),
+        IrExpr::SelfRef(s) => s.result_type.clone(),
+        IrExpr::Schedule(s) => s.result_type.clone(),
         IrExpr::Child(c) => c.result_type.clone(),
         IrExpr::Send(s) => s.result_type.clone(),
         IrExpr::Request(r) => r.result_type.clone(),

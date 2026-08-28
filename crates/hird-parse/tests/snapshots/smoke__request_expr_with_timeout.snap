@@ -1,0 +1,25 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn go() = request(pid, Get, 60000)\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "go"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    REQUEST_EXPR
+      WHITESPACE " "
+      REQUEST_KW "request"
+      L_PAREN "("
+      IDENT "pid"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "Get"
+      COMMA ","
+      WHITESPACE " "
+      INT "60000"
+      R_PAREN ")"

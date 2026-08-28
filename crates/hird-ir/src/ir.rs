@@ -338,11 +338,17 @@ pub enum IrExpr {
     Supervise(IrSupervise),
     /// `stand()`
     Stand(IrStand),
+    /// `clock()`
+    Clock(IrClock),
+    /// `self()`
+    SelfRef(IrSelf),
+    /// `schedule(clock, pid, msg, delay_ms)`
+    Schedule(IrSchedule),
     /// `child(SupName, child_id)`
     Child(IrChild),
     /// `send(pid, msg)`
     Send(IrSend),
-    /// `request(pid, ctor)`
+    /// `request(pid, ctor[, timeout_ms])`
     Request(IrRequest),
     /// `reply(reply_to, value)`
     Reply(IrReply),
@@ -522,6 +528,43 @@ pub struct IrStand {
     pub result_type: Type,
 }
 
+/// A `clock()` expression: acquires the runtime clock capability, typed as
+/// the built-in opaque `Clock` with a bare `Clock` effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrClock {
+    /// The expression's type: `Clock`.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `self()` expression: the enclosing actor's own pid, typed as its
+/// `Pid<Msg>`, effect-free.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSelf {
+    /// The expression's type: `Pid<Msg>` for the enclosing actor's message
+    /// type.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
+/// A `schedule(clock, pid, msg, delay_ms)` expression: delivery of a message
+/// to a typed `Pid<Msg>` reference after a delay, through a clock capability;
+/// unit-valued with a `Schedule<Msg>` effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrSchedule {
+    /// The clock capability expression.
+    pub clock: Box<IrExpr>,
+    /// The destination pid expression.
+    pub pid: Box<IrExpr>,
+    /// The message expression.
+    pub message: Box<IrExpr>,
+    /// The delay expression, in milliseconds.
+    pub delay: Box<IrExpr>,
+    /// The expression's type: unit.
+    #[serde(serialize_with = "serialize_type")]
+    pub result_type: Type,
+}
+
 /// A `child(SupName, child_id)` expression: typed lookup of a supervised
 /// child's pid, effect-free. Both arguments are namespace references, not
 /// expressions; a missing or restarting child crashes rather than returning
@@ -550,8 +593,8 @@ pub struct IrSend {
     pub result_type: Type,
 }
 
-/// A `request(pid, ctor)` expression: builds a message around a fresh
-/// `ReplyTo<T>`, sends it, and awaits the reply, with `Send<Msg>` and
+/// A `request(pid, ctor[, timeout_ms])` expression: builds a message around a
+/// fresh `ReplyTo<T>`, sends it, and awaits the reply, with `Send<Msg>` and
 /// `Await<T>` effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrRequest {
@@ -560,6 +603,9 @@ pub struct IrRequest {
     /// The message-building function (`ReplyTo<T> → Msg`), typically a
     /// message constructor.
     pub message_fn: Box<IrExpr>,
+    /// The timeout expression, in milliseconds; `None` for the 5000 ms
+    /// default.
+    pub timeout: Option<Box<IrExpr>>,
     /// The expression's type: the reply type `T`.
     #[serde(serialize_with = "serialize_type")]
     pub result_type: Type,

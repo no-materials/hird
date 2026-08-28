@@ -157,9 +157,13 @@ expr         ::= let_expr
                | install_expr
                | spawn_expr
                | supervise_expr
+               | stand_expr
+               | clock_expr
+               | self_expr
                | child_expr
                | send_expr
                | request_expr
+               | schedule_expr
                | reply_expr
                | crash_expr
                | infix_expr
@@ -186,11 +190,19 @@ spawn_expr   ::= 'spawn' '(' IDENT ( ',' expr )* ','? ')'
 
 supervise_expr ::= 'supervise' '(' IDENT ')'
 
+stand_expr   ::= 'stand' '(' ')'
+
+clock_expr   ::= 'clock' '(' ')'
+
+self_expr    ::= 'self' '(' ')'
+
 child_expr   ::= 'child' '(' IDENT ',' IDENT ')'
 
 send_expr    ::= 'send' '(' expr ',' expr ')'
 
-request_expr ::= 'request' '(' expr ',' expr ')'
+request_expr ::= 'request' '(' expr ',' expr ( ',' expr )? ')'
+
+schedule_expr ::= 'schedule' '(' expr ',' expr ',' expr ',' expr ')'
 
 reply_expr   ::= 'reply' '(' expr ',' expr ')'
 
@@ -207,8 +219,12 @@ second argument is one of that supervisor's declared child ids. None of
 these are expressions — actor and supervisor names are not first-class
 values.
 
-`send`, `request`, and `reply` are keyword forms taking exactly two
-expression arguments.
+`send` and `reply` are keyword forms taking exactly two expression
+arguments; `request` takes two, plus an optional third (the timeout in
+milliseconds); `schedule` takes four (clock, destination, message, delay
+in milliseconds). `stand`, `clock`, and `self` take none. `clock` is
+contextual: it is the form only as `clock()`, and an ordinary identifier
+elsewhere (so `clock: Clock` is a legal parameter).
 
 `crash!` (and its alias `panic!`) is the divergent primitive: it takes a
 single `String` message, never returns, and propagates as a process exit to
@@ -338,9 +354,10 @@ never delimit anything else in type position.
 See `hird-lex` crate for the authoritative implementation. Summary:
 
 - **Keywords**: `let`, `fn`, `match`, `type`, `actor`, `supervisor`, `effect`,
-  `tool`, `handle`, `install`, `spawn`, `supervise`, `child`, `send`,
-  `request`, `reply`, `crash`, `panic`, `use`, `module`, `pub`, `opaque`,
-  `extern`, `if`, `then`, `else`, `in`. (`as` is contextual, not reserved.)
+  `tool`, `handle`, `install`, `spawn`, `supervise`, `stand`, `self`,
+  `child`, `send`, `request`, `schedule`, `reply`, `crash`, `panic`, `use`,
+  `module`, `pub`, `opaque`, `extern`, `if`, `then`, `else`, `in`. (`as`
+  and `clock` are contextual, not reserved.)
 - **Identifiers**: ASCII alphanumeric + underscore, canonical naming enforced
   (snake_case for values, PascalCase for types)
 - **Literals**: integers, floats, double-quoted strings with escape sequences

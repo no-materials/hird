@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"effect Schedule<t>\ntype Cfg = Cfg(Clock, Int)\nactor Heart {\n  state: Cfg,\n  message: HeartMsg = | Beat,\n  init: fn(c: Cfg) -> Cfg ! {} = c,\n  handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =\n    let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),\n} ! {Schedule<HeartMsg>}\nsupervisor HeartSup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: heart, actor: Heart, start_args: Cfg(clock(), 1000), restart: permanent },\n    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n  ]\n}\"))"
+---
+supervisor HeartSup ! {Clock, Schedule<HeartMsg>, Tool<ReadRepo>}

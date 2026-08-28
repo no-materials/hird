@@ -147,7 +147,8 @@ fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ```
 
 Effect heads are declared like types (`effect Tool<t>`,
-`effect Send<t>`); only `Install`, `Supervise`, and `Stand` are built in.
+`effect Send<t>`); only `Install`, `Supervise`, `Stand`, and `Clock` are
+built in.
 
 ### Tools
 
@@ -225,9 +226,46 @@ reply(reply_to, status)         → ()               ! {Send<PlannerStatus>}
 ```
 
 `request` sends a constructor carrying a `ReplyTo<T>` and blocks for
-the answer (fixed 5000ms timeout; a timeout crashes the caller — see
-the error model below). Inside the handler, `reply(reply_to, value)`
-answers it.
+the answer; an optional third argument is the timeout in milliseconds
+(`request(pid, GetStatus, 60000)`; 5000 when omitted), and a timeout
+crashes the caller — see the error model below. The timeout is not an
+effect, so the row is the same either way. Inside the handler,
+`reply(reply_to, value)` answers it.
+
+Time is a capability, not an ambient service. `Clock` is a built-in
+opaque type; `clock()` is the one way to get one and carries the
+built-in effect `Clock`, so whoever reaches for real time says so in
+their row. `schedule(clock, pid, msg, delay_ms)` delivers a message
+after a delay (milliseconds, a plain `Int`) with the effect
+`Schedule<Msg>`, and `self()` — inside an actor's `init` or handlers —
+is the actor's own `Pid<Msg>`. Together they make a periodic actor:
+
+```
+actor Heart {
+  state: HeartState,
+  message: HeartMsg = | Beat,
+  init: fn(config: HeartConfig) → HeartState ! {Schedule<HeartMsg>} =
+    match config {
+      HeartConfig(clock, period) →
+        let first = schedule(clock, self(), Beat, period) in
+        HeartState(clock, period, 0),
+    },
+  handle Beat, HeartState(clock, period, beats) → HeartState
+    ! {Tool<Log>, Schedule<HeartMsg>} =
+    let logged = log({ message: "beat" }) in
+    let next = schedule(clock, self(), Beat, period) in
+    HeartState(clock, period, beats + 1),
+} ! {Tool<Log>, Schedule<HeartMsg>}
+```
+
+The heart is *handed* its clock: a supervisor child's `start_args` may
+acquire one (`start_args: HeartConfig(clock(), 1000)`) — the only effect
+a start argument is allowed — and the supervisor's derived row records
+the `Clock`. A scheduled message cannot be cancelled, and one aimed at a
+process that has since exited is dropped; that is why the first beat is
+scheduled in `init`, so a restarted heart starts beating again by
+itself. [`demo/heartbeat.hird`](../demo/heartbeat.hird) is the full
+standing program.
 
 Supervisors declare a restart strategy over actor children; their
 effect row is derived from the children, never written:
@@ -285,8 +323,8 @@ restart makes sense, it is a crash. The normative treatment is in
 needs exactly one `fn main() → ()` with no parameters and no residual
 `Tool<…>` effects — handle them with a `handle` block, or keep tool
 calls inside actors and `install` their implementations. Other
-effects (`Install`, `Supervise`, `Stand`, `Send`, `Await`, …) may remain
-on `main`.
+effects (`Install`, `Supervise`, `Stand`, `Clock`, `Send`, `Await`, …)
+may remain on `main`.
 
 Diagnostics carry stable codes: `P####` for parse errors (catalogued
 in [`parser-diagnostics.md`](parser-diagnostics.md)) and `C####` for check errors. The wire

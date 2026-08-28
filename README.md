@@ -243,6 +243,10 @@ Things worth asking an agent wired to it:
 `demo/counter_demo.hird` is that last prompt's output: a supervised
 counter written by an LLM agent that verified itself against the MCP
 tools alone — it type-checks and runs on BEAM unmodified.
+
+`demo/heartbeat.hird` is the standing counterpart: a supervised actor
+handed a `Clock` at init that schedules its own next beat, logging each
+through the audit stream until Ctrl-C — `hird run demo/heartbeat.hird`.
 `docs/writing-hird-llm.md` is the agent-facing guide.
 
 ## Editor support

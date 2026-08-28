@@ -58,12 +58,14 @@ impl Registry {
             ctors: BTreeMap::new(),
             effects: BTreeMap::new(),
         };
-        // `Install`, `Supervise`, and `Stand` are the checker-known effects
-        // of `install` blocks and the `supervise` and `stand` expressions:
-        // rows may name them without a user declaration existing.
+        // `Install`, `Supervise`, `Stand`, and `Clock` are the checker-known
+        // effects of `install` blocks and the `supervise`, `stand`, and
+        // `clock` expressions: rows may name them without a user declaration
+        // existing.
         registry.declare_effect(Name::new("Install"), 0);
         registry.declare_effect(Name::new("Supervise"), 0);
         registry.declare_effect(Name::new("Stand"), 0);
+        registry.declare_effect(Name::new("Clock"), 0);
         registry.declare_adt(
             Name::new("Bool"),
             0,
@@ -125,27 +127,29 @@ impl Registry {
     }
 
     /// The arity of the type constructor `name`: declared ADTs first, then
-    /// the built-ins (`Int`, `Float`, `String`, `List`, `Option`, and the
-    /// actor references `Pid`, `ReplyTo`).
+    /// the built-ins (`Int`, `Float`, `String`, `List`, `Option`, the actor
+    /// references `Pid`, `ReplyTo`, and the capability `Clock`).
     pub(crate) fn type_arity(&self, name: &str) -> Option<usize> {
         if let Some(info) = self.adts.get(&Name::new(name)) {
             return Some(info.arity);
         }
         match name {
-            "Int" | "Float" | "String" => Some(0),
+            "Int" | "Float" | "String" | "Clock" => Some(0),
             "List" | "Option" | "Pid" | "ReplyTo" => Some(1),
             _ => None,
         }
     }
 
-    /// Whether `name` is a declared ADT whose constructors are module-private
-    /// (an opaque capability type).
+    /// Whether `name` is an opaque capability type: a declared ADT whose
+    /// constructors are module-private, or the built-in `Clock` when no
+    /// declaration shadows it.
     pub(crate) fn adt_is_opaque(&self, name: &str) -> bool {
-        self.adts.get(&Name::new(name)).is_some_and(|info| {
-            info.constructors
-                .iter()
-                .any(|ctor| self.ctors.get(ctor).is_some_and(|info| info.opaque))
-        })
+        let Some(info) = self.adts.get(&Name::new(name)) else {
+            return name == "Clock";
+        };
+        info.constructors
+            .iter()
+            .any(|ctor| self.ctors.get(ctor).is_some_and(|info| info.opaque))
     }
 
     /// Declared ADTs with their constructor lists, in name order.

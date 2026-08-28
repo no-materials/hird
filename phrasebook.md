@@ -102,10 +102,10 @@ effect Spawn<t>
 
 Parametric effects reference specific capabilities or message types.
 
-Only `Install`, `Supervise`, and `Stand` are pre-declared. Every other
-head a row names — including `Tool`, `Send`, `Await`, `Spawn`, `Exn` —
-needs an `effect` declaration like the above, even though the checker
-knows the keyword forms' semantics.
+Only `Install`, `Supervise`, `Stand`, and `Clock` are pre-declared. Every
+other head a row names — including `Tool`, `Send`, `Await`, `Spawn`,
+`Schedule`, `Exn` — needs an `effect` declaration like the above, even
+though the checker knows the keyword forms' semantics.
 
 ---
 
@@ -204,11 +204,16 @@ ReplyTo<PlannerStatus>  — typed reply channel
 spawn(Planner, config) → Pid<PlannerMsg> ! {Spawn<PlannerMsg>}
 send(pid, PlanRepo(path)) → () ! {Send<PlannerMsg>}
 request(pid, GetStatus) → PlannerStatus ! {Send<PlannerMsg>, Await<PlannerStatus>}
+request(pid, GetStatus, 60000) → PlannerStatus ! {Send<PlannerMsg>, Await<PlannerStatus>}
 reply(reply_to, status) → () ! {Send<PlannerStatus>}
 
 supervise(PlannerSup) → () ! {Supervise}
 child(PlannerSup, planner) → Pid<PlannerMsg> ! {}
 stand() → () ! {Stand}
+
+clock() → Clock ! {Clock}
+schedule(clock, pid, Tick, 1000) → () ! {Schedule<PlannerMsg>}
+self() → Pid<PlannerMsg> ! {}          — inside Planner's init/handlers only
 ```
 
 - `Pid<t>` and `ReplyTo<t>` are built-in type constructors (like `List<t>`);
@@ -217,10 +222,13 @@ stand() → () ! {Stand}
   the actor namespace. Actor names are not first-class values.
 - `send`, `request`, and `reply` are keyword forms as well. `reply` is the
   only operation on `ReplyTo<t>` — it is not an overload of `send`.
-- `request` blocks with a fixed 5000ms timeout; a timeout exits the caller
-  (no `Exn` in the row — crash handling belongs to supervision).
-- `Spawn<t>`, `Send<t>`, `Await<t>` are ordinary declared effect heads (see
-  Effect Declarations) whose semantics the checker knows, like `Tool<t>`.
+- `request` blocks for its timeout — an optional trailing `Int` of
+  milliseconds, 5000 when omitted; a timeout exits the caller (no `Exn` in
+  the row — crash handling belongs to supervision). The timeout is not an
+  effect: the row is the same with or without it.
+- `Spawn<t>`, `Send<t>`, `Await<t>`, `Schedule<t>` are ordinary declared
+  effect heads (see Effect Declarations) whose semantics the checker knows,
+  like `Tool<t>`.
 - `supervise` starts a declared supervisor's tree: the name resolves in the
   supervisor namespace (supervisor names are not values either). One running
   instance per declaration — a second `supervise` of the same name crashes.
@@ -238,6 +246,24 @@ stand() → () ! {Stand}
   `main` returns, trees included. Its bare `Stand` effect is checker-known
   (like `Supervise`). Not allowed inside an actor's `init` or handlers
   (C0054) — it would park the actor's process.
+- Time is a capability. `Clock` is a built-in opaque type; `clock()` is the
+  one way to obtain one and carries the checker-known bare effect `Clock`,
+  so a function or actor that reaches for real time — rather than being
+  handed a clock — says so in its row. `clock` is contextual: only
+  `clock()` is the form, so `clock: Clock` is a fine parameter name.
+- `schedule(clock, pid, msg, delay_ms)` delivers `msg` to `pid` after
+  `delay_ms` milliseconds (an `Int`; no duration type) through the clock;
+  its effect is `Schedule<Msg>`, a head of its own, so the row tells a
+  self-driving actor from one that merely sends. The timer is not returned
+  and cannot be cancelled; a message aimed at an exited pid is dropped, so a
+  restarted actor schedules its first tick again in `init`.
+- `self()` is the enclosing actor's own `Pid<Msg>`, effect-free; only
+  inside an actor's `init` or handler body (C0055 elsewhere). Schedule to
+  `self()` for a periodic tick.
+- A supervisor child's `start_args` must be pure except for acquiring the
+  clock (`start_args: HeartConfig(clock(), 1000)`) — the child spec is where
+  a supervised actor is handed its capabilities — and the supervisor's
+  derived row records the `Clock`.
 
 ---
 
@@ -300,6 +326,10 @@ fn rand(rng: Random) → Float ! {RandomRead<rng>}
 fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 ```
 
+`Clock` is the one built-in capability today: acquired by `clock()`
+(effect `Clock`), consumed by `schedule` (effect `Schedule<Msg>`). The
+others are the shape the discipline takes for user-declared capabilities.
+
 ---
 
 ## Errors vs Crashes
@@ -324,9 +354,12 @@ fn info(log: Log, msg: String) → () ! {LogWrite<log>}
 - **Opaque types outside their module**: constructing (C0022) or
   destructuring (C0021) an opaque type outside its declaring module is a
   compile error — that is the capability discipline doing its job.
-- **Undeclared effect heads** (C0027): only `Install`, `Supervise`, and
-  `Stand` are built in; declare `effect Tool<t>`, `effect Send<t>`, …
-  before a row names them.
+- **Undeclared effect heads** (C0027): only `Install`, `Supervise`,
+  `Stand`, and `Clock` are built in; declare `effect Tool<t>`,
+  `effect Send<t>`, `effect Schedule<t>`, … before a row names them.
+- **Milliseconds are bare `Int`s**: `request(p, Get, 60000)` and
+  `schedule(c, p, Tick, 1000)` take millisecond counts; there is no
+  duration type or literal.
 - **Tool arms**: `Tool<X>` requires `X` to be a declared tool (C0033); the
   handler must match the tool's operation signature (C0034); `install`
   handlers must be pure — closed empty row (C0051).

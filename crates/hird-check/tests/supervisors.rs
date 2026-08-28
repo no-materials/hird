@@ -442,3 +442,30 @@ fn main() ! {{Install, Supervise, Send<PlannerMsg>}} =
   send(child(PlannerSup, planner), Stop)"
     ))));
 }
+
+/// A child's `start_args` may acquire the clock — the one effect allowed —
+/// and the supervisor's derived row records the acquisition alongside the
+/// child's summary.
+#[test]
+fn start_args_may_acquire_clock() {
+    insta::assert_snapshot!(check_str(&with_prelude(
+        "effect Schedule<t>
+type Cfg = Cfg(Clock, Int)
+actor Heart {
+  state: Cfg,
+  message: HeartMsg = | Beat,
+  init: fn(c: Cfg) -> Cfg ! {} = c,
+  handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =
+    let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),
+} ! {Schedule<HeartMsg>}
+supervisor HeartSup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: heart, actor: Heart, start_args: Cfg(clock(), 1000), restart: permanent },
+    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },
+  ]
+}"
+    )));
+}

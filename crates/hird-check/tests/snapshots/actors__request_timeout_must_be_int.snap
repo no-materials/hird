@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/actors.rs
+expression: check_str(&source)
+---
+Get : ReplyTo<Status> → Msg
+Inc : Msg
+St : Int → St
+Status : Int → Status
+hasty : Pid<Msg> → Status ! {Await<Status>, Send<Msg>}
+error[C0001] 417..423: type mismatch: expected `Int`, got `String`
