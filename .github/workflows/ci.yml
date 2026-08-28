@@ -51,10 +51,10 @@ env:
 # from the very rare cases where there are multiple PRs in the merge queue).
 # This is because GitHub doesn't share caches between merge queues and the main branch.
 #
-# The BEAM job is the only one with Erlang/OTP installed. Tests that need it self-skip when erlc is
-# absent, so they would pass vacuously in every other job — and would keep passing there if the
-# toolchain install silently broke. HIRD_REQUIRE_BEAM turns those skips into failures, so the job
-# either exercises the BEAM or fails.
+# The BEAM jobs are the only ones with Erlang/OTP installed. Tests that need it self-skip when erlc
+# is absent, so they would pass vacuously in every other job — and would keep passing there if the
+# toolchain install silently broke. HIRD_REQUIRE_BEAM turns those skips into failures, so the jobs
+# either exercise the BEAM or fail.
 
 name: CI
 
@@ -170,11 +170,15 @@ jobs:
 
   beam:
     name: erlang runtime and BEAM tests
-    # NOTE: The runtime is platform independent Erlang, and the BEAM-dependent Rust tests shell out
-    #       to the same erlc everywhere, so one OS is enough.
-    runs-on: ubuntu-latest
+    # NOTE: The runtime is platform independent Erlang, but a standing program's stop path and the
+    #       launcher's process handling are where platforms differ, so the BEAM tests run everywhere
+    #       the CLI is built.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
     env:
-      # Refuse to skip a BEAM-dependent test in the one job that installs Erlang.
+      # Refuse to skip a BEAM-dependent test in the jobs that install Erlang.
       HIRD_REQUIRE_BEAM: "1"
     steps:
       - uses: actions/checkout@v4
@@ -188,6 +192,7 @@ jobs:
       # Compiles the runtime and its suites with `-Werror`, then runs eunit: this is where the
       # Erlang encoder is checked byte for byte against the `conformance/v1` goldens.
       - name: runtime eunit suites
+        shell: bash
         run: ./runtime/test.sh
 
       - name: install stable toolchain

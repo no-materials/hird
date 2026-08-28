@@ -284,8 +284,9 @@ supervisor PlannerSup {
 `supervise(PlannerSup)` starts the tree (effect `Supervise`);
 `child(PlannerSup, planner)` looks up the running child as a typed
 `Pid<PlannerMsg>`. A program halts when `main` returns, tree included —
-end `main` with `stand()` (effect `Stand`) to keep it up until SIGTERM
-or Ctrl-C, which shuts the trees down and syncs the audit stream before
+end `main` with `stand()` (effect `Stand`) to keep it up until Ctrl-C
+(or SIGTERM, where the platform has it), which shuts the trees down and
+syncs the audit stream before
 the halt. The full worked example is
 [`demo/agent_planner.hird`](../demo/agent_planner.hird) — a
 supervised planner driven end to end by `hird run`.

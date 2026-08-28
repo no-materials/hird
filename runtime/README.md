@@ -42,12 +42,15 @@ dispatcher.
 - `hird_sup_util.erl` — supervisor utilities: `child_pid/2` looks up an
   unregistered supervised child's pid. Generated supervisor modules carry
   their child specs inline, so nothing more is needed here.
-- `hird_stand.erl` — standing mode: `await/0` blocks the caller until the
-  node receives SIGTERM, then shuts down every supervisor the caller
-  started (its linked `supervisor` children, in reverse start order, by
-  the OTP parent-shutdown protocol) and returns, so the boot module's
-  audit sync runs after the trees are gone. It replaces OTP's default
-  signal handler for the node's lifetime.
+- `hird_stand.erl` — standing mode: `await/0` blocks the caller until a
+  stop trigger fires — SIGTERM where the platform has it, or end of file
+  on stdin when the launcher passed `-hird_stop stdin` (`hird run` owns
+  that pipe and closes it on Ctrl-C or termination, on every platform) —
+  then shuts down every supervisor the caller started (its linked
+  `supervisor` children, in reverse start order, by the OTP
+  parent-shutdown protocol) and returns, so the boot module's audit sync
+  runs after the trees are gone. It replaces OTP's default signal handler
+  for the node's lifetime.
 - `hird_clock.erl` — the clock capability: `real/0` is what `clock()`
   lowers to, and `schedule/4` is `schedule(clock, pid, msg, delay_ms)`:
   `erlang:send_after` into the destination's cast path. The clock value

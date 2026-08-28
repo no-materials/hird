@@ -239,8 +239,9 @@ self() → Pid<PlannerMsg> ! {}          — inside Planner's init/handlers only
   message type. Effect-free; a missing or restarting child crashes
   (`{no_child, id}`) — tree health is supervision's concern, never a
   caller-recoverable error.
-- `stand` keeps the program up: it blocks the caller until the node
-  receives SIGTERM (Ctrl-C under `hird run`), then shuts down every
+- `stand` keeps the program up: it blocks the caller until the program is
+  asked to stop (Ctrl-C under `hird run` on any platform; SIGTERM to the
+  node where the platform has it), then shuts down every
   supervisor the caller started and returns, so `main` finishes and the
   audit stream is synced before the halt. Without it a program halts when
   `main` returns, trees included. Its bare `Stand` effect is checker-known

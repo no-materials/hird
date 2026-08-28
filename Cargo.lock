@@ -484,7 +484,6 @@ dependencies = [
  "hird-parse",
  "hird-types",
  "miette",
- "nix",
  "serde_json",
 ]
 

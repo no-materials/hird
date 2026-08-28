@@ -29,13 +29,15 @@ schedule and is not covered by these entries.
   5000 ms default with an `Int` of milliseconds; the row is unchanged, a
   timeout still exits the caller.
 - **Standing programs.** The `stand()` keyword form keeps a program up
-  after `main`'s setup: it blocks until the node receives SIGTERM, then
+  after `main`'s setup: it blocks until the program is asked to stop, then
   shuts down every supervisor the caller started (OTP parent shutdown,
   reverse start order) and returns, so the audit stream is synced before
-  the halt. It carries the checker-known bare effect `Stand`. `hird run`
-  relays Ctrl-C and SIGTERM to the emulator as SIGTERM, so a standing
-  program ends cleanly from the terminal; without `stand()` a program
-  halts when `main` returns, as before.
+  the halt. It carries the checker-known bare effect `Stand`. Two stop
+  triggers exist: SIGTERM, where the platform has it, and end of file on
+  the emulator's stdin when the launcher owns that pipe — which `hird run`
+  does on every platform, closing it on Ctrl-C or termination, so a
+  standing program ends cleanly from the terminal on Windows as well as
+  Unix. Without `stand()` a program halts when `main` returns, as before.
 
 ## [0.1.1] — 2026-08-27
 

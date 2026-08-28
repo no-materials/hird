@@ -9,10 +9,8 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
-
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
+use std::process::{ChildStdin, Command, Stdio};
+use std::sync::Mutex;
 
 use hird_codegen::erlang_module_name;
 use hird_ir::{IrDecl, IrFnDef, IrModule};
@@ -31,14 +29,14 @@ const RUNTIME: [(&str, &str); 8] = [
         )),
     ),
     (
-        "hird_handlers",
-    (
         "hird_clock",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_clock.erl"
         )),
     ),
+    (
+        "hird_handlers",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_handlers.erl"
@@ -196,11 +194,14 @@ pub(crate) fn build(
 /// Runs a built program on BEAM through the generated boot module, returning
 /// the emulator's exit status.
 ///
-/// Ctrl-C (SIGINT) and SIGTERM to `hird run` reach the emulator as SIGTERM:
-/// a standing program then shuts its trees down and syncs the audit stream
-/// before halting, any other program stops. The BEAM's break handler owns
-/// SIGINT itself, so the emulator is told to ignore it (`+Bi`) and the relay
-/// is the only Ctrl-C path.
+/// `hird run` owns the program's stop channel: it keeps the emulator's stdin
+/// as a pipe, tells the runtime so (`-hird_stop stdin`), and closes the pipe
+/// on Ctrl-C or termination (SIGTERM/SIGHUP on Unix, console close on
+/// Windows). A standing program sees end of file, shuts its trees down and
+/// syncs the audit stream before halting; any other program stops. The
+/// console delivers Ctrl-C to the emulator too, where the BEAM's break
+/// handler would act on it, so the emulator is told to ignore it (`+Bi`) and
+/// the pipe is the only stop path. Nothing here is platform-specific.
 pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
     let entry_module = match &build.entry {
         Some(_) => BOOT_MODULE,
@@ -218,23 +219,28 @@ pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
         .arg("-s")
         .arg(entry_module)
         .arg("run")
+        .arg("-hird_stop")
+        .arg("stdin")
+        .stdin(Stdio::piped())
         .spawn()
         .map_err(erlang_unavailable)?;
-    relay_termination(&child)?;
+    let stdin = child.stdin.take().expect("the emulator's stdin is piped");
+    stop_on_termination(stdin)?;
     let status = child
         .wait()
         .map_err(|e| fail!("cannot wait for Erlang/OTP: {e}"))?;
     Ok(status.code().unwrap_or(1))
 }
 
-/// Installs the handler relaying SIGINT/SIGTERM/SIGHUP to `emulator` as
-/// SIGTERM. An emulator already gone has nothing to relay to.
-fn relay_termination(emulator: &Child) -> Result<(), Failure> {
-    let pid = i32::try_from(emulator.id())
-        .map(Pid::from_raw)
-        .map_err(|_| fail!("emulator pid out of range"))?;
+/// Installs the handler that closes the emulator's stdin — the stop
+/// channel — on Ctrl-C or a termination request. Closing an already
+/// closed pipe is a no-op, so a second signal is harmless.
+fn stop_on_termination(stdin: ChildStdin) -> Result<(), Failure> {
+    let stdin = Mutex::new(Some(stdin));
     ctrlc::set_handler(move || {
-        let _ = signal::kill(pid, Signal::SIGTERM);
+        if let Ok(mut slot) = stdin.lock() {
+            drop(slot.take());
+        }
     })
     .map_err(|e| fail!("cannot install the termination handler: {e}"))
 }

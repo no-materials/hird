@@ -1604,7 +1604,7 @@ the headline claim the demo exists to make.
 ## ADR-025: Standing programs — `stand` keeps the tree up until shutdown
 
 **Date**: 2026-08-27
-**Status**: Accepted (builds on ADR-023/024)
+**Status**: Accepted (builds on ADR-023/024; §4 superseded by ADR-027)
 
 ### Context
 
@@ -1780,6 +1780,68 @@ whose supervisors are declared statically.
 - The runtime grows `hird_clock`; generated code calls `real/0` and
   `schedule/4` and nothing else, so a virtual clock later is a runtime
   change, not a language one.
+
+---
+
+## ADR-027: Stopping a standing program is platform-neutral
+
+**Date**: 2026-08-28
+**Status**: Accepted (supersedes ADR-025 §4)
+
+### Context
+
+ADR-025 keyed a standing program's shutdown to SIGTERM: `hird_stand`
+waited on `erl_signal_server`, and `hird run` relayed Ctrl-C to the
+emulator as SIGTERM through `nix`. Windows has no SIGTERM and OTP exposes
+no signal emulation there, so on Windows a standing program could only be
+killed — trees torn down unordered, the tail of the audit stream lost —
+and the launcher grew a `cfg(unix)` split with nothing behind it on the
+other side. The headline claim is standing systems; they have to stop as
+cleanly on every platform the CLI ships for.
+
+### Decision
+
+1. **The launcher owns the stop channel, and it is a pipe.** `hird run`
+   keeps the emulator's stdin as a pipe, tells the runtime so with the
+   plain init argument `-hird_stop stdin`, and closes the pipe on Ctrl-C or
+   a termination request (SIGTERM/SIGHUP on Unix, console close on
+   Windows; the `ctrlc` crate handles all of them). `hird_stand` reads
+   stdin to end of file and shuts down on it. The pipe also closes if the
+   launcher dies, so an orphaned emulator stops rather than lingers. The
+   emulator is told to ignore its own console Ctrl-C (`+Bi`) everywhere,
+   so the pipe is the only stop path under `hird run`.
+
+2. **SIGTERM stays a trigger where the platform has it.** A node started by
+   plain `erl` under an init system is stopped by SIGTERM, and that path is
+   unchanged off Windows. `hird_stand:await/0` arms every trigger that
+   applies — `triggers/0` decides from `os:type()` and the init argument
+   — and any one of them ends the wait.
+
+3. **Stdin is a trigger only when the launcher asks.** A node started
+   without `-hird_stop stdin` never reads its standard input, so a
+   redirected, absent, or interactive stdin cannot stop it by accident.
+   Input before end of file is not a protocol: it is discarded.
+
+### Alternatives considered
+
+- **Forwarding `hird run`'s own stdin and stopping on its end of file.**
+  Rejected: `hird run x < /dev/null` (any cron job) would stop at once.
+- **Emulating SIGTERM on Windows with console control events.** Rejected:
+  it needs `windows-sys`, targets a process group rather than a process,
+  and reintroduces the platform split the decision exists to remove.
+- **A control socket.** Rejected as far heavier than a pipe the launcher
+  already has.
+
+### Consequences
+
+- `hird-cli` drops `nix`; `ctrlc` is a plain dependency; `hird run` has no
+  platform branches. The one platform test in the runtime is `os:type()`
+  in `triggers/0`.
+- The BEAM CI job runs on Windows, macOS, and Linux; the runtime suite
+  covers both triggers (the SIGTERM case off Windows), and the launcher's
+  interrupt test stays Unix-only, since there is no portable way for a
+  test to press Ctrl-C.
+- A Hirð program cannot tell which trigger stopped it, by design.
 
 ---
 

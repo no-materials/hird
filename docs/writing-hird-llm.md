@@ -70,7 +70,7 @@ the spawned actor — use `install`.
 with no parameters and no residual `Tool<…>` in its row. `Install`,
 `Supervise`, `Stand`, `Clock`, `Send`, `Await` may remain. A program halts when
 `main` returns, supervision trees included; end `main` with `stand()`
-(effect `Stand`) to keep it up until SIGTERM or Ctrl-C, which shuts the
+(effect `Stand`) to keep it up until Ctrl-C or SIGTERM, which shuts the
 trees down and syncs the audit stream first.
 
 ## Querying the compiler

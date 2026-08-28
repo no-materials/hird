@@ -480,12 +480,14 @@ fn wait_for_content(child: &mut Child, path: &Path, needle: &str, timeout: Durat
 
 /// A `main` that stands keeps its supervised actor serving after its own
 /// setup is done, and Ctrl-C to `hird run` shuts the tree down cleanly:
-/// exit status 0 with the audit stream synced. Unix only: the interrupt
-/// relay it exercises has no counterpart elsewhere.
+/// exit status 0 with the audit stream synced. Unix only: a test has no
+/// portable way to press Ctrl-C, so it sends SIGINT; the stop path it
+/// reaches (the launcher closing the emulator's stdin) is the same on every
+/// platform and is covered on all of them by the runtime suite.
 #[test]
 fn run_stands_until_interrupted_then_exits_cleanly() {
     if !cfg!(unix) {
-        eprintln!("skipping: the interrupt relay is Unix-only");
+        eprintln!("skipping: the test sends SIGINT, which is Unix-only");
         return;
     }
     if !erlang_available() {
@@ -567,11 +569,11 @@ const MUTE: &str = "effect Spawn<t>\n\
 /// The heartbeat demo beats on its own: handed a clock at init, the
 /// supervised actor schedules its own next tick, so the audit stream keeps
 /// recording `Log` calls after `main` has stood, and Ctrl-C still ends the
-/// run cleanly. Unix only, like every standing test.
+/// run cleanly. Unix only, like every standing test: it sends SIGINT.
 #[test]
 fn run_heartbeat_ticks_itself_until_interrupted() {
     if !cfg!(unix) {
-        eprintln!("skipping: the interrupt relay is Unix-only");
+        eprintln!("skipping: the test sends SIGINT, which is Unix-only");
         return;
     }
     if !erlang_available() {
