@@ -141,6 +141,14 @@ fn demo_runs_on_beam_and_audits_the_planning_round() {
         out_dir.to_str().expect("utf-8 path"),
     ]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    // Nothing but the build notice on stderr: erlc warnings (unused
+    // variables above all) would drown the audit stream a viewer follows.
+    let err = stderr(&output);
+    assert!(
+        err.lines().count() == 1 && err.starts_with("compiled ") && err.contains(" module(s) to "),
+        "stderr: {err}"
+    );
     let out = stdout(&output);
 
     // One planning round, in dispatch order: the opening log, the repo

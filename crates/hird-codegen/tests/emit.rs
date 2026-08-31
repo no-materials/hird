@@ -590,41 +590,100 @@ fn snapshot_tool_signature_table() {
 
 // ── erlc validation ──────────────────────────────────────────────
 
-/// Compiles every fixture's generated Erlang with stock `erlc`. Skipped (with
-/// a note) when `erlc` is not on the `PATH`, unless `HIRD_REQUIRE_BEAM` is set
-/// — where Erlang is meant to be installed, a missing toolchain is a failure,
-/// not a quiet pass.
+/// Whether `erlc` can be spawned. Skipping callers note it, unless
+/// `HIRD_REQUIRE_BEAM` is set — where Erlang is meant to be installed, a
+/// missing toolchain is a failure, not a quiet pass.
+fn erlang_available() -> bool {
+    if std::process::Command::new("erlc")
+        .arg("-version")
+        .output()
+        .is_ok()
+    {
+        return true;
+    }
+    assert!(
+        std::env::var_os("HIRD_REQUIRE_BEAM").is_none(),
+        "HIRD_REQUIRE_BEAM is set but erlc is not on PATH"
+    );
+    false
+}
+
+/// Compiles `modules` in `dir` with stock `erlc`, requiring success and no
+/// unused-variable warnings — those fire per effect-only `let` and would
+/// drown a real run's stderr.
+fn assert_erlc_clean(dir: &std::path::Path, modules: &[EmittedModule]) {
+    for module in modules {
+        let path = dir.join(format!("{}.erl", module.name));
+        std::fs::write(&path, &module.source).expect("write generated module");
+        let output = std::process::Command::new("erlc")
+            .arg("-o")
+            .arg(dir)
+            .arg(&path)
+            .output()
+            .expect("run erlc");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success() && !stderr.contains("is unused"),
+            "erlc complained about {}:\n{}{}\n--- generated ---\n{}",
+            module.name,
+            String::from_utf8_lossy(&output.stdout),
+            stderr,
+            module.source,
+        );
+    }
+}
+
+/// Compiles every fixture's generated Erlang with stock `erlc`, warning-free.
+/// Skipped (with a note) when `erlc` is not on the `PATH`.
 #[test]
 fn generated_erlang_compiles_with_erlc() {
-    let erlc = std::process::Command::new("erlc").arg("-version").output();
-    if erlc.is_err() {
-        assert!(
-            std::env::var_os("HIRD_REQUIRE_BEAM").is_none(),
-            "HIRD_REQUIRE_BEAM is set but erlc is not on PATH"
-        );
+    if !erlang_available() {
         eprintln!("skipping: erlc not found on PATH");
         return;
     }
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("erlc");
     std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
     for (name, source) in PROGRAMS {
-        for module in emit_all(source, name) {
-            let path = dir.join(format!("{}.erl", module.name));
-            std::fs::write(&path, &module.source).expect("write generated module");
-            let output = std::process::Command::new("erlc")
-                .arg("-o")
-                .arg(&dir)
-                .arg(&path)
-                .output()
-                .expect("run erlc");
-            assert!(
-                output.status.success(),
-                "erlc rejected {}:\n{}{}\n--- generated ---\n{}",
-                module.name,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-                module.source,
-            );
-        }
+        assert_erlc_clean(&dir, &emit_all(source, name));
     }
+}
+
+/// Compiles every checked-in demo program's generated Erlang with stock
+/// `erlc`, warning-free. Skipped (with a note) when `erlc` is not on the
+/// `PATH`.
+#[test]
+fn demo_programs_compile_with_erlc_without_warnings() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("erlc_demo");
+    std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
+    let demos = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo");
+    let mut seen = 0;
+    for entry in std::fs::read_dir(&demos).expect("read the demo directory") {
+        let path = entry.expect("read a demo directory entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("hird") {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("a utf-8 demo file stem");
+        // The CLI's module-name rule: capitalize each `_`-separated segment.
+        let name: String = stem
+            .split('_')
+            .map(|segment| {
+                let mut chars = segment.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
+                    None => String::new(),
+                }
+            })
+            .collect();
+        let source = std::fs::read_to_string(&path).expect("read a demo program");
+        assert_erlc_clean(&dir, &emit_all(&source, &name));
+        seen += 1;
+    }
+    assert!(seen > 0, "no demo programs found in {}", demos.display());
 }

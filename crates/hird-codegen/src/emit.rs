@@ -77,6 +77,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::slice;
 
 use hird_ir::{
     IrActorDef, IrActorHandler, IrApp, IrChildSpec, IrConstructor, IrConstructorPat, IrDecl,
@@ -671,13 +672,19 @@ impl<'a> Emitter<'a> {
                 ..Env::default()
             };
             let tag = atom(&snake_case(&clause.ctor.name));
-            let from = clause
-                .ctor
-                .fields
-                .get(clause.reply_pos)
-                .map_or_else(|| String::from("_"), |p| self.pattern(p, &mut env, &mut cx));
-            let state = self.pattern(&clause.handler.state, &mut env, &mut cx);
+            let from_pat = clause.ctor.fields.get(clause.reply_pos);
+            let mut binders = Vec::new();
+            if let Some(p) = from_pat {
+                self.bind_pattern(p, &mut env, &mut cx, &mut binders);
+            }
+            self.bind_pattern(&clause.handler.state, &mut env, &mut cx, &mut binders);
             let body = self.expr(&clause.handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let mut binders = binders.iter();
+            let from = from_pat.map_or_else(
+                || String::from("_"),
+                |p| self.render_pattern(p, &mut binders, &cx),
+            );
+            let state = self.render_pattern(&clause.handler.state, &mut binders, &cx);
             let sep = if i + 1 == clauses.len() { "." } else { ";" };
             out.push_str(&format!(
                 "handle_call({tag}, {from}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
@@ -709,9 +716,13 @@ impl<'a> Emitter<'a> {
                 },
                 ..Env::default()
             };
-            let message = self.pattern(&handler.message, &mut env, &mut cx);
-            let state = self.pattern(&handler.state, &mut env, &mut cx);
+            let mut binders = Vec::new();
+            self.bind_pattern(&handler.message, &mut env, &mut cx, &mut binders);
+            self.bind_pattern(&handler.state, &mut env, &mut cx, &mut binders);
             let body = self.expr(&handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let mut binders = binders.iter();
+            let message = self.render_pattern(&handler.message, &mut binders, &cx);
+            let state = self.render_pattern(&handler.state, &mut binders, &cx);
             let sep = if i + 1 == handlers.len() { "." } else { ";" };
             out.push_str(&format!(
                 "handle_cast({message}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
@@ -946,7 +957,10 @@ impl<'a> Emitter<'a> {
     }
 
     /// `let name = value in body`: a match expression followed by the body,
-    /// flattened into the surrounding sequence in body position.
+    /// flattened into the surrounding sequence in body position. The binder
+    /// is `_`-prefixed when the body never references it (effect-only
+    /// bindings — the sequencing idiom — would otherwise trip erlc's
+    /// unused-variable warning).
     fn let_expr(&self, le: &IrLet, env: &Env, cx: &mut FnCx, indent: usize, ctx: Ctx) -> String {
         let inner_indent = if ctx == Ctx::Body { indent } else { indent + 1 };
         let value = self.expr(&le.value, env, cx, inner_indent, Ctx::Expr);
@@ -960,7 +974,11 @@ impl<'a> Emitter<'a> {
             },
         );
         let body = self.expr(&le.body, &inner, cx, inner_indent, Ctx::Body);
-        sequence(&[format!("{var} = {value},"), body], indent, ctx)
+        sequence(
+            &[format!("{} = {value},", cx.head_var(&var)), body],
+            indent,
+            ctx,
+        )
     }
 
     /// `λparams → body` as `fun(Params[, Handlers]) -> Body end`. An
@@ -1033,8 +1051,10 @@ impl<'a> Emitter<'a> {
         let mut out = format!("case {scrutinee} of");
         for (i, arm) in m.arms.iter().enumerate() {
             let mut inner = env.clone();
-            let pattern = self.pattern(&arm.pattern, &mut inner, cx);
+            let mut binders = Vec::new();
+            self.bind_pattern(&arm.pattern, &mut inner, cx, &mut binders);
             let body = self.expr(&arm.body, &inner, cx, indent + 2, Ctx::Body);
+            let pattern = self.render_pattern(&arm.pattern, &mut binders.iter(), cx);
             let sep = if i + 1 == m.arms.len() { "" } else { ";" };
             out.push_str(&format!(
                 "\n{}{pattern} ->\n{}{body}{sep}",
@@ -1346,11 +1366,20 @@ impl<'a> Emitter<'a> {
 
     // ── patterns ─────────────────────────────────────────────────
 
-    /// Renders a pattern, binding its variables (always fresh, so a pattern
-    /// binder can never alias an outer Erlang variable) into `env`.
-    fn pattern(&self, pattern: &IrPattern, env: &mut Env, cx: &mut FnCx) -> String {
+    /// Binds a pattern's variables (always fresh, so a pattern binder can
+    /// never alias an outer Erlang variable) into `env`, appending them to
+    /// `vars` in traversal order. Rendering waits for [`Self::render_pattern`]
+    /// after the governed body has been emitted, so binders the body never
+    /// references can be `_`-prefixed.
+    fn bind_pattern(
+        &self,
+        pattern: &IrPattern,
+        env: &mut Env,
+        cx: &mut FnCx,
+        vars: &mut Vec<String>,
+    ) {
         match pattern {
-            IrPattern::Wildcard(_) => String::from("_"),
+            IrPattern::Wildcard(_) | IrPattern::Literal(_) => {}
             IrPattern::Bind(bind) => {
                 let var = cx.fresh_var(&bind.name);
                 env.scope.insert(
@@ -1360,8 +1389,33 @@ impl<'a> Emitter<'a> {
                         ty: bind.ty.clone(),
                     },
                 );
-                var
+                vars.push(var);
             }
+            IrPattern::Tuple(tuple) => {
+                for p in &tuple.elems {
+                    self.bind_pattern(p, env, cx, vars);
+                }
+            }
+            IrPattern::Constructor(ctor) => {
+                for p in &ctor.fields {
+                    self.bind_pattern(p, env, cx, vars);
+                }
+            }
+        }
+    }
+
+    /// Renders a pattern against the variables [`Self::bind_pattern`]
+    /// allocated for it, consumed in the same traversal order; binders the
+    /// emitted body never referenced come out `_`-prefixed.
+    fn render_pattern(
+        &self,
+        pattern: &IrPattern,
+        vars: &mut slice::Iter<'_, String>,
+        cx: &FnCx,
+    ) -> String {
+        match pattern {
+            IrPattern::Wildcard(_) => String::from("_"),
+            IrPattern::Bind(_) => cx.head_var(vars.next().expect("a variable per binder")),
             IrPattern::Literal(lit) => literal(&lit.value),
             IrPattern::Tuple(tuple) => {
                 if tuple.elems.is_empty() {
@@ -1370,7 +1424,7 @@ impl<'a> Emitter<'a> {
                 let elems: Vec<String> = tuple
                     .elems
                     .iter()
-                    .map(|p| self.pattern(p, env, cx))
+                    .map(|p| self.render_pattern(p, vars, cx))
                     .collect();
                 format!("{{{}}}", elems.join(", "))
             }
@@ -1382,7 +1436,7 @@ impl<'a> Emitter<'a> {
                 let fields: Vec<String> = ctor
                     .fields
                     .iter()
-                    .map(|p| self.pattern(p, env, cx))
+                    .map(|p| self.render_pattern(p, vars, cx))
                     .collect();
                 format!("{{{tag}, {}}}", fields.join(", "))
             }

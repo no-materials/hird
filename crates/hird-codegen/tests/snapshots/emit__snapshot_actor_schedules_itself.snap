@@ -15,18 +15,18 @@ start_link(C) ->
 init(C) ->
     {ok, case C of
         {cfg, Clock, Period} ->
-            First = hird_clock:schedule(Clock, self(), beat, Period),
+            _First = hird_clock:schedule(Clock, self(), beat, Period),
             C
     end}.
 
 handle_call(get, R, St) ->
     {noreply, begin
-        Sent = gen_server:reply(R, {status, 1}),
+        _Sent = gen_server:reply(R, {status, 1}),
         St
     end}.
 
 handle_cast(beat, {cfg, Clock, Period}) ->
     {noreply, begin
-        Next = hird_clock:schedule(Clock, self(), beat, Period),
+        _Next = hird_clock:schedule(Clock, self(), beat, Period),
         {cfg, Clock, Period}
     end}.

@@ -1,6 +1,6 @@
 ---
 source: crates/hird-codegen/tests/emit.rs
-expression: "actor_module(program(\"Echo\"), \"Echo\", \"hird_responder\")"
+expression: "behaviour_module(program(\"Echo\"), \"Echo\", \"hird_responder\")"
 ---
 %% Generated from src/echo.hird by the Hirð compiler. Do not edit.
 %% src/echo.hird:4
@@ -17,7 +17,7 @@ init(S) ->
 
 handle_call(get, R, {st, N}) ->
     {noreply, begin
-        Ack = gen_server:reply(R, ping),
+        _Ack = gen_server:reply(R, ping),
         {st, N}
     end}.
 

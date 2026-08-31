@@ -12,7 +12,7 @@ default_config() ->
 
 %% src/tree.hird:18
 boot(_Handlers@) ->
-    U = begin
+    _U = begin
         {ok, _} = hird_planner_sup:start_link(),
         ok
     end,
@@ -23,7 +23,7 @@ boot(_Handlers@) ->
 
 %% src/tree.hird:21
 serve(_Handlers@) ->
-    U = begin
+    _U = begin
         {ok, _} = hird_planner_sup:start_link(),
         ok
     end,
