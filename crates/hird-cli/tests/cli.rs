@@ -1018,7 +1018,7 @@ const BACKLOG: &str = "module Backlog\n\
 /// The main module: unqualified imported functions used in call position
 /// (inside a supervised actor's handler), in value position, and under a
 /// local shadow, plus an imported constructor in value position. The final
-/// count discriminates every mis-resolution at runtime: `main` crashes
+/// count discriminates every wrong resolution at runtime: `main` crashes
 /// unless every use behaved.
 const IMPORTER: &str = "module App\n\
      use Backlog.{Task, Tasks, Cons, Nil, actionable, announce}\n\
