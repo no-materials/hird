@@ -121,6 +121,12 @@ pub(crate) struct Checker {
     /// Imported module qualifiers mapped to their exported value schemes, for
     /// `Mod.member` qualified access.
     pub(crate) modules: BTreeMap<String, BTreeMap<String, Type>>,
+    /// Functions brought into scope unqualified by a selective `use`, mapped
+    /// to their defining module.
+    pub(crate) imported_fns: BTreeMap<String, ModuleName>,
+    /// Name uses that resolved to an unqualified imported function, keyed by
+    /// the name expression's node and valued with the defining module.
+    pub(crate) import_origins: BTreeMap<NodeKey, ModuleName>,
     /// Names of this module's exported (`pub`) functions.
     exported_fns: Vec<String>,
     /// This module's exported (`pub`) types paired with their opacity.
@@ -160,6 +166,8 @@ impl Checker {
             actor_spans: BTreeMap::new(),
             supervisor_spans: BTreeMap::new(),
             modules: BTreeMap::new(),
+            imported_fns: BTreeMap::new(),
+            import_origins: BTreeMap::new(),
             exported_fns: Vec::new(),
             exported_types: Vec::new(),
         }
@@ -291,9 +299,17 @@ impl Checker {
         self.modules.insert(String::from(qualifier), values);
     }
 
-    /// Brings an imported function into scope unqualified.
-    pub(crate) fn seed_import_function(&mut self, name: &str, scheme: Type, span: Span) {
+    /// Brings an imported function into scope unqualified, recording its
+    /// defining module so lowering can qualify each use.
+    pub(crate) fn seed_import_function(
+        &mut self,
+        name: &str,
+        scheme: Type,
+        from: ModuleName,
+        span: Span,
+    ) {
         self.note_value_name(name, span);
+        self.imported_fns.insert(String::from(name), from);
         self.env.insert_root(name, scheme);
     }
 
@@ -1165,6 +1181,7 @@ impl Checker {
             handled_effects,
             tools,
             invocation_records,
+            import_origins: self.import_origins,
             diagnostics: self.diags,
         };
         (checked, interface)

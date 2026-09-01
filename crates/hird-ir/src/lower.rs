@@ -353,7 +353,15 @@ impl Lowerer<'_> {
                 value: literal_value(lit),
                 ty: self.expr_type(expr),
             }),
-            Expr::Name(name) => self.lower_name(name.text(), self.expr_type(expr)),
+            // A use of an unqualified imported function is qualified to its
+            // defining module, the form remote calls already lower through.
+            Expr::Name(name) => match self.checked.import_origins.get(&NodeKey::of_expr(expr)) {
+                Some(from) => IrExpr::Var(IrVar {
+                    name: format!("{from}.{}", name.text()),
+                    ty: self.expr_type(expr),
+                }),
+                None => self.lower_name(name.text(), self.expr_type(expr)),
+            },
             Expr::Let(le) => self.lower_let(le),
             Expr::Lambda(lambda) => self.lower_lambda(lambda),
             Expr::If(ife) => self.lower_if(ife),

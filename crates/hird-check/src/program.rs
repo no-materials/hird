@@ -304,7 +304,7 @@ fn seed_use(
             found = true;
         }
         if let Some(scheme) = interface.functions.get(member) {
-            checker.seed_import_function(member, scheme.clone(), *span);
+            checker.seed_import_function(member, scheme.clone(), u.target.clone(), *span);
             found = true;
         } else if let Some((owner, scheme)) = interface.public_ctor(member) {
             checker.seed_import_ctor(member, owner, scheme, u.target.clone(), *span);

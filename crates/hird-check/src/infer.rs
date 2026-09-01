@@ -92,6 +92,14 @@ impl Checker {
                         ),
                     ));
                 }
+                // An unshadowed use of an unqualified imported function is
+                // recorded so lowering can qualify it to its defining module.
+                if let Some(from) = self.imported_fns.get(text)
+                    && self.env.resolves_to_root(text)
+                {
+                    self.import_origins
+                        .insert(NodeKey::of_expr(expr), from.clone());
+                }
                 Ok(self.subst.instantiate(&scheme))
             }
             Expr::Let(le) => self.infer_let(le),

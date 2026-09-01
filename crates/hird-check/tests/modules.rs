@@ -38,6 +38,27 @@ fn check_modules(modules: &[(&str, &str)]) -> String {
     render(&check_program(&files))
 }
 
+/// Parses each `(module name, source)` pair and checks the program, returning
+/// the raw result for structural assertions.
+fn checked(modules: &[(&str, &str)]) -> CheckedProgram {
+    let files: Vec<(ModuleName, SourceFile)> = modules
+        .iter()
+        .map(|(name, src)| {
+            let parsed = hird_parse::parse(src, 0);
+            assert!(
+                parsed.is_ok(),
+                "module `{name}` has parse errors: {:?}",
+                parsed.diagnostics()
+            );
+            (
+                ModuleName::new(*name),
+                SourceFile::cast(parsed.syntax().clone()).expect("root is a source file"),
+            )
+        })
+        .collect();
+    check_program(&files)
+}
+
 /// Renders a checked program: a header per module, then its bindings and
 /// diagnostics (secondary spans indented beneath their diagnostic).
 fn render(program: &CheckedProgram) -> String {
@@ -250,6 +271,45 @@ fn import_collides_with_import() {
             "module App\nuse A.{shared}\nuse B.{shared}\npub fn run() -> Int = shared()",
         ),
     ]));
+}
+
+// ── import origins for lowering ─────────────────────────────────
+
+/// Each unshadowed use of an unqualified imported function records its
+/// defining module (call and value positions alike); a shadowed use records
+/// nothing, and the defining module records nothing for its own functions.
+#[test]
+fn import_origins_recorded_for_unshadowed_uses() {
+    let program = checked(&[
+        ("Lib", "module Lib\npub fn double(x: Int) -> Int = x + x"),
+        (
+            "App",
+            "module App\nuse Lib.{double}\n\
+             pub fn call(x: Int) -> Int = double(x)\n\
+             pub fn value(x: Int) -> Int = let f = double in f(x)\n\
+             pub fn shadowed(x: Int) -> Int = let double = \\y -> y in double(x)",
+        ),
+    ]);
+    let app = &program.modules[&ModuleName::new("App")];
+    assert!(
+        app.diagnostics
+            .iter()
+            .all(|d| d.severity == Severity::Warning),
+        "diags: {:?}",
+        app.diagnostics
+    );
+    let origins: Vec<&str> = app
+        .import_origins
+        .values()
+        .map(ModuleName::as_str)
+        .collect();
+    assert_eq!(origins, ["Lib", "Lib"], "one origin per unshadowed use");
+    let lib = &program.modules[&ModuleName::new("Lib")];
+    assert!(
+        lib.import_origins.is_empty(),
+        "origins: {:?}",
+        lib.import_origins
+    );
 }
 
 // ── module-name validation ──────────────────────────────────────

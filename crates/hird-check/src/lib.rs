@@ -224,6 +224,10 @@ pub struct CheckedFile {
     /// signature. A checker-side artefact for audit tooling — not a type in the
     /// surface namespace.
     pub invocation_records: BTreeMap<Name, Type>,
+    /// Name uses that resolved to an unqualified imported function, keyed by
+    /// the name expression's node and valued with the defining module.
+    /// Lowering reads these to qualify each use to the module that defines it.
+    pub import_origins: BTreeMap<NodeKey, ModuleName>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
 }

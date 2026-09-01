@@ -951,3 +951,68 @@ fn schedule_and_self_lower_inside_actor() {
         IrExpr::Constructor(c) if matches!(c.args.as_slice(), [IrExpr::Clock(_), _])
     ));
 }
+
+// ── imported functions qualify to their defining module ─────────
+
+/// An unqualified imported function lowers as the qualified `Mod.member`
+/// variable remote calls already lower through — in call and value position
+/// alike — while a use under a local shadow stays bare.
+#[test]
+fn imported_function_uses_qualify_to_the_defining_module() {
+    use hird_check::ModuleName;
+
+    let sources = [
+        ("Lib", "module Lib\npub fn double(x: Int) -> Int = x + x"),
+        (
+            "App",
+            "module App\nuse Lib.{double}\n\
+             fn call(x: Int) -> Int = double(x)\n\
+             fn value(x: Int) -> Int = let f = double in f(x)\n\
+             fn shadowed(x: Int) -> Int = let double = \\y -> y in double(x)",
+        ),
+    ];
+    let program: Vec<(ModuleName, SourceFile)> = sources
+        .iter()
+        .map(|(name, src)| {
+            let parsed = hird_parse::parse(src, 0);
+            assert!(
+                parsed.is_ok(),
+                "module `{name}` has parse errors: {:?}",
+                parsed.diagnostics()
+            );
+            (
+                ModuleName::new(*name),
+                SourceFile::cast(parsed.syntax().clone()).expect("root is a source file"),
+            )
+        })
+        .collect();
+    let mut checked = hird_check::check_program(&program);
+    let app = checked
+        .modules
+        .remove(&ModuleName::new("App"))
+        .expect("App was checked");
+    assert!(!app.has_errors(), "type errors: {:?}", app.diagnostics);
+    let module = lower_module(&program[1].1, &app, "App");
+
+    let var_name = |body: &IrExpr| match body {
+        IrExpr::App(app) => match app.func.as_ref() {
+            IrExpr::Var(v) => v.name.clone(),
+            other => panic!("expected a variable callee, got {other:?}"),
+        },
+        other => panic!("expected an application body, got {other:?}"),
+    };
+    assert_eq!(var_name(&fn_named(&module, "call").body), "Lib.double");
+    let IrExpr::Let(bound) = &fn_named(&module, "value").body else {
+        panic!("expected a let body");
+    };
+    assert!(
+        matches!(bound.value.as_ref(), IrExpr::Var(v) if v.name == "Lib.double"),
+        "bound value: {:?}",
+        bound.value
+    );
+    // The shadowing let binds a lambda; the use under it stays bare.
+    let IrExpr::Let(shadow) = &fn_named(&module, "shadowed").body else {
+        panic!("expected a let body");
+    };
+    assert_eq!(var_name(&shadow.body), "double");
+}

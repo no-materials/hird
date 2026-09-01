@@ -989,3 +989,128 @@ fn run_request_timeout_override_is_honoured() {
         "the run took {elapsed:?}; the 200 ms timeout was not applied"
     );
 }
+
+// ── cross-module programs ───────────────────────────────────────
+
+/// The pure half of a two-module program: types and functions the main
+/// module imports unqualified.
+const BACKLOG: &str = "module Backlog\n\
+     effect Tool<t>\n\
+     tool Note : { message: String } -> ()\n\
+     pub type Task = Task(Int, String)\n\
+     pub type Tasks = Cons(Task, Tasks) | Nil\n\
+     pub fn actionable(tasks: Tasks) -> Tasks =\n\
+       match tasks {\n\
+         Nil -> Nil,\n\
+         Cons(Task(priority, title), rest) ->\n\
+           if priority > 0\n\
+             then Cons(Task(priority, title), actionable(rest))\n\
+             else actionable(rest),\n\
+       }\n\
+     pub fn announce(tasks: Tasks) -> Int ! {Tool<Note>} =\n\
+       match tasks {\n\
+         Nil -> 0,\n\
+         Cons(Task(_, title), rest) ->\n\
+           let noted = note({ message: title }) in\n\
+           1 + announce(rest),\n\
+       }";
+
+/// The main module: unqualified imported functions used in call position
+/// (inside a supervised actor's handler), in value position, and under a
+/// local shadow, plus an imported constructor in value position. The final
+/// count discriminates every mis-resolution at runtime: `main` crashes
+/// unless every use behaved.
+const IMPORTER: &str = "module App\n\
+     use Backlog.{Task, Tasks, Cons, Nil, actionable, announce}\n\
+     effect Tool<t>\n\
+     effect Send<t>\n\
+     effect Await<t>\n\
+     tool Note : { message: String } -> ()\n\
+     fn demo_note(args: { message: String }) -> () = ()\n\
+     type St = St(Int)\n\
+     actor Counter {\n\
+       state: St,\n\
+       message: CounterMsg = | Count(Tasks) | Get(ReplyTo<Int>),\n\
+       init: fn(c: St) -> St ! {} = c,\n\
+       handle Count(tasks), St(n) -> Next<St> ! {Tool<Note>} =\n\
+         Continue(St(n + announce(tasks))),\n\
+       handle Get(r), St(n) -> Next<St> ! {Send<Int>} =\n\
+         let sent = reply(r, n) in\n\
+         Continue(St(n)),\n\
+     } ! {Tool<Note>, Send<Int>}\n\
+     supervisor CounterSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: counter, actor: Counter, start_args: St(0), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn both() -> Tasks =\n\
+       let task = Task in\n\
+       Cons(task(1, \"urgent\"), Cons(Task(0, \"skip\"), Nil))\n\
+     fn pick(tasks: Tasks) -> Tasks =\n\
+       let filter = actionable in\n\
+       filter(tasks)\n\
+     fn keep_all(tasks: Tasks) -> Tasks =\n\
+       let actionable = \\t -> t in\n\
+       actionable(tasks)\n\
+     fn main() -> () ! {Install, Supervise, Send<CounterMsg>, Await<Int>} =\n\
+       install { Tool<Note> -> demo_note } in\n\
+       let started = supervise(CounterSup) in\n\
+       let filtered = send(child(CounterSup, counter), Count(pick(both()))) in\n\
+       let unfiltered = send(child(CounterSup, counter), Count(keep_all(both()))) in\n\
+       match request(child(CounterSup, counter), Get) {\n\
+         n -> if n == 3 then () else crash!(\"an imported function resolved wrongly\"),\n\
+       }";
+
+/// Unqualified imported functions call the defining module: the program
+/// runs to its count (one filtered task plus two unfiltered), and the
+/// emitted actor and base modules name `hird_backlog` at every use.
+#[test]
+fn run_resolves_unqualified_imports_to_the_defining_module() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_unqualified_imports");
+    write(&dir, "backlog.hird", BACKLOG);
+    write(&dir, "app.hird", IMPORTER);
+    let out_dir = dir.join("out");
+    let output = hird(&[
+        "run",
+        dir.to_str().expect("utf-8 path"),
+        "-o",
+        out_dir.to_str().expect("utf-8 path"),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    // Three audited notes: `pick` filtered the skip-priority task, the
+    // shadowed `keep_all` kept both.
+    let out = stdout(&output);
+    assert_eq!(out.matches("\"tool\":\"Note\"").count(), 3, "stdout: {out}");
+    assert_eq!(
+        out.matches("\"message\":\"urgent\"").count(),
+        2,
+        "stdout: {out}"
+    );
+    assert_eq!(
+        out.matches("\"message\":\"skip\"").count(),
+        1,
+        "stdout: {out}"
+    );
+
+    // The emitted Erlang resolves every import to the defining module: the
+    // call inside the actor, and the value-position fun reference.
+    let counter =
+        fs::read_to_string(out_dir.join("hird_counter.erl")).expect("read the actor module");
+    assert!(
+        counter.contains("hird_backlog:announce("),
+        "actor module: {counter}"
+    );
+    let app = fs::read_to_string(out_dir.join("hird_app.erl")).expect("read the base module");
+    assert!(
+        app.contains("fun hird_backlog:actionable/1"),
+        "base module: {app}"
+    );
+}

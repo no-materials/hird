@@ -606,7 +606,8 @@ fn context_for_imported_symbol_spans_the_program() {
     );
     assert!(summary.contains("callers: run"), "summary: {summary}");
 
-    // Callees are the imported names as the body writes them.
+    // Callees resolve to their defining module, whether the body writes
+    // them qualified or brings them in with a selective import.
     let result = call_tool(
         &mut server,
         "get_context_for_symbol",
@@ -621,7 +622,10 @@ fn context_for_imported_symbol_spans_the_program() {
         json!({ "file": app, "name": "run" }),
     );
     let summary = result["summary"].as_str().expect("a summary");
-    assert!(summary.contains("callees: double"), "summary: {summary}");
+    assert!(
+        summary.contains("callees: Util.double"),
+        "summary: {summary}"
+    );
     assert!(summary.contains("callers: local"), "summary: {summary}");
 }
 

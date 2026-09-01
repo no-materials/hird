@@ -44,6 +44,17 @@ impl Env {
         self.frames.iter().rev().find_map(|f| f.get(name))
     }
 
+    /// Whether the visible binding for `name` sits in the root frame — that
+    /// is, no inner scope shadows the top-level binding.
+    pub(crate) fn resolves_to_root(&self, name: &str) -> bool {
+        self.frames
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, f)| f.contains_key(name))
+            .is_some_and(|(i, _)| i == 0)
+    }
+
     /// Binds `name` in the innermost scope. Returns `true` when an existing
     /// visible binding (in any frame) is shadowed, so the caller can warn.
     pub(crate) fn insert(&mut self, name: &str, ty: Type) -> bool {
