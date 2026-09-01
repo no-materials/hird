@@ -1,0 +1,30 @@
+// The fleet's pure planning core: what each round of duty calls for.
+//
+// No effects here — orders are forged and outcomes shaped by plain
+// functions — and the exported types are the words the AgentFleet actors
+// speak to each other. The module exists on its own so the demo spans a
+// real module boundary: AgentFleet reaches everything below with `use`.
+
+module Errands
+
+// One round's marching order: the round number and the errand it calls for.
+pub type Order = Order(Int, String)
+
+// What the executor reports onward: the round and the runner's note.
+pub type Outcome = Outcome(Int, String)
+
+// Rounds cycle through the fleet's three standing duties.
+fn cycle(round: Int) → Int =
+  if round > 3 then cycle(round - 3) else round
+
+fn duty_of(slot: Int) → String =
+  if slot == 1
+    then "scout the border"
+    else if slot == 2 then "mend the palisade" else "count the granary"
+
+// The errand round `round` calls for.
+pub fn forge(round: Int) → Order = Order(round, duty_of(cycle(round)))
+
+// A run errand and the runner's note, shaped for the auditor.
+pub fn conclude(order: Order, note: String) → Outcome =
+  match order { Order(round, _) → Outcome(round, note) }

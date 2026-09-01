@@ -1,0 +1,158 @@
+// The v0.1 flagship demo: a standing hirð of cooperating agents.
+//
+// Three supervised actors serve for as long as the program stands. The
+// Planner ticks itself on a clock and forges each round's order (pure
+// planning imported from Errands); the Executor carries the order out
+// through Tool<RunErrand> and reports the outcome onward; the Auditor
+// chronicles every outcome through Tool<Chronicle>. Round 3's errand
+// crashes the executor on purpose: FleetSup restarts rest_for_one, so
+// the auditor — downstream of the crash — restarts with it, the planner
+// keeps its round counter, and the rounds keep coming. Actor state dies
+// with its process; the audit stream is the durable record.
+//
+// Run `hird run demo/agent_fleet` and watch: two audit beats per round
+// (RunErrand, then Chronicle), no beat at all for round 3, and the
+// executor's and auditor's inits logging a second time.
+
+module AgentFleet
+
+use Errands
+use Errands.{Order, Outcome}
+
+effect Tool<t>
+effect Send<t>
+effect Schedule<t>
+
+// ── domain types ─────────────────────────────────────────────────
+
+// The clock to schedule rounds through and the round period in ms.
+type FleetConfig = FleetConfig(Clock, Int)
+
+// The planner's clock and period, plus the next round to order.
+type PlannerState = PlannerState(Clock, Int, Int)
+
+// Errands carried out since the executor last took its post.
+type ExecutorState = ExecutorState(Int)
+
+// Outcomes chronicled since the auditor last took its post.
+type AuditorState = AuditorState(Int)
+
+// ── tools ────────────────────────────────────────────────────────
+
+tool RunErrand : { round: Int, errand: String } → String
+tool Chronicle : { round: Int, note: String } → ()
+tool Log : { level: String, message: String } → ()
+
+// ── the planner: orders each round ───────────────────────────────
+
+// The first tick is scheduled from init, so a restarted planner resumes
+// ticking on its own — though in this tree nothing restarts it: the
+// planner is first under rest_for_one, and its round counter is what
+// keeps the deliberate crash below a one-time event.
+actor Planner {
+  state: PlannerState,
+
+  message: PlannerMsg = | Tick,
+
+  init: fn(config: FleetConfig) → PlannerState ! {Tool<Log>, Schedule<PlannerMsg>} =
+    match config {
+      FleetConfig(clock, period) →
+        let posted = log({ level: "info", message: "planner takes its post" }) in
+        let first = schedule(clock, self(), Tick, period) in
+        PlannerState(clock, period, 1),
+    },
+
+  handle Tick, PlannerState(clock, period, round) → Next<PlannerState>
+    ! {Send<ExecutorMsg>, Schedule<PlannerMsg>} =
+    let ordered = send(child(FleetSup, executor), Carry(Errands.forge(round))) in
+    let next = schedule(clock, self(), Tick, period) in
+    Continue(PlannerState(clock, period, round + 1)),
+} ! {Tool<Log>, Send<ExecutorMsg>, Schedule<PlannerMsg>}
+
+// ── the executor: carries orders out ─────────────────────────────
+
+actor Executor {
+  state: ExecutorState,
+
+  message: ExecutorMsg = | Carry(Order),
+
+  init: fn(done: Int) → ExecutorState ! {Tool<Log>} =
+    let posted = log({ level: "info", message: "executor takes its post" }) in
+    ExecutorState(done),
+
+  // Round 3 is dropped on purpose: the crash consumes the order, the
+  // supervisor restarts the executor, and the next round proceeds — the
+  // gap stays visible in the audit stream.
+  handle Carry(order), ExecutorState(done) → Next<ExecutorState>
+    ! {Tool<RunErrand>, Send<AuditorMsg>} =
+    match order {
+      Order(round, errand) →
+        if round == 3
+          then crash!("round 3: the executor drops its errand")
+          else
+            let note = run_errand({ round: round, errand: errand }) in
+            let reported =
+              send(child(FleetSup, auditor), Record(Errands.conclude(order, note))) in
+            Continue(ExecutorState(done + 1)),
+    },
+} ! {Tool<Log>, Tool<RunErrand>, Send<AuditorMsg>}
+
+// ── the auditor: chronicles outcomes ─────────────────────────────
+
+actor Auditor {
+  state: AuditorState,
+
+  message: AuditorMsg = | Record(Outcome),
+
+  init: fn(recorded: Int) → AuditorState ! {Tool<Log>} =
+    let posted = log({ level: "info", message: "auditor takes its post" }) in
+    AuditorState(recorded),
+
+  handle Record(outcome), AuditorState(recorded) → Next<AuditorState>
+    ! {Tool<Chronicle>} =
+    match outcome {
+      Outcome(round, note) →
+        let chronicled = chronicle({ round: round, note: note }) in
+        Continue(AuditorState(recorded + 1)),
+    },
+} ! {Tool<Log>, Tool<Chronicle>}
+
+// ── supervision ──────────────────────────────────────────────────
+
+// rest_for_one: a crash restarts the crashed child and every child after
+// it — the report chain downstream — and leaves earlier children alone.
+// The restart budget (5 in 60 seconds) is what separates one deliberate
+// crash from a chronically failing tree.
+supervisor FleetSup {
+  strategy: rest_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: FleetConfig(clock(), 400), restart: permanent },
+    { id: executor, actor: Executor, start_args: 0, restart: permanent },
+    { id: auditor, actor: Auditor, start_args: 0, restart: permanent },
+  ]
+}
+
+// ── demo handlers (registry defaults) ────────────────────────────
+
+// Every errand succeeds; the audit stream is the visible work.
+fn demo_run_errand(args: { round: Int, errand: String }) → String = "done"
+
+fn demo_chronicle(args: { round: Int, note: String }) → () = ()
+
+fn demo_log(args: { level: String, message: String }) → () = ()
+
+// ── entry point ──────────────────────────────────────────────────
+
+// Handler maps never cross the supervision boundary: the install block
+// is what every retainer's tool calls resolve through. main starts the
+// tree and stands.
+fn main() → () ! {Install, Supervise, Stand} =
+  install {
+    Tool<RunErrand> → demo_run_errand,
+    Tool<Chronicle> → demo_chronicle,
+    Tool<Log> → demo_log,
+  } in
+  let started = supervise(FleetSup) in
+  stand()
