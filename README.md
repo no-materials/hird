@@ -21,12 +21,17 @@ contacted. That is a regression test with no oracle to maintain, a bug
 report that reproduces, and a fixed environment to evaluate a change in.
 It is also not something you can retrofit onto a framework that hides
 its side effects: it needs the effects in the types and a single
-dispatch path underneath them.
+dispatch path underneath them. `hird demo` is that claim in one command:
+it records a run of the demo planner, replays that one recording against
+three variants of the program, and prints where each parted from it.
 
-`hird demo` is that claim in one command, with no file argument and no
-service contacted: it records a run of the demo planner, replays that
-one recording against three variants of the program, and prints where
-each one parted from the recording.
+**And systems that stand.** A Hirð program is not a script that exits:
+`fn main` can start a supervision tree and `stand`, leaving typed actors
+serving after its own work is done — driving their own periodic rounds
+off a clock capability, crashing and restarting under a declared budget,
+every round on the audit stream. `hird run demo/agent_fleet` is that
+claim running: a hirð of three retainers that keeps working through a
+deliberate crash.
 
 **Status**: pre-1.0 and experimental. The v0.1 compiler pipeline works
 end to end (the demos below type-check, compile to Erlang, and run on
@@ -97,85 +102,68 @@ legal input.
 | Command | What it does |
 |---|---|
 | `hird check <file-or-dir>` | type- and effect-check; coded diagnostics |
-| `hird build <file>` | emit readable Erlang, compile it to `.beam` |
-| `hird run <file>` | build, then execute `fn main` on BEAM |
+| `hird build <file-or-dir>` | emit readable Erlang, compile it to `.beam` |
+| `hird run <file-or-dir>` | build, then execute `fn main` on BEAM |
 | `hird demo` | record one run of the built-in demo, replay it against variants of the program |
 | `hird emit-ast <file> --json` | the typed IR of every definition |
-| `hird emit-effect-graph <file> --json` | actors, mailboxes, handler rows, supervisors, tools |
+| `hird emit-effect-graph <file-or-dir> --json` | actors, mailboxes, handler rows, supervisors, tools |
 
 [`docs/writing-hird-human.md`](docs/writing-hird-human.md) is the guided
 tour, and [`phrasebook.md`](phrasebook.md) the dense syntax reference.
 
-## The v0.1 demo: a supervised agent planner
+## The flagship demo: a standing hirð of agents
 
-`demo/agent_planner.hird` is the flagship v0.1 program. A `Planner`
-actor receives a repository path, reads repository state through
-`Tool<ReadRepo>`, analyzes it (pure computation), files tickets through
-`Tool<CreateTicket>`, and logs progress through `Tool<Log>`; a
-`PlannerSup` supervisor declares it as a `one_for_one` child. The
-entry point installs the demo's tool handlers in the runtime registry —
-handler maps never cross the supervision boundary, so the `install`
-block is how the supervised planner's tool calls resolve — starts the
-tree with `supervise(PlannerSup)`, reaches the running child with
-`child(PlannerSup, planner)`, and drives one planning round end to end:
-the planner it messages is a supervised OTP process, restarted by
-`PlannerSup` if it crashes.
-
-Build it (requires Erlang/OTP on `PATH`):
+A hirð is retainers with named duties; `demo/agent_fleet/` is the
+metaphor made literal. Three supervised actors serve for as long as the
+program stands: a `Planner` ticks itself on a clock and forges each
+round's order (pure planning imported from a second module — the source
+spans a real `use` boundary), an `Executor` carries the order out
+through `Tool<RunErrand>` and reports onward, an `Auditor` chronicles
+every outcome through `Tool<Chronicle>`. Round 3 crashes the executor
+*on purpose*: `FleetSup` restarts `rest_for_one`, so the auditor —
+downstream of the crash — restarts with it, the planner keeps its round
+counter, and the rounds keep coming. Actor state dies with its process;
+the audit stream is the durable record.
 
 ```sh
-hird build demo/agent_planner.hird
+hird run demo/agent_fleet
 ```
 
-This type-checks the program, emits human-readable Erlang source
-(`hird_agent_planner.erl`, `hird_planner.erl`, `hird_planner_sup.erl`,
-plus the hand-written runtime), and compiles it all with `erlc` into
-`_build/hird/`.
+```json
+{"schema_version":1,"tool":"RunErrand","args":{"errand":"mend the palisade","round":2},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry"}
+{"schema_version":1,"tool":"Chronicle","args":{"note":"done","round":2},"result":{"ok":null},"timestamp":"…","caller":"Auditor.handle_msg/Record"}
+{"schema_version":1,"tool":"Log","args":{"level":"info","message":"executor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Executor.init"}
+{"schema_version":1,"tool":"Log","args":{"level":"info","message":"auditor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Auditor.init"}
+{"schema_version":1,"tool":"RunErrand","args":{"errand":"scout the border","round":4},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry"}
+```
 
-Run it on BEAM:
+Round 3 never beats — the crash consumed its order — and the two
+re-posted inits are the supervisor's work, visible in the same stream as
+everything else. The tree itself is queryable; its effect graph is the
+system's live org chart, every retainer with its duty and its effects:
 
 ```sh
-hird run demo/agent_planner.hird
+hird emit-effect-graph demo/agent_fleet
 ```
 
-Every tool invocation — mocked or real — is recorded unconditionally on
-the audit stream, one canonical JSON line per call:
+## Record and replay a run
+
+`demo/agent_planner.hird` drives one planning round against a supervised
+`Planner`: repository state in through `Tool<ReadRepo>`, pure analysis,
+tickets out through `Tool<CreateTicket>`, progress through `Tool<Log>`.
+Every tool invocation — mocked or real — lands on the audit stream, one
+canonical JSON line per call:
 
 ```json
 {"schema_version":1,"tool":"CreateTicket","args":{"body":"The parser has no fuzz harness.","title":"Fuzz the parser"},"result":{"ok":{"ctor":"TicketId","args":["Fuzz the parser"]}},"timestamp":"2026-07-28T06:44:42.893Z","caller":"AgentPlanner.file_tickets"}
 ```
 
-Query the actor/effect graph as JSON (or drop `--json` for text):
-
-```sh
-hird emit-effect-graph demo/agent_planner.hird --json
-```
-
-The graph shows the `Planner` actor with its full effect summary, its
-mailbox sum type (`PlanRepo | GetStatus | Shutdown`), the `PlannerSup`
-supervisor with its strategy and children, and each tool declaration
-with structured argument and return types.
-
-The dry-run test harness lives in `crates/hird-cli/tests/demo.rs`: it
-re-runs the same demo with mock handlers swapped into the `install`
-block and asserts on the audit JSON lines — the same program, the same
-unconditional audit stream, differing only in the installed handler
-set.
-
-## Record and replay a run
-
 Because the stream is complete — every call, full arguments, tagged
-result — a recorded run is a replayable environment. Record one to a
-file instead of stdout:
+result — a recorded run is a replayable environment:
 
 ```sh
-hird run demo/agent_planner.hird --audit-file run.jsonl
-```
-
-Then feed it back as the tool implementation:
-
-```sh
-hird run demo/agent_planner.hird --replay run.jsonl
+hird run demo/agent_planner.hird --audit-file run.jsonl   # record
+hird run demo/agent_planner.hird --replay run.jsonl       # replay
 ```
 
 The replay cursor outranks every `handle` and `install` block, so no
@@ -233,8 +221,8 @@ Things worth asking an agent wired to it:
 
 - "What does the Planner actor in demo/agent_planner.hird do? Ask the
   compiler instead of reading the source."
-- "If the Planner crashes mid-plan, who restarts it, and what's the
-  restart budget?"
+- "If the Executor in demo/agent_fleet crashes mid-round, who restarts
+  it, who restarts with it, and what's the restart budget?"
 - "Give me a 50-token summary of the Planner actor. Now 400 tokens.
   What got dropped?"
 - "Write a new Hirð module with a supervised actor, and iterate with
@@ -242,112 +230,22 @@ Things worth asking an agent wired to it:
 
 `demo/counter_demo.hird` is that last prompt's output: a supervised
 counter written by an LLM agent that verified itself against the MCP
-tools alone — it type-checks and runs on BEAM unmodified.
-
-`demo/heartbeat.hird` is the standing counterpart: a supervised actor
-handed a `Clock` at init that schedules its own next beat, logging each
-through the audit stream until Ctrl-C — `hird run demo/heartbeat.hird`.
-`docs/writing-hird-llm.md` is the agent-facing guide.
+tools alone — it type-checks and runs on BEAM unmodified. And
+`demo/heartbeat.hird` is the smallest standing program: one actor, one
+clock, one beat a second until Ctrl-C. `docs/writing-hird-llm.md` is
+the agent-facing guide.
 
 ## Editor support
 
-### Language server
-
 `hird-lsp` is a Language Server Protocol server over the compiler front
-end, speaking stdio. Point any LSP client at the `hird-lsp` binary, with
-no arguments.
-
-v0.1 capabilities:
-
-- **Diagnostics** on file open and save: parse errors, then type errors
-  and warnings, with source spans.
-- **Hover**: the inferred type of the identifier or expression under the
-  cursor, including the effect row for functions
-  (`read_file : Path → String ! {Tool<ReadFile>}`).
-- **Go-to-definition** for top-level declarations: functions, types and
-  their constructors, effects, tools (by marker or generated function
-  name), actors and their message types, and supervisors.
-
-Known limitations (real, by design for v0.1):
-
-- No completion, rename/refactor, or code actions.
-- No workspace-wide analysis: each file is compiled alone, so `use`
-  imports of other modules report as unresolved and definitions resolve
-  only within the current file.
-- No incremental compilation: every change recompiles the whole file.
-
-### Syntax highlighting
-
+end, speaking stdio: diagnostics on open and save, hover with inferred
+types and effect rows, go-to-definition for top-level declarations.
+Point any LSP client at the binary, with no arguments.
 `tree-sitter-hird/` is a tree-sitter grammar for the v0.1 surface, with
-`highlights.scm`, `indents.scm` and `folds.scm` under `queries/`. Both
-operator spellings parse identically, so `→` and `->` highlight the same.
-The flake builds it as a package output, next to `hird-lsp`:
-
-```sh
-nix build github:no-materials/hird#tree-sitter-hird
-```
-
-The result holds the compiled `parser` and a copy of `queries/`. A
-flake-based Neovim configuration takes this repository as an input and
-hands the grammar to nvim-treesitter, which wants the parser and the
-queries under the names it looks them up by:
-
-```nix
-# inputs.hird.url = "github:no-materials/hird";
-{
-  plugins = [
-    (pkgs.neovimUtils.grammarToPlugin
-      inputs.hird.packages.${pkgs.system}.tree-sitter-hird)
-  ];
-}
-```
-
-Neovim needs the file type registered too, whichever route below you
-take, since `.hird` is not one it knows:
-
-```lua
-vim.filetype.add({ extension = { hird = "hird" } })
-```
-
-Without nix, nvim-treesitter builds the grammar itself, given the
-tree-sitter CLI on `PATH` (`npm i -g tree-sitter-cli`). `src/parser.c`
-is generated rather than committed — `grammar.js` is the only source —
-so `requires_generate_from_grammar` is the part that matters: it makes
-`:TSInstall hird` generate the parser before compiling it.
-
-```lua
-require('nvim-treesitter.parsers').get_parser_configs().hird = {
-  install_info = {
-    url = "https://github.com/no-materials/hird",
-    location = "tree-sitter-hird",
-    files = { "src/parser.c", "src/scanner.c" },
-    requires_generate_from_grammar = true,
-  },
-  filetype = "hird",
-}
-```
-
-That installs the parser but not the queries: nvim-treesitter ships
-those only for the languages it supports, so copy this grammar's onto
-the runtime path by hand. It is the one step the nix package does for
-you.
-
-```sh
-mkdir -p ~/.config/nvim/queries/hird
-cp tree-sitter-hird/queries/*.scm ~/.config/nvim/queries/hird/
-```
-
-With no plugin at all, build the parser straight onto the runtime path
-next to those queries (`tree-sitter build -o ~/.config/nvim/parser/hird.so`)
-and call `vim.treesitter.start()` from a `FileType hird` autocommand.
-
-Working on the grammar itself needs no global tree-sitter CLI — the dev
-shell ships one, and `nix flake check` runs the corpus tests and parses
-every `.hird` source in the repository:
-
-```sh
-cd tree-sitter-hird && tree-sitter generate && tree-sitter test
-```
+highlight, indent, and fold queries, built by the flake as a package
+output. [`docs/editor-setup.md`](docs/editor-setup.md) has client
+configuration (including Neovim, with and without nix), the grammar
+development loop, and the v0.1 limitations.
 
 ## Repository layout
 
@@ -359,7 +257,7 @@ cd tree-sitter-hird && tree-sitter generate && tree-sitter test
 - `demo/` — the v0.1 demo programs.
 - `conformance/` — golden files for the audit-log wire format.
 - `docs/` — normative specifications (grammar, error model, tool
-  effects wire format) and the audit stream's guarantees.
+  effects wire format), the audit stream's guarantees, and editor setup.
 - `phrasebook.md` — dense surface-syntax reference.
 - `DECISIONS.md` — architecture decision records.
 - `.beads/README.md` — the issue tracker and roadmap, driven by `bd`.
