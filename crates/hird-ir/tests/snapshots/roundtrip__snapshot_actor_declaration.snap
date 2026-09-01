@@ -14,8 +14,8 @@ tool ReadRepo : { path: Path } → St
 
 actor Planner {
   state: St,
-  message: PlannerMsg = Plan(Path) | Stop,
+  message: PlannerMsg = Plan(Path) | Quit,
   init: fn(start: St) → St = start,
-  handle Plan(p), st → St ! {Tool<ReadRepo>} = read_repo({ path: p }),
-  handle Stop, st → St = st,
+  handle Plan(p), st → Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Quit, st → Next<St> = Continue(st),
 } ! {Tool<ReadRepo>}

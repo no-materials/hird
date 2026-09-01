@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 query : Pid<Msg> → Status ! {Await<Status>, Send<Msg>}
-error[C0001] 412..415: type mismatch: expected `ReplyTo<b> → Msg ! {r}`, got `Msg`
+error[C0001] 444..447: type mismatch: expected `ReplyTo<c> → Msg ! {r}`, got `Msg`

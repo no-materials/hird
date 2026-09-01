@@ -130,13 +130,15 @@ pub(crate) struct Checker {
 impl Checker {
     /// A fresh checker for the file identified by `source_id`.
     pub(crate) fn new(source_id: u32) -> Self {
-        let registry = Registry::new();
+        let mut subst = Subst::new();
+        let mut registry = Registry::new();
         let mut env = Env::new();
         // The seeded Bool constructors are values too.
         env.insert_root("True", Type::bool());
         env.insert_root("False", Type::bool());
+        seed_next(&mut subst, &mut registry, &mut env);
         Self {
-            subst: Subst::new(),
+            subst,
             env,
             registry,
             diags: Vec::new(),
@@ -1222,6 +1224,40 @@ enum WireViolation {
     Function(Type),
     /// An opaque capability type: minting one from a log would forge it.
     Capability(Name),
+}
+
+/// Seeds the built-in handler-outcome type, as if `type Next<a> =
+/// Continue(a) | Stop` had been written: `Continue` carries the next state,
+/// `Stop` stops the actor deliberately. Registered as an ordinary ADT — the
+/// constructors are values, exhaustiveness needs no special-casing — with the
+/// schemes generalised through `subst` exactly as a declared ADT's would be.
+fn seed_next(subst: &mut Subst, registry: &mut Registry, env: &mut Env) {
+    subst.enter_level();
+    let param = subst.fresh_type();
+    let next = Type::con("Next", Vec::from([param.clone()]));
+    let continue_ty = Type::func(Vec::from([param]), next.clone());
+    subst.exit_level();
+    let schemes = [
+        ("Continue", subst.generalize(&continue_ty)),
+        ("Stop", subst.generalize(&next)),
+    ];
+    registry.declare_adt(
+        Name::new("Next"),
+        1,
+        Vec::from([Name::new("Continue"), Name::new("Stop")]),
+    );
+    for (name, scheme) in schemes {
+        registry.declare_ctor(
+            Name::new(name),
+            CtorInfo {
+                scheme: scheme.clone(),
+                owner: Name::new("Next"),
+                module: None,
+                opaque: false,
+            },
+        );
+        env.insert_root(name, scheme);
+    }
 }
 
 /// The first wire-representability violation in `ty`, if any.

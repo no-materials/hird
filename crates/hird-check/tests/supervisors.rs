@@ -58,23 +58,23 @@ fn worker_config() -> St = St(1)
 fn read_config() -> St ! {Tool<ReadRepo>} = read_repo({ path: Path(\"repo\") })
 actor Planner {
   state: St,
-  message: PlannerMsg = | Plan(Path) | Stop,
+  message: PlannerMsg = | Plan(Path) | Quit,
   init: fn(c: St) -> St ! {} = c,
-  handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),
-  handle Stop, st -> St ! {} = st,
+  handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Quit, st -> Next<St> ! {} = Continue(st),
 } ! {Tool<ReadRepo>}
 actor Worker {
   state: St,
   message: WorkerMsg = | Work(Title) | Halt,
   init: fn(c: St) -> St ! {} = c,
-  handle Work(t), st -> St ! {Tool<CreateTicket>} = create_ticket({ title: t }),
-  handle Halt, st -> St ! {} = st,
+  handle Work(t), st -> Next<St> ! {Tool<CreateTicket>} = Continue(create_ticket({ title: t })),
+  handle Halt, st -> Next<St> ! {} = Continue(st),
 } ! {Tool<CreateTicket>}
 actor Pair {
   state: St,
   message: PairMsg = | Ping,
   init: fn(a: St, b: St) -> St ! {} = a,
-  handle Ping, st -> St ! {} = st,
+  handle Ping, st -> Next<St> ! {} = Continue(st),
 }
 ";
 
@@ -397,7 +397,7 @@ actor Parker {
   state: Cfg,
   message: ParkerMsg = | Park,
   init: fn(c: Cfg) -> Cfg ! {Stand} = let u = stand() in c,
-  handle Park, st -> Cfg ! {Stand} = let u = stand() in st,
+  handle Park, st -> Next<Cfg> ! {Stand} = let u = stand() in Continue(st),
 } ! {Stand}"
     )));
 }
@@ -455,8 +455,8 @@ actor Heart {
   state: Cfg,
   message: HeartMsg = | Beat,
   init: fn(c: Cfg) -> Cfg ! {} = c,
-  handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =
-    let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),
+  handle Beat, Cfg(clock, period) -> Next<Cfg> ! {Schedule<HeartMsg>} =
+    let next = schedule(clock, self(), Beat, period) in Continue(Cfg(clock, period)),
 } ! {Schedule<HeartMsg>}
 supervisor HeartSup {
   strategy: one_for_one,

@@ -2,6 +2,6 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  intensity: 6,\n  period: 60,\n  bogus: 1,\n  children: []\n}\"))"
 ---
-error[C0046] 987..996: supervisor `Sup` declares `intensity` twice
-error[C0046] 1017..1022: supervisor `Sup` has no field `bogus`; expected `strategy`, `intensity`, `period`, or `children`
+error[C0046] 1067..1076: supervisor `Sup` declares `intensity` twice
+error[C0046] 1097..1102: supervisor `Sup` has no field `bogus`; expected `strategy`, `intensity`, `period`, or `children`
 supervisor Sup ! {}

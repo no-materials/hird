@@ -2,6 +2,6 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: planner, actor: Planner, restart: permanent, bogus: 1 },\n  ]\n}\"))"
 ---
-error[C0046] 1012..1078: a child of supervisor `Sup` is missing its `start_args` field
-error[C0046] 1067..1076: a child of supervisor `Sup` has no field `bogus`; expected `id`, `actor`, `start_args`, or `restart`
+error[C0046] 1092..1158: a child of supervisor `Sup` is missing its `start_args` field
+error[C0046] 1147..1156: a child of supervisor `Sup` has no field `bogus`; expected `id`, `actor`, `start_args`, or `restart`
 supervisor Sup ! {Tool<ReadRepo>}

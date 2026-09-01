@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 poke : Pid<Msg> → () ! {Send<Msg>}
-error[C0030] 360..373: declared {} but body performs {Send<Msg>}
+error[C0030] 392..405: declared {} but body performs {Send<Msg>}

@@ -1,9 +1,9 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type Status = Status(Int)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Query(String, ReplyTo<Status>) | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Query(name, r), st -> St ! {} = st,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Query(String, ReplyTo<Status>) | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Query(name, r), st -> Next<St> ! {} = Continue(st),\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
+Halt : Msg
 Query : String → ReplyTo<Status> → Msg
 St : Int → St
 Status : Int → Status
-Stop : Msg
 error[C0045] 82..87: message constructor `Query` carries a `ReplyTo` field alongside other fields; a reply channel must be the constructor's only field

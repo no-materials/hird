@@ -31,7 +31,7 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
             "fields": []
           },
           {
-            "name": "Stop",
+            "name": "Quit",
             "fields": []
           }
         ]
@@ -75,40 +75,48 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
           "effect_row": "{}",
           "body": {
             "kind": "Constructor",
-            "name": "St",
-            "type_name": "St",
+            "name": "Continue",
+            "type_name": "Next",
             "args": [
               {
-                "kind": "App",
-                "func": {
-                  "kind": "Var",
-                  "name": "+",
-                  "type": "Int → Int → Int"
-                },
+                "kind": "Constructor",
+                "name": "St",
+                "type_name": "St",
                 "args": [
                   {
-                    "kind": "Var",
-                    "name": "n",
-                    "type": "Int"
-                  },
-                  {
-                    "kind": "Literal",
-                    "value": {
-                      "Int": "1"
+                    "kind": "App",
+                    "func": {
+                      "kind": "Var",
+                      "name": "+",
+                      "type": "Int → Int → Int"
                     },
-                    "type": "Int"
+                    "args": [
+                      {
+                        "kind": "Var",
+                        "name": "n",
+                        "type": "Int"
+                      },
+                      {
+                        "kind": "Literal",
+                        "value": {
+                          "Int": "1"
+                        },
+                        "type": "Int"
+                      }
+                    ],
+                    "result_type": "Int"
                   }
                 ],
-                "result_type": "Int"
+                "result_type": "St"
               }
             ],
-            "result_type": "St"
+            "result_type": "Next<St>"
           }
         },
         {
           "message": {
             "kind": "Constructor",
-            "name": "Stop",
+            "name": "Quit",
             "type_name": "Msg",
             "fields": [],
             "type": "Msg"
@@ -120,9 +128,17 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
           },
           "effect_row": "{}",
           "body": {
-            "kind": "Var",
-            "name": "st",
-            "type": "St"
+            "kind": "Constructor",
+            "name": "Continue",
+            "type_name": "Next",
+            "args": [
+              {
+                "kind": "Var",
+                "name": "st",
+                "type": "St"
+              }
+            ],
+            "result_type": "Next<St>"
           }
         }
       ],

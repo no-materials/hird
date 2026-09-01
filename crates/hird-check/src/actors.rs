@@ -488,9 +488,9 @@ impl Checker {
 
     /// Checks one `handle` clause: the message pattern names a constructor of
     /// the message type (no duplicates), the state pattern binds the state
-    /// type, the body produces the next state, and the body's effects equal
-    /// the handler's declared row. The declared row joins `member_rows` for
-    /// the actor-level summary check.
+    /// type, the body produces a `Next<state>` outcome (`Continue(next)` or
+    /// `Stop`), and the body's effects equal the handler's declared row. The
+    /// declared row joins `member_rows` for the actor-level summary check.
     fn check_handler(
         &mut self,
         handler: &ActorHandler,
@@ -567,13 +567,14 @@ impl Checker {
                 None => Err(Aborted),
             };
         }
+        let next_ty = Type::con("Next", Vec::from([info.state.clone()]));
         if result.is_ok()
             && let Some(ret) = handler.return_type()
         {
             let span = type_expr_span(&ret, self.source_id);
             result = self
                 .elaborate_closed(&ret, &mut scope)
-                .and_then(|ret_ty| self.unify_at(&info.state, &ret_ty, span));
+                .and_then(|ret_ty| self.unify_at(&next_ty, &ret_ty, span));
         }
         let body_res = match (&result, handler.body()) {
             (Ok(()), Some(body)) => {
@@ -587,7 +588,7 @@ impl Checker {
         self.env.pop_scope();
         result?;
         let (body_ty, inferred, body_span) = body_res?;
-        self.unify_at(&info.state, &body_ty, body_span)?;
+        self.unify_at(&next_ty, &body_ty, body_span)?;
         if let Ok(declared) = declared {
             self.check_effect_row(&declared, &inferred, body_span);
         }

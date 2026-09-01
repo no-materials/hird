@@ -1,7 +1,6 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 215
 expression: "check_str(r\"fn omega(f: a) = f(f)\")"
 ---
 omega : ∀a. a
-error[C0002] 16..21: infinite type: `b` occurs within `b → c ! {r}`
+error[C0002] 16..21: infinite type: `c` occurs within `c → d ! {r}`

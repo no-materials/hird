@@ -680,8 +680,8 @@ impl Printer {
 
     /// An actor declaration, one member per line. All types in an actor are
     /// concrete, so no variable canonicalisation is applied; empty effect
-    /// rows are elided and the return type of `init` and of each handler is
-    /// the state type.
+    /// rows are elided, the return type of `init` is the state type, and each
+    /// handler's is the `Next<state>` outcome.
     fn actor_def(&mut self, a: &IrActorDef) {
         self.push("actor ");
         self.push(&a.name);
@@ -728,8 +728,9 @@ impl Printer {
             self.pattern(&handler.message);
             self.push(", ");
             self.pattern(&handler.state);
-            self.push(" \u{2192} ");
+            self.push(" \u{2192} Next<");
             self.push_display(&a.state);
+            self.push(">");
             if !handler.effect_row.is_empty() {
                 self.push(" ! ");
                 self.push_display(&handler.effect_row);

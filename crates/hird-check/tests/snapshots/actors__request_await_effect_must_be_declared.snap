@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 query : Pid<Msg> → Status ! {Send<Msg>}
-error[C0030] 385..401: declared {Send<Msg>} but body performs {Await<Status>, Send<Msg>}
+error[C0030] 417..433: declared {Send<Msg>} but body performs {Await<Status>, Send<Msg>}

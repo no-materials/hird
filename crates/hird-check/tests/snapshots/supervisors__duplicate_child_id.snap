@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: c, actor: Planner, start_args: planner_config(), restart: permanent },\n    { id: c, actor: Worker, start_args: worker_config(), restart: transient },\n  ]\n}\"))"
 ---
-error[C0046] 1104..1105: supervisor `Sup` declares two children with id `c`
+error[C0046] 1184..1185: supervisor `Sup` declares two children with id `c`
 supervisor Sup ! {Tool<CreateTicket>, Tool<ReadRepo>}

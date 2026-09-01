@@ -1845,6 +1845,77 @@ cleanly on every platform the CLI ships for.
 
 ---
 
+## ADR-028: Actor stop path — handlers return a `Next<State>` outcome
+
+**Date**: 2026-09-01
+**Status**: Accepted
+
+### Context
+
+A v0.1 handler could only return the next state, so an actor had no way
+to stop deliberately: the planner demo carried a `Shutdown` sentinel whose
+handler returned the state unchanged, and the process lived until the tree
+was torn down. A standing system needs deliberate child stop, and its
+interplay with restart dispositions must respect ADR-021's boundary: a
+deliberate stop is not a crash.
+
+### Decision
+
+1. **Handlers return a typed outcome.** The checker seeds a built-in sum,
+   as if `type Next<a> = Continue(a) | Stop` had been declared: `Continue`
+   carries the next state, `Stop` stops the actor. A handler's declared
+   return type and body now check against `Next<State>` instead of the bare
+   state; `init` still returns the state — an actor that cannot start is a
+   start failure, not a stop. `Continue` and `Stop` are ordinary
+   constructors (registered like `Bool`'s), so helpers can build and return
+   outcomes and `match` over `Next` is exhaustiveness-checked with no
+   special cases.
+
+2. **`Stop` maps to `{stop, normal, State}`.** A generated callback clause
+   hands the body's outcome and the incoming state (aliased in the clause
+   head) to the runtime's `hird_actor:outcome/2`: `Continue(Next)` becomes
+   `{noreply, Next}`, `Stop` becomes `{stop, normal, State}`. Exit reason
+   `normal` is OTP's encoding of a deliberate stop, so the restart
+   interplay needs no runtime of its own: a `transient` child stays
+   stopped, a `permanent` one is restarted, a `temporary` one never
+   restarts.
+
+3. **`Stop` carries no reason.** A reasoned stop would grow into an error
+   channel and blur ADR-021's crash-vs-outcome boundary; failure detail
+   belongs on the audit stream or in a message, and abnormal ends are
+   crashes.
+
+### Alternatives considered
+
+- **A `stop!` primitive (the `crash!` shape), keeping bare-state
+  handlers.** Rejected: it hides a control-flow change inside an
+  expression, while the outcome type puts the stop path in every handler's
+  signature — and stopping is a return, not a divergence.
+- **Emitting the outcome `case` inline in the callback clause.** Rejected:
+  erlc's cannot-match analysis sees through `begin` blocks and nested
+  cases, so any handler whose body visibly always continues — the common
+  case — would warn on the unreachable `stop` clause. The runtime call is
+  opaque to that analysis and keeps generated clauses one line.
+- **A magic `Stop` sentinel value with handlers still typed as `State`.**
+  Rejected: unification would have to special-case it everywhere, and the
+  type would no longer say what a handler can do.
+
+### Consequences
+
+- Every existing handler changes: `= e` becomes `= Continue(e)`, and the
+  declared return type becomes `Next<State>`. Accepted per the north star —
+  break callers to get the right core shape.
+- `Next`, `Continue`, and `Stop` are predeclared names; a user declaration
+  may shadow them, exactly as `Bool`'s constructors behave.
+- A call handler may stop too: replies are explicit `gen_server:reply`
+  calls (ADR-020), so the outcome is uniform across call and cast clauses.
+  Stopping without replying leaves the caller to its `request` timeout —
+  the ADR-019 dropped-`ReplyTo` caveat, unchanged.
+- The planner demo's `Shutdown` handler is `= Stop` and the child is
+  `transient`; the stop is real and the tree leaves it stopped.
+
+---
+
 ## Open Decision Slots
 
 The following decisions are tracked as open tickets and will be documented here

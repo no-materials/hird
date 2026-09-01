@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 query : Pid<Msg> → Status ! {Await<Status>, Send<Msg>}
-error[C0042] 411..426: the message builder of `request` must be a bare message constructor (e.g. `Get`), not an arbitrary function
+error[C0042] 443..458: the message builder of `request` must be a bare message constructor (e.g. `Get`), not an arbitrary function

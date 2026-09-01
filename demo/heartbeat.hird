@@ -41,11 +41,11 @@ actor Heart {
         HeartState(clock, period, 0),
     },
 
-  handle Beat, HeartState(clock, period, beats) → HeartState
+  handle Beat, HeartState(clock, period, beats) → Next<HeartState>
     ! {Tool<Log>, Schedule<HeartMsg>} =
     let logged = log({ message: "beat" }) in
     let next = schedule(clock, self(), Beat, period) in
-    HeartState(clock, period, beats + 1),
+    Continue(HeartState(clock, period, beats + 1)),
 } ! {Tool<Log>, Schedule<HeartMsg>}
 
 // ── supervision ──────────────────────────────────────────────────

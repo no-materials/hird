@@ -22,9 +22,9 @@ const PLANNER: &str = "effect Tool<t>\n\
        state: St,\n\
        message: PlannerMsg = | PlanRepo(Path) | GetStatus(ReplyTo<Status>) | Shutdown,\n\
        init: fn(c: St) -> St ! {} = c,\n\
-       handle PlanRepo(p), st -> St ! {Tool<ReadRepo>} = read(p, st),\n\
-       handle GetStatus(r), St(n) -> St ! {Send<Status>} = let ack = reply(r, Status(n)) in St(n),\n\
-       handle Shutdown, st -> St ! {} = st,\n\
+       handle PlanRepo(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
+       handle GetStatus(r), St(n) -> Next<St> ! {Send<Status>} = let ack = reply(r, Status(n)) in Continue(St(n)),\n\
+       handle Shutdown, st -> Next<St> ! {} = Continue(st),\n\
      } ! {Tool<ReadRepo>, Send<Status>}\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\

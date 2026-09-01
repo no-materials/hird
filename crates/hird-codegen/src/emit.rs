@@ -55,9 +55,13 @@
 //! constructor: a constructor whose declaration carries a `ReplyTo` field is
 //! received by a `handle_call` clause — the payload is the bare constructor
 //! atom, the reply channel binds `From` — and every other constructor by a
-//! `handle_cast` clause matching its ADT wire shape. Every clause returns
-//! `{noreply, NextState}`; replies are always explicit `gen_server:reply`
-//! calls in handler bodies. Handler maps never cross the spawn boundary:
+//! `handle_cast` clause matching its ADT wire shape. Every clause hands the
+//! body's `Next` outcome to `hird_actor:outcome/2` with the incoming state
+//! (aliased in the head): `Continue(next)` becomes `{noreply, Next}`,
+//! `Stop` becomes `{stop, normal, State}` — reason `normal`, so a deliberate
+//! stop is not a crash and a transient child stays stopped. Replies are
+//! always explicit `gen_server:reply` calls in handler bodies. Handler maps
+//! never cross the spawn boundary:
 //! callbacks run init and handler bodies against no in-scope map, so tool
 //! calls inside actors fall back to the runtime registry.
 //!
@@ -654,8 +658,8 @@ impl<'a> Emitter<'a> {
 
     /// The `handle_call/3` callback: one clause per call constructor — the
     /// bare constructor atom as payload, the reply channel bound from `From`,
-    /// an explicit `{noreply, NextState}` — or a crashing fallback clause
-    /// when the actor has no call constructors.
+    /// `Next`-outcome dispatch through `hird_actor:outcome/2` — or a
+    /// crashing fallback clause when the actor has no call constructors.
     fn handle_call_form(&self, actor: &str, clauses: &[CallClause<'_>], out: &mut String) {
         if clauses.is_empty() {
             out.push_str(&format!(
@@ -679,6 +683,7 @@ impl<'a> Emitter<'a> {
             }
             self.bind_pattern(&clause.handler.state, &mut env, &mut cx, &mut binders);
             let body = self.expr(&clause.handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let (state_alias, outcome) = outcome_case(&body, &mut cx);
             let mut binders = binders.iter();
             let from = from_pat.map_or_else(
                 || String::from("_"),
@@ -687,15 +692,15 @@ impl<'a> Emitter<'a> {
             let state = self.render_pattern(&clause.handler.state, &mut binders, &cx);
             let sep = if i + 1 == clauses.len() { "." } else { ";" };
             out.push_str(&format!(
-                "handle_call({tag}, {from}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
-                ind(1)
+                "handle_call({tag}, {from}, {state_alias} = {state}) ->\n{outcome}{sep}\n"
             ));
         }
     }
 
     /// The `handle_cast/2` callback: one clause per cast constructor,
-    /// matching its ADT wire shape and returning `{noreply, NextState}`, or
-    /// a crashing fallback clause when the actor has no cast constructors.
+    /// matching its ADT wire shape with `Next`-outcome dispatch through
+    /// `hird_actor:outcome/2`, or a crashing fallback clause when the actor
+    /// has no cast constructors.
     fn handle_cast_form(&self, actor: &str, handlers: &[&IrActorHandler], out: &mut String) {
         if handlers.is_empty() {
             out.push_str(&format!(
@@ -720,13 +725,13 @@ impl<'a> Emitter<'a> {
             self.bind_pattern(&handler.message, &mut env, &mut cx, &mut binders);
             self.bind_pattern(&handler.state, &mut env, &mut cx, &mut binders);
             let body = self.expr(&handler.body, &env, &mut cx, 1, Ctx::Expr);
+            let (state_alias, outcome) = outcome_case(&body, &mut cx);
             let mut binders = binders.iter();
             let message = self.render_pattern(&handler.message, &mut binders, &cx);
             let state = self.render_pattern(&handler.state, &mut binders, &cx);
             let sep = if i + 1 == handlers.len() { "." } else { ";" };
             out.push_str(&format!(
-                "handle_cast({message}, {state}) ->\n{}{{noreply, {body}}}{sep}\n",
-                ind(1)
+                "handle_cast({message}, {state_alias} = {state}) ->\n{outcome}{sep}\n"
             ));
         }
     }
@@ -1455,6 +1460,19 @@ struct CallClause<'m> {
     ctor: &'m IrConstructorPat,
     /// The `ReplyTo` field position in the constructor's declaration.
     reply_pos: usize,
+}
+
+/// The callback-clause body shared by `handle_call` and `handle_cast`:
+/// `hird_actor:outcome/2` over the handler body's `Next` outcome and the
+/// incoming state, aliased in the clause head to the returned variable. The
+/// runtime dispatch (rather than an inline `case`) keeps erlc's cannot-match
+/// analysis quiet when a body visibly always continues.
+///
+/// Returns the state-alias variable and the rendered clause body.
+fn outcome_case(body: &str, cx: &mut FnCx) -> (String, String) {
+    let state = cx.fresh_internal("State");
+    let call = format!("{i}hird_actor:outcome({body}, {state})", i = ind(1));
+    (state, call)
 }
 
 /// Splits an actor's handlers into call clauses (message constructor carries

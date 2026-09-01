@@ -499,10 +499,10 @@ effect Spawn<t>
 type St = St(Int)
 actor Counter {
   state: St,
-  message: Msg = | Inc | Stop,
+  message: Msg = | Inc | Quit,
   init: fn(s: St) -> St ! {} = s,
-  handle Inc, St(n) -> St ! {} = St(n + 1),
-  handle Stop, st -> St ! {} = st,
+  handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),
+  handle Quit, st -> Next<St> ! {} = Continue(st),
 }
 fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)";
 
@@ -571,8 +571,8 @@ actor Counter {
   state: St,
   message: Msg = | Inc | Get(ReplyTo<Status>),
   init: fn(s: St) -> St ! {} = s,
-  handle Inc, St(n) -> St ! {} = St(n + 1),
-  handle Get(r), St(n) -> St ! {Send<Status>} = let sent = reply(r, Status(n)) in St(n),
+  handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),
+  handle Get(r), St(n) -> Next<St> ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),
 } ! {Send<Status>}
 fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)
 fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)";
@@ -652,10 +652,10 @@ tool ReadRepo : { path: Path } -> St
 fn planner_config() -> St = St(0)
 actor Planner {
   state: St,
-  message: Msg = | Plan(Path) | Stop,
+  message: Msg = | Plan(Path) | Quit,
   init: fn(c: St) -> St ! {} = c,
-  handle Plan(p), st -> St ! {Tool<ReadRepo>} = read_repo({ path: p }),
-  handle Stop, st -> St ! {} = st,
+  handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Quit, st -> Next<St> ! {} = Continue(st),
 } ! {Tool<ReadRepo>}
 supervisor PlannerSup {
   strategy: one_for_one,
@@ -851,9 +851,9 @@ actor Heart {
   state: Cfg,
   message: HeartMsg = | Beat | Get(ReplyTo<Status>),
   init: fn(c: Cfg) -> Cfg ! {} = c,
-  handle Beat, Cfg(clock, period) -> Cfg ! {Schedule<HeartMsg>} =
-    let next = schedule(clock, self(), Beat, period) in Cfg(clock, period),
-  handle Get(r), st -> Cfg ! {Send<Status>} = let sent = reply(r, Status(1)) in st,
+  handle Beat, Cfg(clock, period) -> Next<Cfg> ! {Schedule<HeartMsg>} =
+    let next = schedule(clock, self(), Beat, period) in Continue(Cfg(clock, period)),
+  handle Get(r), st -> Next<Cfg> ! {Send<Status>} = let sent = reply(r, Status(1)) in Continue(st),
 } ! {Schedule<HeartMsg>, Send<Status>}
 supervisor HeartSup {
   strategy: one_for_one,

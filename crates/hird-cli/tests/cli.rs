@@ -33,7 +33,7 @@ const PLANNER: &str = "effect Tool<t>\n\
        state: St,\n\
        message: PlannerMsg = | PlanRepo(Path),\n\
        init: fn(c: St) -> St ! {} = c,\n\
-       handle PlanRepo(p), st -> St ! {Tool<ReadRepo>} = read(p, st),\n\
+       handle PlanRepo(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
      } ! {Tool<ReadRepo>}\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\
@@ -56,7 +56,7 @@ const STANDING: &str = "effect Tool<t>\n\
        state: St,\n\
        message: KeeperMsg = | Note(String),\n\
        init: fn(c: St) -> St ! {} = c,\n\
-       handle Note(m), st -> St ! {Tool<Log>} = match log({ message: m }) { _ -> st },\n\
+       handle Note(m), st -> Next<St> ! {Tool<Log>} = match log({ message: m }) { _ -> Continue(st) },\n\
      } ! {Tool<Log>}\n\
      supervisor KeeperSup {\n\
        strategy: one_for_one,\n\
@@ -70,6 +70,45 @@ const STANDING: &str = "effect Tool<t>\n\
        install { Tool<Log> -> fake_log } in\n\
        let u = supervise(KeeperSup) in\n\
        let s = send(child(KeeperSup, keeper), Note(\"standing\")) in\n\
+       stand()";
+
+/// A standing program whose two actors stop themselves deliberately: the
+/// permanent one is restarted (its init logs again), the transient one
+/// stays stopped (its init logs exactly once).
+const STOPPING: &str = "effect Tool<t>\n\
+     effect Send<t>\n\
+     type St = St(Int)\n\
+     tool Log : { message: String } -> ()\n\
+     fn fake_log(args: { message: String }) -> () = ()\n\
+     fn config() -> St = St(0)\n\
+     actor Keeper {\n\
+       state: St,\n\
+       message: KeeperMsg = | Rest,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"keeper up\" }) { _ -> c },\n\
+       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     actor Drifter {\n\
+       state: St,\n\
+       message: DrifterMsg = | Leave,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"drifter up\" }) { _ -> c },\n\
+       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     supervisor MixedSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: keeper, actor: Keeper, start_args: config(), restart: permanent },\n\
+         { id: drifter, actor: Drifter, start_args: config(), restart: transient },\n\
+       ]\n\
+     }\n\
+     fn main() ! {Install, Supervise, Send<KeeperMsg>, Send<DrifterMsg>, Stand} =\n\
+       install { Tool<Log> -> fake_log } in\n\
+       let u = supervise(MixedSup) in\n\
+       let s1 = send(child(MixedSup, keeper), Rest) in\n\
+       let s2 = send(child(MixedSup, drifter), Leave) in\n\
        stand()";
 
 /// A program whose `main` leaks a tool effect (no `handle` block).
@@ -549,6 +588,84 @@ fn run_stands_until_interrupted_then_exits_cleanly() {
     assert!(lines[0].ends_with('}'), "audit log: {log}");
 }
 
+/// A deliberate stop (`Stop` from a handler) is not a crash: the supervisor
+/// restarts a permanent child that stopped itself — its init logs a second
+/// time — and leaves a transient one stopped — its init logs exactly once.
+/// Unix only, like every standing test: it sends SIGINT.
+#[test]
+fn run_deliberate_stop_respects_restart_dispositions() {
+    if !cfg!(unix) {
+        eprintln!("skipping: the test sends SIGINT, which is Unix-only");
+        return;
+    }
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_deliberate_stop");
+    let file = write(&dir, "stopping.hird", STOPPING);
+    let audit = dir.join("audit.jsonl");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args([
+            "run",
+            &file,
+            "-o",
+            dir.join("out").to_str().expect("utf-8 path"),
+            "--audit-file",
+            audit.to_str().expect("utf-8 path"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the hird binary");
+
+    // The permanent keeper stopped itself and was restarted: two init logs.
+    let count = |log: &str, needle: &str| log.matches(needle).count();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let log = fs::read_to_string(&audit).unwrap_or_default();
+        if count(&log, "keeper up") >= 2 {
+            break;
+        }
+        if let Some(status) = child.try_wait().expect("poll the hird binary") {
+            let mut err = String::new();
+            if let Some(stderr) = child.stderr.as_mut() {
+                let _ = stderr.read_to_string(&mut err);
+            }
+            panic!("the program exited early with {status}; stderr: {err}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the permanent child was never restarted; audit log: {log}"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    // The transient drifter's stop happened alongside the keeper's; give the
+    // supervisor time to (wrongly) restart it before counting.
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        child.try_wait().expect("poll the hird binary").is_none(),
+        "the program halted instead of standing"
+    );
+
+    let interrupt = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send SIGINT");
+    assert!(interrupt.success());
+    let output = child.wait_with_output().expect("wait for the hird binary");
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        stderr(&output)
+    );
+
+    let log = fs::read_to_string(&audit).expect("read the audit log");
+    assert_eq!(count(&log, "keeper up"), 2, "audit log: {log}");
+    assert_eq!(count(&log, "drifter up"), 1, "audit log: {log}");
+}
+
 // ── time: scheduled sends and request timeouts ─────────────────
 
 /// An actor that swallows its requests: the handler never replies.
@@ -560,7 +677,7 @@ const MUTE: &str = "effect Spawn<t>\n\
        state: St,\n\
        message: MuteMsg = | Get(ReplyTo<Int>),\n\
        init: fn(c: St) -> St ! {} = c,\n\
-       handle Get(r), st -> St ! {} = st,\n\
+       handle Get(r), st -> Next<St> ! {} = Continue(st),\n\
      }\n\
      fn main() ! {Spawn<MuteMsg>, Send<MuteMsg>, Await<Int>} =\n\
        let p = spawn(Mute, St(0)) in\n\

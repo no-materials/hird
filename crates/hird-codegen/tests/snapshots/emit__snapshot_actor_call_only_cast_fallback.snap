@@ -15,11 +15,11 @@ start_link(S) ->
 init(S) ->
     {ok, S}.
 
-handle_call(get, R, {st, N}) ->
-    {noreply, begin
+handle_call(get, R, State@1 = {st, N}) ->
+    hird_actor:outcome(begin
         _Ack = gen_server:reply(R, ping),
-        {st, N}
-    end}.
+        {continue, {st, N}}
+    end, State@1).
 
 handle_cast(Message, _State) ->
     erlang:error({unexpected_cast, Message}).

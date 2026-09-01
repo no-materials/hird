@@ -148,13 +148,13 @@ actor Planner {
 
   init: fn(config: PlannerConfig) → PlannerState ! {Tool<Log>} = initial_state(config),
 
-  handle PlanRepo(path), st → PlannerState
+  handle PlanRepo(path), st → Next<PlannerState>
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} = plan_repo(path, st),
 
-  handle GetStatus(reply_to), st → PlannerState
+  handle GetStatus(reply_to), st → Next<PlannerState>
     ! {Send<PlannerStatus>} = reply_status(reply_to, st),
 
-  handle Shutdown, st → PlannerState ! {} = st,
+  handle Shutdown, _ → Next<PlannerState> ! {} = Stop,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
 ```
 
@@ -163,6 +163,12 @@ actor Planner {
 - A handler binds the message payload pattern, then the current state as a
   trailing comma-separated pattern (`_` if unused). The state pattern's type
   is the declared `state` type; the binder name is the author's choice.
+- A handler body produces a `Next<State>` outcome, never a bare state:
+  `Continue(next)` keeps the actor running, `Stop` stops it deliberately.
+  `Next<a> = Continue(a) | Stop` is predeclared (constructors and all, like
+  `Bool`), so helpers may build and return outcomes. A deliberate stop is
+  not a crash: a `transient` child stays stopped, a `permanent` one is
+  restarted. `init` still returns the bare state.
 - State is encapsulated — inaccessible outside handlers.
 - Handlers must be exhaustive over the message type.
 - Per-actor effect summary is declared and checked.
@@ -372,7 +378,11 @@ others are the shape the discipline takes for user-declared capabilities.
   (P0005); write `(a == b) == c`.
 - **`Some`/`None`, `Cons`/`Nil` are not predefined**: `Option` and `List`
   exist as built-in type names but carry no constructors until you declare
-  `type Option<a> = Some(a) | None` yourself.
+  `type Option<a> = Some(a) | None` yourself. `Next` is different: it comes
+  with `Continue`/`Stop` predeclared (like `Bool`), so a handler returns
+  outcomes without declaring anything.
+- **Handlers return `Next<State>`, not `State`**: `= st` in a handler is a
+  type error — write `= Continue(st)`; stop with `= Stop`.
 - **Handler maps never cross `spawn`/`supervise`**: a `handle` block around
   a spawn does nothing for the spawned actor's tool calls — use `install`.
 

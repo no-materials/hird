@@ -27,12 +27,12 @@ actor Counter {
   init: fn(config: CounterConfig) → CounterState ! {} =
     match config { CounterConfig(start) → CounterState(start) },
 
-  handle Increment(by), CounterState(n) → CounterState ! {} =
-    CounterState(n + by),
+  handle Increment(by), CounterState(n) → Next<CounterState> ! {} =
+    Continue(CounterState(n + by)),
 
-  handle GetCount(reply_to), CounterState(n) → CounterState ! {Send<Int>} =
+  handle GetCount(reply_to), CounterState(n) → Next<CounterState> ! {Send<Int>} =
     let sent = reply(reply_to, n) in
-    CounterState(n),
+    Continue(CounterState(n)),
 } ! {Send<Int>}
 
 // Counters start at zero.

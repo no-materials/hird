@@ -29,5 +29,5 @@ init({A, B}) ->
 handle_call(Request, _From, _State) ->
     erlang:error({unexpected_call, Request}).
 
-handle_cast(nop, {st, N}) ->
-    {noreply, {st, N}}.
+handle_cast(nop, State@1 = {st, N}) ->
+    hird_actor:outcome({continue, {st, N}}, State@1).

@@ -2,6 +2,6 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 0,\n  period: sixty,\n  children: []\n}\"))"
 ---
-error[C0046] 982..983: supervisor `Sup`'s `intensity` must be a positive integer
-error[C0046] 995..1000: supervisor `Sup`'s `period` must be a positive integer
+error[C0046] 1062..1063: supervisor `Sup`'s `intensity` must be a positive integer
+error[C0046] 1075..1080: supervisor `Sup`'s `period` must be a positive integer
 supervisor Sup ! {}

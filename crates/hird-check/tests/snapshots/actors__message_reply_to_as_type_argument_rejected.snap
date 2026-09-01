@@ -1,10 +1,10 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Box<a> = BoxOf(a)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Ask(Box<ReplyTo<Status>>) | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Ask(b), st -> St ! {} = st,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Box<a> = BoxOf(a)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Ask(Box<ReplyTo<Status>>) | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Ask(b), st -> Next<St> ! {} = Continue(st),\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
 Ask : Box<ReplyTo<Status>> → Msg
 BoxOf : ∀a. a → Box<a>
+Halt : Msg
 St : Int → St
 Status : Int → Status
-Stop : Msg
 error[C0044] 105..108: message constructor `Ask` nests `ReplyTo` within `Box<ReplyTo<Status>>`; a reply channel may appear only as a direct field of a message constructor

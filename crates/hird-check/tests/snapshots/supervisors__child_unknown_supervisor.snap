@@ -2,4 +2,4 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"fn planner() -> Pid<PlannerMsg> ! {} = child(GhostSup, planner)\"))"
 ---
-error[C0052] 972..980: `GhostSup` is not a declared supervisor
+error[C0052] 1052..1060: `GhostSup` is not a declared supervisor

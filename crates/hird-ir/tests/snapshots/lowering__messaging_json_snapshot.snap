@@ -90,34 +90,42 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
           "effect_row": "{}",
           "body": {
             "kind": "Constructor",
-            "name": "St",
-            "type_name": "St",
+            "name": "Continue",
+            "type_name": "Next",
             "args": [
               {
-                "kind": "App",
-                "func": {
-                  "kind": "Var",
-                  "name": "+",
-                  "type": "Int → Int → Int"
-                },
+                "kind": "Constructor",
+                "name": "St",
+                "type_name": "St",
                 "args": [
                   {
-                    "kind": "Var",
-                    "name": "n",
-                    "type": "Int"
-                  },
-                  {
-                    "kind": "Literal",
-                    "value": {
-                      "Int": "1"
+                    "kind": "App",
+                    "func": {
+                      "kind": "Var",
+                      "name": "+",
+                      "type": "Int → Int → Int"
                     },
-                    "type": "Int"
+                    "args": [
+                      {
+                        "kind": "Var",
+                        "name": "n",
+                        "type": "Int"
+                      },
+                      {
+                        "kind": "Literal",
+                        "value": {
+                          "Int": "1"
+                        },
+                        "type": "Int"
+                      }
+                    ],
+                    "result_type": "Int"
                   }
                 ],
-                "result_type": "Int"
+                "result_type": "St"
               }
             ],
-            "result_type": "St"
+            "result_type": "Next<St>"
           }
         },
         {
@@ -176,16 +184,24 @@ expression: "module.to_json_pretty().expect(\"serialization succeeds\")"
             },
             "body": {
               "kind": "Constructor",
-              "name": "St",
-              "type_name": "St",
+              "name": "Continue",
+              "type_name": "Next",
               "args": [
                 {
-                  "kind": "Var",
-                  "name": "n",
-                  "type": "Int"
+                  "kind": "Constructor",
+                  "name": "St",
+                  "type_name": "St",
+                  "args": [
+                    {
+                      "kind": "Var",
+                      "name": "n",
+                      "type": "Int"
+                    }
+                  ],
+                  "result_type": "St"
                 }
               ],
-              "result_type": "St"
+              "result_type": "Next<St>"
             }
           }
         }

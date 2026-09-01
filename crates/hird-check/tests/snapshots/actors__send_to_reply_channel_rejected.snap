@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 answer : ∀a. a
-error[C0001] 392..393: type mismatch: expected `Pid<b>`, got `ReplyTo<Status>`
+error[C0001] 424..425: type mismatch: expected `Pid<c>`, got `ReplyTo<Status>`

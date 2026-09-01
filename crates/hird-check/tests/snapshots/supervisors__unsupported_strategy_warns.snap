@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_all,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },\n  ]\n}\"))"
 ---
-warning[C0050] 956..967: restart strategy `one_for_all` is not implemented yet; only `one_for_one` is supported
+warning[C0050] 1036..1047: restart strategy `one_for_all` is not implemented yet; only `one_for_one` is supported
 supervisor Sup ! {Tool<ReadRepo>}

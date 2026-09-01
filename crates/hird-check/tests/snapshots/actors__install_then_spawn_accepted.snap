@@ -2,10 +2,10 @@
 source: crates/hird-check/tests/actors.rs
 expression: check_str(&source)
 ---
+Halt : PlannerMsg
 Path : String → Path
 Plan : Path → PlannerMsg
 St : Int → St
-Stop : PlannerMsg
 main : St → Pid<PlannerMsg> ! {Install, Spawn<PlannerMsg>}
 mock : { path: Path } → St
 read_repo : { path: Path } → St ! {Tool<ReadRepo>}

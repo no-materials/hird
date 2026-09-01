@@ -1,10 +1,10 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Wrapper = Wrap(ReplyTo<Status>)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Ask(Wrapper) | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Ask(w), st -> St ! {} = st,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\")"
+expression: "check_str(\"type Status = Status(Int)\\n\\\n         type Wrapper = Wrap(ReplyTo<Status>)\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Ask(Wrapper) | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Ask(w), st -> Next<St> ! {} = Continue(st),\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
 Ask : Wrapper → Msg
+Halt : Msg
 St : Int → St
 Status : Int → Status
-Stop : Msg
 Wrap : ReplyTo<Status> → Wrapper
 error[C0044] 119..122: message constructor `Ask` nests `ReplyTo` within `Wrapper`; a reply channel may appear only as a direct field of a message constructor

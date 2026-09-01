@@ -18,7 +18,7 @@ init(S) ->
 handle_call(Request, _From, _State) ->
     erlang:error({unexpected_call, Request}).
 
-handle_cast({set, X}, {st, _}) ->
-    {noreply, {st, X}};
-handle_cast(bump, {st, N}) ->
-    {noreply, {st, hird_tool_dispatch:call(audit, <<"Worker.handle_msg/Bump"/utf8>>, #{}, #{n => N})}}.
+handle_cast({set, X}, State@1 = {st, _}) ->
+    hird_actor:outcome({continue, {st, X}}, State@1);
+handle_cast(bump, State@1 = {st, N}) ->
+    hird_actor:outcome({continue, {st, hird_tool_dispatch:call(audit, <<"Worker.handle_msg/Bump"/utf8>>, #{}, #{n => N})}}, State@1).

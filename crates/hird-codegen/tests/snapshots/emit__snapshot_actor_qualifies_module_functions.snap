@@ -1,6 +1,6 @@
 ---
 source: crates/hird-codegen/tests/emit.rs
-expression: "actor_module(program(\"Clock\"), \"Clock\", \"hird_ticker\")"
+expression: "behaviour_module(program(\"Clock\"), \"Clock\", \"hird_ticker\")"
 ---
 %% Generated from src/clock.hird by the Hirð compiler. Do not edit.
 %% src/clock.hird:3
@@ -18,10 +18,10 @@ init(S) ->
 handle_call(Request, _From, _State) ->
     erlang:error({unexpected_call, Request}).
 
-handle_cast(tick, {st, N}) ->
-    {noreply, {st, hird_clock:bump(N)}};
-handle_cast(via, {st, N}) ->
-    {noreply, begin
+handle_cast(tick, State@1 = {st, N}) ->
+    hird_actor:outcome({continue, {st, hird_clock:bump(N)}}, State@1);
+handle_cast(via, State@1 = {st, N}) ->
+    hird_actor:outcome(begin
         F = fun hird_clock:bump/1,
-        {st, F(N)}
-    end}.
+        {continue, {st, F(N)}}
+    end, State@1).

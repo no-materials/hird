@@ -19,14 +19,14 @@ init(C) ->
             C
     end}.
 
-handle_call(get, R, St) ->
-    {noreply, begin
+handle_call(get, R, State@1 = St) ->
+    hird_actor:outcome(begin
         _Sent = gen_server:reply(R, {status, 1}),
-        St
-    end}.
+        {continue, St}
+    end, State@1).
 
-handle_cast(beat, {cfg, Clock, Period}) ->
-    {noreply, begin
+handle_cast(beat, State@1 = {cfg, Clock, Period}) ->
+    hird_actor:outcome(begin
         _Next = hird_clock:schedule(Clock, self(), beat, Period),
-        {cfg, Clock, Period}
-    end}.
+        {continue, {cfg, Clock, Period}}
+    end, State@1).

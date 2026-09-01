@@ -1,8 +1,8 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Inc, st -> St ! {} = st,\\n\\\n         }\")"
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Inc, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
+Halt : Msg
 Inc : Msg
 St : Int → St
-Stop : Msg
-error[C0041] 24..25: actor `A` does not handle message variant `Stop`
+error[C0041] 24..25: actor `A` does not handle message variant `Halt`

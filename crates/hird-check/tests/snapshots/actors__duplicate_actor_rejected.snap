@@ -1,10 +1,10 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Stop,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Stop, st -> St ! {} = st,\\n\\\n         }\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg2 = | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Halt, st -> St ! {} = st,\\n\\\n         }\")"
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Halt,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg2 = | Quit,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Quit, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
-Halt : Msg2
+Halt : Msg
+Quit : Msg2
 St : Int → St
-Stop : Msg
-error[C0035] 135..136: duplicate actor `A`
-error[C0041] 135..136: actor `A` does not handle message variant `Stop`
-error[C0037] 212..217: `Halt` is not a constructor of actor `A`'s message type `Msg`
+error[C0035] 151..152: duplicate actor `A`
+error[C0041] 151..152: actor `A` does not handle message variant `Halt`
+error[C0037] 228..233: `Quit` is not a constructor of actor `A`'s message type `Msg`
