@@ -13,9 +13,6 @@
 //! other effects of its own; its effect row is derived as the union of its
 //! children's per-actor effect summaries plus what their start arguments
 //! acquire, and recorded for the IR.
-//!
-//! Only `one_for_one` is implemented in v0.1: `one_for_all` and `rest_for_one`
-//! parse and type-check but raise a warning ([`CheckCode::C0050`]).
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -31,8 +28,7 @@ use crate::checker::Checker;
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::{NodeKey, expr_span, name_token_span, node_span};
 
-/// The restart strategies the surface accepts. Only `one_for_one` is lowered in
-/// v0.1; the rest warn.
+/// The restart strategies the surface accepts.
 const STRATEGIES: [&str; 3] = ["one_for_one", "one_for_all", "rest_for_one"];
 
 /// The restart dispositions a child spec accepts.
@@ -162,8 +158,7 @@ impl Checker {
             .push((NodeKey::of_node(decl.syntax()), derived));
     }
 
-    /// Checks the `strategy` field names a known strategy; `one_for_all` and
-    /// `rest_for_one` warn as unimplemented in v0.1.
+    /// Checks the `strategy` field names a known strategy.
     fn check_strategy(&mut self, sup: &str, field: &SupervisorField) {
         let Some(value) = field.value() else {
             return;
@@ -190,15 +185,6 @@ impl Checker {
                      expected `one_for_one`, `one_for_all`, or `rest_for_one`"
                 ),
             );
-        } else if strategy != "one_for_one" {
-            self.diags.push(CheckDiagnostic::warning(
-                CheckCode::C0050,
-                span,
-                format!(
-                    "restart strategy `{strategy}` is not implemented yet; \
-                     only `one_for_one` is supported"
-                ),
-            ));
         }
     }
 

@@ -258,8 +258,7 @@ pub struct IrActorHandler {
 pub struct IrSupervisorDef {
     /// The supervisor's name (its own namespace; not a value).
     pub name: String,
-    /// The restart strategy: `one_for_one` (the only one lowered in v0.1),
-    /// `one_for_all`, or `rest_for_one`.
+    /// The restart strategy: `one_for_one`, `one_for_all`, or `rest_for_one`.
     pub strategy: String,
     /// The maximum number of restarts tolerated within `period` seconds.
     pub intensity: u32,

@@ -287,13 +287,20 @@ fn intensity_and_period_positive() {
 
 // ── restart strategy ─────────────────────────────────────────────
 
-/// `one_for_all` and `rest_for_one` parse and type-check but warn as
-/// unimplemented in v0.1; only `one_for_one` is supported.
+/// All three restart strategies check cleanly.
 #[test]
-fn unsupported_strategy_warns() {
+fn group_strategies_accepted() {
     insta::assert_snapshot!(check_str(&with_prelude(
-        "supervisor Sup {
+        "supervisor AllSup {
   strategy: one_for_all,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: planner, actor: Planner, start_args: planner_config(), restart: permanent },
+  ]
+}
+supervisor RestSup {
+  strategy: rest_for_one,
   intensity: 5,
   period: 60,
   children: [
@@ -303,8 +310,7 @@ fn unsupported_strategy_warns() {
     )));
 }
 
-/// An unknown strategy is a compile error, distinct from the unimplemented
-/// warning.
+/// An unknown strategy is a compile error.
 #[test]
 fn unknown_strategy_rejected() {
     insta::assert_snapshot!(check_str(&with_prelude(

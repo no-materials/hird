@@ -196,8 +196,8 @@ supervisor PlannerSup {
   `restart` of `permanent`, `temporary`, or `transient`.
 - The supervisor's effect row is derived (the union of its children's per-actor
   summaries), never declared — there is no trailing `! { … }`.
-- `strategy` is `one_for_one` in v0.1; `one_for_all` and `rest_for_one` parse
-  but warn as not yet implemented.
+- `strategy` is `one_for_one`, `one_for_all`, or `rest_for_one`, with OTP's
+  restart semantics.
 
 ---
 

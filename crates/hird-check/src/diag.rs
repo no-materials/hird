@@ -147,8 +147,8 @@ pub enum CheckCode {
     /// A supervisor child's `start_args` performs effects; start arguments are
     /// evaluated during supervisor init and must be pure.
     C0049,
-    /// A restart strategy is parsed and type-checked but not implemented in
-    /// v0.1 (only `one_for_one` is); a warning, not an error.
+    /// Retired: raised while `one_for_all` and `rest_for_one` were parsed but
+    /// not yet lowered. Never emitted; kept so codes stay stable.
     C0050,
     /// An `install` arm's handler has a non-empty or open effect row; an
     /// installed handler runs in arbitrary processes against whatever handler

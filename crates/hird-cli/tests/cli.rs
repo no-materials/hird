@@ -111,6 +111,90 @@ const STOPPING: &str = "effect Tool<t>\n\
        let s2 = send(child(MixedSup, drifter), Leave) in\n\
        stand()";
 
+/// A standing program with two permanent actors under a `one_for_all`
+/// supervisor: stopping the last child restarts the whole group, so both
+/// inits log a second time.
+const ALL: &str = "effect Tool<t>\n\
+     effect Send<t>\n\
+     type St = St(Int)\n\
+     tool Log : { message: String } -> ()\n\
+     fn fake_log(args: { message: String }) -> () = ()\n\
+     fn config() -> St = St(0)\n\
+     actor First {\n\
+       state: St,\n\
+       message: FirstMsg = | Rest,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"first up\" }) { _ -> c },\n\
+       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     actor Last {\n\
+       state: St,\n\
+       message: LastMsg = | Leave,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"last up\" }) { _ -> c },\n\
+       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     supervisor AllSup {\n\
+       strategy: one_for_all,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: first, actor: First, start_args: config(), restart: permanent },\n\
+         { id: last, actor: Last, start_args: config(), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn main() ! {Install, Supervise, Send<LastMsg>, Stand} =\n\
+       install { Tool<Log> -> fake_log } in\n\
+       let u = supervise(AllSup) in\n\
+       let s = send(child(AllSup, last), Leave) in\n\
+       stand()";
+
+/// A standing program with three permanent actors under a `rest_for_one`
+/// supervisor: stopping the middle child restarts it and the later sibling,
+/// while the earlier one keeps standing (its init logs exactly once).
+const REST: &str = "effect Tool<t>\n\
+     effect Send<t>\n\
+     type St = St(Int)\n\
+     tool Log : { message: String } -> ()\n\
+     fn fake_log(args: { message: String }) -> () = ()\n\
+     fn config() -> St = St(0)\n\
+     actor First {\n\
+       state: St,\n\
+       message: FirstMsg = | Rest,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"first up\" }) { _ -> c },\n\
+       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     actor Middle {\n\
+       state: St,\n\
+       message: MiddleMsg = | Leave,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"middle up\" }) { _ -> c },\n\
+       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     actor Last {\n\
+       state: St,\n\
+       message: LastMsg = | Nap,\n\
+       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+         match log({ message: \"last up\" }) { _ -> c },\n\
+       handle Nap, _ -> Next<St> ! {} = Stop,\n\
+     } ! {Tool<Log>}\n\
+     supervisor RestSup {\n\
+       strategy: rest_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: first, actor: First, start_args: config(), restart: permanent },\n\
+         { id: middle, actor: Middle, start_args: config(), restart: permanent },\n\
+         { id: last, actor: Last, start_args: config(), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn main() ! {Install, Supervise, Send<MiddleMsg>, Stand} =\n\
+       install { Tool<Log> -> fake_log } in\n\
+       let u = supervise(RestSup) in\n\
+       let s = send(child(RestSup, middle), Leave) in\n\
+       stand()";
+
 /// A program whose `main` leaks a tool effect (no `handle` block).
 const LEAKY: &str = "effect Tool<t>\n\
      tool Ping : { msg: String } -> String\n\
@@ -664,6 +748,125 @@ fn run_deliberate_stop_respects_restart_dispositions() {
     let log = fs::read_to_string(&audit).expect("read the audit log");
     assert_eq!(count(&log, "keeper up"), 2, "audit log: {log}");
     assert_eq!(count(&log, "drifter up"), 1, "audit log: {log}");
+}
+
+/// Counts occurrences of `needle` in the file at `path`.
+fn count_in(path: &Path, needle: &str) -> usize {
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .matches(needle)
+        .count()
+}
+
+/// Polls `path` until it contains `needle` at least `n` times; panics after
+/// `timeout`, or as soon as `child` (the program writing the file) exits.
+fn wait_for_count(child: &mut Child, path: &Path, needle: &str, n: usize, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if count_in(path, needle) >= n {
+            return;
+        }
+        if let Some(status) = child.try_wait().expect("poll the hird binary") {
+            let mut err = String::new();
+            if let Some(stderr) = child.stderr.as_mut() {
+                let _ = stderr.read_to_string(&mut err);
+            }
+            panic!("the program exited early with {status}; stderr: {err}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "`{}` never contained `{needle}` {n} times; log: {}",
+            path.display(),
+            fs::read_to_string(path).unwrap_or_default()
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Spawns `hird run` on a standing group-restart program, waits until
+/// `restarted` (the init line of a child the strategy must restart alongside
+/// the stopped one) appears twice, settles, then interrupts and returns the
+/// audit log for exact counting.
+fn run_group_restart(name: &str, program: &str, restarted: &str) -> String {
+    let dir = scratch(name);
+    let file = write(&dir, "group.hird", program);
+    let audit = dir.join("audit.jsonl");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args([
+            "run",
+            &file,
+            "-o",
+            dir.join("out").to_str().expect("utf-8 path"),
+            "--audit-file",
+            audit.to_str().expect("utf-8 path"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the hird binary");
+
+    wait_for_count(&mut child, &audit, restarted, 2, Duration::from_secs(60));
+    // Any wrongful extra restart happens alongside the observed one; give the
+    // supervisor time to (wrongly) produce it before counting.
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        child.try_wait().expect("poll the hird binary").is_none(),
+        "the program halted instead of standing"
+    );
+
+    let interrupt = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send SIGINT");
+    assert!(interrupt.success(), "SIGINT was not delivered");
+    let output = child.wait_with_output().expect("wait for the hird binary");
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        stderr(&output)
+    );
+    fs::read_to_string(&audit).expect("read the audit log")
+}
+
+/// Under `one_for_all`, a deliberate stop of the last child takes the whole
+/// group down and back up: the first child's init logs a second time even
+/// though it never stopped itself. Unix only, like every standing test: it
+/// sends SIGINT.
+#[test]
+fn run_one_for_all_restarts_the_group() {
+    if !cfg!(unix) {
+        eprintln!("skipping: the test sends SIGINT, which is Unix-only");
+        return;
+    }
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let log = run_group_restart("run_one_for_all", ALL, "first up");
+    let count = |needle: &str| log.matches(needle).count();
+    assert_eq!(count("first up"), 2, "audit log: {log}");
+    assert_eq!(count("last up"), 2, "audit log: {log}");
+}
+
+/// Under `rest_for_one`, a deliberate stop of the middle child restarts it
+/// and the later sibling, while the earlier one keeps standing: its init logs
+/// exactly once. Unix only, like every standing test: it sends SIGINT.
+#[test]
+fn run_rest_for_one_restarts_later_siblings() {
+    if !cfg!(unix) {
+        eprintln!("skipping: the test sends SIGINT, which is Unix-only");
+        return;
+    }
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let log = run_group_restart("run_rest_for_one", REST, "last up");
+    let count = |needle: &str| log.matches(needle).count();
+    assert_eq!(count("first up"), 1, "audit log: {log}");
+    assert_eq!(count("middle up"), 2, "audit log: {log}");
+    assert_eq!(count("last up"), 2, "audit log: {log}");
 }
 
 // ── time: scheduled sends and request timeouts ─────────────────
