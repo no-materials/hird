@@ -8,7 +8,7 @@ minor versions may break the language surface and the tooling APIs.
 The tree-sitter grammar (`tree-sitter-hird/`) versions on its own
 schedule and is not covered by these entries.
 
-## [Unreleased]
+## [0.2.0] — 2026-09-01
 
 ### Added
 
@@ -38,6 +38,44 @@ schedule and is not covered by these entries.
   does on every platform, closing it on Ctrl-C or termination, so a
   standing program ends cleanly from the terminal on Windows as well as
   Unix. Without `stand()` a program halts when `main` returns, as before.
+- **Actor stop path.** A message handler returns the built-in
+  `Next<State>` sum — seeded as if `type Next<a> = Continue(a) | Stop`
+  were declared — instead of a bare state, so an actor can stop itself
+  deliberately. `Stop` exits with reason `normal`: a `transient` child
+  stays stopped, a `permanent` one is restarted, by stock OTP semantics.
+  `init` still returns the bare state. Every handler body changes:
+  wrap a continuing state in `Continue(…)`.
+- **Group restart strategies.** `one_for_all` and `rest_for_one` now
+  lower to their OTP supervisor strategies instead of warning as
+  unimplemented (C0050 is retired): a crash restarts the whole group, or
+  the crashed child and every child after it, under the declared
+  `intensity`/`period` budget.
+- **The standing-fleet demo.** `demo/agent_fleet/` is the flagship
+  standing program: three supervised actors with typed protocols —
+  a clock-driven planner, an executor, an auditor — under one
+  `rest_for_one` tree, with a deliberate crash whose restart is visible
+  on the audit stream. Its source spans two modules joined by `use`,
+  compiled as one program by `hird build <dir>`.
+
+### Fixed
+
+- **Unqualified imported functions miscompiled to the importing
+  module.** A selective import (`use Lib.{f}`) used bare compiled to a
+  call on the importing module and crashed at runtime with
+  `function not exported`; such uses now resolve to the defining module,
+  in call and value position alike, with local shadows respected.
+  Qualified calls (`Lib.f(…)`) were always correct.
+- **erlc unused-variable warnings on emitted code.** Effect-only
+  bindings (`let logged = log(…) in …`) emitted binders erlc flagged as
+  unused — dozens of stderr lines drowning the audit stream on `hird
+  run`. Unreferenced binders now emit `_`-prefixed, and the erlc
+  validation suite rejects the warning class.
+
+### Changed
+
+- **MCP callees resolve to their defining module.**
+  `get_context_for_symbol` reports an imported callee as `Lib.f` whether
+  the body writes it qualified or bare.
 
 ## [0.1.1] — 2026-08-27
 
@@ -109,5 +147,6 @@ The v0.1 milestone: a typed language for agent systems on BEAM with
 effect-row tracking, auditable tool effects, typed actors, and OTP
 supervision, plus LSP and MCP servers over the same compiler pipeline.
 
+[0.2.0]: https://github.com/no-materials/hird/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/no-materials/hird/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/no-materials/hird/releases/tag/v0.1.0

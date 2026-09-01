@@ -17,7 +17,7 @@ members = [
 [workspace.package]
 # The single source of truth for every crate's version, and for the versions
 # the flake stamps onto its Rust package outputs.
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 # Keep in sync with RUST_MIN_VER in .github/workflows/ci.yml, the toolchain in
 # rust-toolchain.toml, and the MSRV stated in README.md and AGENTS.md.
