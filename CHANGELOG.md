@@ -12,6 +12,10 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **`Option` is predeclared.** `Option<a> = Some(a) | None` is seeded like
+  `Next`, so `Some(1)` and a `match` over `Some`/`None` need no declaration;
+  a user `type Option<a> = …` still shadows it. `List` stays a bare type
+  name until list literals and patterns exist.
 - **Irrefutable patterns in `let`.** The binder is a pattern:
   `let Config(clock, period) = config in …`, `let (a, b) = pair in …`, and
   `let _ = e in …` all work, replacing the one-arm `match` idiom. A plain

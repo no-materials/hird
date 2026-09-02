@@ -144,7 +144,22 @@ impl Checker {
         // The seeded Bool constructors are values too.
         env.insert_root("True", Type::bool());
         env.insert_root("False", Type::bool());
-        seed_next(&mut subst, &mut registry, &mut env);
+        seed_unary_sum(
+            &mut subst,
+            &mut registry,
+            &mut env,
+            "Next",
+            "Continue",
+            "Stop",
+        );
+        seed_unary_sum(
+            &mut subst,
+            &mut registry,
+            &mut env,
+            "Option",
+            "Some",
+            "None",
+        );
         Self {
             subst,
             env,
@@ -1257,32 +1272,41 @@ enum WireViolation {
     Capability(Name),
 }
 
-/// Seeds the built-in handler-outcome type, as if `type Next<a> =
-/// Continue(a) | Stop` had been written: `Continue` carries the next state,
-/// `Stop` stops the actor deliberately. Registered as an ordinary ADT — the
-/// constructors are values, exhaustiveness needs no special-casing — with the
-/// schemes generalised through `subst` exactly as a declared ADT's would be.
-fn seed_next(subst: &mut Subst, registry: &mut Registry, env: &mut Env) {
+/// Seeds a built-in sum of the shape `type T<a> = Wrap(a) | Empty`, as if it
+/// had been written: `Next<a> = Continue(a) | Stop` (the handler outcome:
+/// `Continue` carries the next state, `Stop` stops the actor deliberately)
+/// and `Option<a> = Some(a) | None`. Registered as an ordinary ADT — the
+/// constructors are values, exhaustiveness needs no special-casing, a user
+/// declaration shadows it — with the schemes generalised through `subst`
+/// exactly as a declared ADT's would be.
+fn seed_unary_sum(
+    subst: &mut Subst,
+    registry: &mut Registry,
+    env: &mut Env,
+    type_name: &str,
+    wrap: &str,
+    empty: &str,
+) {
     subst.enter_level();
     let param = subst.fresh_type();
-    let next = Type::con("Next", Vec::from([param.clone()]));
-    let continue_ty = Type::func(Vec::from([param]), next.clone());
+    let sum = Type::con(type_name, Vec::from([param.clone()]));
+    let wrap_ty = Type::func(Vec::from([param]), sum.clone());
     subst.exit_level();
     let schemes = [
-        ("Continue", subst.generalize(&continue_ty)),
-        ("Stop", subst.generalize(&next)),
+        (wrap, subst.generalize(&wrap_ty)),
+        (empty, subst.generalize(&sum)),
     ];
     registry.declare_adt(
-        Name::new("Next"),
+        Name::new(type_name),
         1,
-        Vec::from([Name::new("Continue"), Name::new("Stop")]),
+        Vec::from([Name::new(wrap), Name::new(empty)]),
     );
     for (name, scheme) in schemes {
         registry.declare_ctor(
             Name::new(name),
             CtorInfo {
                 scheme: scheme.clone(),
-                owner: Name::new("Next"),
+                owner: Name::new(type_name),
                 module: None,
                 opaque: false,
             },

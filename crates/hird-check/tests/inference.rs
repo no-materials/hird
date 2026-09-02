@@ -203,6 +203,37 @@ fn let_pattern_binding_is_monomorphic() {
     ));
 }
 
+// ── predeclared Option ──────────────────────────────────────────
+
+/// `Option`, `Some`, and `None` are seeded like `Next`: usable with no
+/// declaration, and `Some` generalises over its payload.
+#[test]
+fn option_is_predeclared() {
+    insta::assert_snapshot!(check_str(
+        "fn some_int() -> Option<Int> = Some(1)\n\
+         fn none_str() -> Option<String> = None\n\
+         fn unwrap_or(o: Option<Int>, d: Int) -> Int = match o { Some(n) -> n, None -> d, }"
+    ));
+}
+
+/// A match over the seeded `Option` is exhaustiveness-checked like any ADT.
+#[test]
+fn option_match_missing_none_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "fn unwrap(o: Option<Int>) -> Int = match o { Some(n) -> n, }"
+    ));
+}
+
+/// A user declaration of `Option` shadows the seeded one, as `Bool`'s and
+/// `Next`'s constructors do.
+#[test]
+fn user_option_declaration_shadows_builtin() {
+    insta::assert_snapshot!(check_str(
+        "type Option<a> = Some(a) | None\n\
+         fn some_int() -> Option<Int> = Some(1)"
+    ));
+}
+
 #[test]
 fn higher_order_return_type() {
     insta::assert_snapshot!(check_str(

@@ -111,9 +111,9 @@ error, not a warning. Records are structural (`{ x: Int, y: Int }`)
 and accessed with `point.x`. Generics use lowercase type variables
 (`a`, `b`) with no declaration needed.
 
-`Option` and `List` are built-in type *names* but ship with no
-constructors in v0.1: declare `type Option<a> = Some(a) | None`
-yourself before matching on `Some`.
+`Option<a> = Some(a) | None` is predeclared, like `Bool`. `List` is a
+built-in type *name* with no constructors in v0.1; there are no list
+literals or patterns yet.
 
 ### Modules
 

@@ -124,15 +124,16 @@ impl Registry {
     }
 
     /// The arity of the type constructor `name`: declared ADTs first, then
-    /// the built-ins (`Int`, `Float`, `String`, `List`, `Option`, the actor
-    /// references `Pid`, `ReplyTo`, and the capability `Clock`).
+    /// the built-ins (`Int`, `Float`, `String`, `List`, the actor references
+    /// `Pid`, `ReplyTo`, and the capability `Clock`). `Option`, like `Next`
+    /// and `Bool`, is a seeded ADT.
     pub(crate) fn type_arity(&self, name: &str) -> Option<usize> {
         if let Some(info) = self.adts.get(&Name::new(name)) {
             return Some(info.arity);
         }
         match name {
             "Int" | "Float" | "String" | "Clock" => Some(0),
-            "List" | "Option" | "Pid" | "ReplyTo" => Some(1),
+            "List" | "Pid" | "ReplyTo" => Some(1),
             _ => None,
         }
     }
@@ -159,7 +160,7 @@ impl Registry {
     /// The constructor names of `name`, if it is a declared (or seeded) ADT.
     ///
     /// Returns `None` for non-ADT type constructors — the built-ins `Int`,
-    /// `Float`, `String`, and any `List`/`Option` that no declaration backs.
+    /// `Float`, `String`, and any `List` that no declaration backs.
     /// Their value space is open, so exhaustiveness over them is decided by a
     /// catch-all rather than a constructor enumeration.
     pub(crate) fn adt_constructors(&self, name: &str) -> Option<&[Name]> {

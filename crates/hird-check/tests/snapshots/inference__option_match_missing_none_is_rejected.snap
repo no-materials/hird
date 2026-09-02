@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn unwrap(o: Option<Int>) -> Int = match o { Some(n) -> n, }\")"
+---
+unwrap : Option<Int> → Int
+error[C0015] 34..60: non-exhaustive match: missing case(s): `None`

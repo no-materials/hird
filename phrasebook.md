@@ -60,7 +60,7 @@ fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ## Type Declarations (ADTs)
 
 ```
-type Option<a> = Some(a) | None
+type Result<a, e> = Ok(a) | Err(e)
 
 type List<a> = Cons(a, List<a>) | Nil
 
@@ -70,7 +70,9 @@ type PlannerMsg =
   | Shutdown
 ```
 
-Constructors are typed functions: `Some : ∀a. a → Option<a>`.
+Constructors are typed functions: `Ok : ∀a e. a → Result<a, e>`. `Option<a> =
+Some(a) | None` is predeclared (like `Bool` and `Next`); a user declaration
+shadows it.
 
 ---
 
@@ -388,11 +390,10 @@ others are the shape the discipline takes for user-declared capabilities.
   (a `{` never starts an application argument).
 - **Relational operators do not chain**: `a == b == c` is a parse error
   (P0005); write `(a == b) == c`.
-- **`Some`/`None`, `Cons`/`Nil` are not predefined**: `Option` and `List`
-  exist as built-in type names but carry no constructors until you declare
-  `type Option<a> = Some(a) | None` yourself. `Next` is different: it comes
-  with `Continue`/`Stop` predeclared (like `Bool`), so a handler returns
-  outcomes without declaring anything.
+- **`Cons`/`Nil` are not predefined**: `List` is a built-in type name with
+  no constructors until list literals and patterns exist. `Option` (with
+  `Some`/`None`), `Next` (with `Continue`/`Stop`), and `Bool` are
+  predeclared, so they need no declaration.
 - **Handlers return `Next<State>`, not `State`**: `= st` in a handler is a
   type error — write `= Continue(st)`; stop with `= Stop`.
 - **Handler maps never cross `spawn`/`supervise`**: a `handle` block around
