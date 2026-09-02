@@ -18,7 +18,9 @@ schedule and is not covered by these entries.
   name until list literals and patterns exist.
 - **Irrefutable patterns in `let`.** The binder is a pattern:
   `let Config(clock, period) = config in …`, `let (a, b) = pair in …`, and
-  `let _ = e in …` all work, replacing the one-arm `match` idiom. A plain
+  `let _ = e in …` all work, replacing the one-arm `match` idiom; a `_`
+  binder emits `_ = Expr` in Erlang, so sequencing an effect no longer
+  needs an invented name. A plain
   name still generalises; a destructuring pattern binds monomorphically and
   must cover every value of the bound type — a refutable one (`Some(x)`, a
   literal) is a compile error (C0057). Lowers to a one-arm match, so the IR

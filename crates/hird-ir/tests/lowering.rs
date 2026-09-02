@@ -124,6 +124,22 @@ fn let_pattern_lowers_to_one_arm_match() {
 }
 
 #[test]
+fn let_wildcard_lowers_to_discard_let() {
+    // `let _ = e in b` is a let named `_`, not a one-arm match: codegen emits
+    // `_ = E` for it.
+    let module = lower(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log} = let _ = run(0) in 1",
+        "Main",
+    );
+    let IrExpr::Let(le) = &only_fn(&module).body else {
+        panic!("body should be a let");
+    };
+    assert_eq!(le.name, "_");
+    assert!(matches!(le.value.as_ref(), IrExpr::App(_)));
+}
+
+#[test]
 fn let_lambda_and_application() {
     let module = lower(r"fn main() = let id = \x -> x in id(1)", "Main");
     let main = only_fn(&module);

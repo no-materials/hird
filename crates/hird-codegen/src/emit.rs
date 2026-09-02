@@ -971,13 +971,16 @@ impl<'a> Emitter<'a> {
         let value = self.expr(&le.value, env, cx, inner_indent, Ctx::Expr);
         let var = cx.fresh_var(&le.name);
         let mut inner = env.clone();
-        inner.scope.insert(
-            le.name.clone(),
-            Binding {
-                var: var.clone(),
-                ty: le.ty.clone(),
-            },
-        );
+        // A `_` binder (`let _ = e in …`) discards the value: nothing to scope.
+        if le.name != "_" {
+            inner.scope.insert(
+                le.name.clone(),
+                Binding {
+                    var: var.clone(),
+                    ty: le.ty.clone(),
+                },
+            );
+        }
         let body = self.expr(&le.body, &inner, cx, inner_indent, Ctx::Body);
         sequence(
             &[format!("{} = {value},", cx.head_var(&var)), body],

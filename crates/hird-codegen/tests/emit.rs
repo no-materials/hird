@@ -405,6 +405,20 @@ fn snapshot_let_shadowing_freshens_variables() {
     insta::assert_snapshot!(emit(program("Shadow"), "Shadow"));
 }
 
+/// A `_` binder sequences an effect as `_ = Expr`: no invented variable, no
+/// `case`.
+#[test]
+fn snapshot_let_wildcard_discards_value() {
+    insta::assert_snapshot!(emit(
+        "tool Ping : { msg: String } -> String\n\
+         fn twice() -> String ! {Tool<Ping>} =\n\
+           let _ = ping({ msg: \"a\" }) in\n\
+           let answer = ping({ msg: \"b\" }) in\n\
+           answer",
+        "Discard"
+    ));
+}
+
 #[test]
 fn snapshot_lambdas_and_function_values() {
     insta::assert_snapshot!(emit(program("Funs"), "Funs"));

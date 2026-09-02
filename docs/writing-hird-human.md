@@ -248,12 +248,12 @@ actor Heart {
   message: HeartMsg = | Beat,
   init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
     let HeartConfig(clock, period) = config in
-    let first = schedule(clock, self(), Beat, period) in
+    let _ = schedule(clock, self(), Beat, period) in
     HeartState(clock, period, 0),
   handle Beat, HeartState(clock, period, beats)
     ! {Tool<Log>, Schedule<HeartMsg>} =
-    let logged = log({ message: "beat" }) in
-    let next = schedule(clock, self(), Beat, period) in
+    let _ = log({ message: "beat" }) in
+    let _ = schedule(clock, self(), Beat, period) in
     Continue(HeartState(clock, period, beats + 1)),
 } ! {Tool<Log>, Schedule<HeartMsg>}
 ```

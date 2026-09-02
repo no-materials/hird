@@ -511,6 +511,14 @@ fn let_polymorphic_lambda_and_application() {
 }
 
 #[test]
+fn let_wildcard_round_trips() {
+    assert_roundtrips(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log} = let _ = run(0) in 1",
+    );
+}
+
+#[test]
 fn let_pattern_round_trips() {
     // A destructuring `let` prints as the one-arm match it lowers to and
     // re-lowers to the same IR.

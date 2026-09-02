@@ -57,8 +57,8 @@ fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
   match backlog {
     EmptyBacklog → 0,
     Backlog(Task(_, title, body), rest) →
-      let ticket = create_ticket({ title: title, body: body }) in
-      let logged = log({ level: "info", message: title }) in
+      let _ = create_ticket({ title: title, body: body }) in
+      let _ = log({ level: "info", message: title }) in
       1 + file_tickets(rest),
   }
 
@@ -76,15 +76,15 @@ actor Planner {
 
   handle PlanRepo(path), PlannerState(repos, tickets)
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} =
-    let started = log({ level: "info", message: "planning repository" }) in
+    let _ = log({ level: "info", message: "planning repository" }) in
     let repo = read_repo({ path: path }) in
     let filed = file_tickets(analyze(repo)) in
-    let done = log({ level: "info", message: "planning complete" }) in
+    let _ = log({ level: "info", message: "planning complete" }) in
     Continue(PlannerState(repos + 1, tickets + filed)),
 
   handle GetStatus(reply_to), PlannerState(repos, tickets)
     ! {Send<PlannerStatus>} =
-    let sent = reply(reply_to, PlannerStatus(repos, tickets)) in
+    let _ = reply(reply_to, PlannerStatus(repos, tickets)) in
     Continue(PlannerState(repos, tickets)),
 
   // A deliberate stop, not a crash: the planner is a transient child, so
@@ -129,11 +129,11 @@ fn demo_log(args: { level: String, message: String }) → () = ()
 // tree, look up the child, plan a repository, confirm tickets were
 // filed, then ask the planner to stop itself.
 fn run_demo() → () ! {Supervise, Send<PlannerMsg>, Await<PlannerStatus>} =
-  let started = supervise(PlannerSup) in
+  let _ = supervise(PlannerSup) in
   let planner = child(PlannerSup, planner) in
-  let plan = send(planner, PlanRepo(Path("forest-rs/hird"))) in
+  let _ = send(planner, PlanRepo(Path("forest-rs/hird"))) in
   let PlannerStatus(_, tickets) = request(planner, GetStatus) in
-  let stop = send(planner, Shutdown) in
+  let _ = send(planner, Shutdown) in
   if tickets > 0 then () else crash!("the planner filed no tickets")
 
 // Handler maps never cross the supervision boundary: the install block

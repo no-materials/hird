@@ -1,0 +1,22 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(\"tool Ping : { msg: String } -> String\\n\\\n         fn twice() -> String ! {Tool<Ping>} =\\n\\\n           let _ = ping({ msg: \\\"a\\\" }) in\\n\\\n           let answer = ping({ msg: \\\"b\\\" }) in\\n\\\n           answer\",\n\"Discard\")"
+---
+%% Generated from src/discard.hird by the Hirð compiler. Do not edit.
+-module(hird_discard).
+-export([twice/1, hird_tools@/0]).
+
+%% src/discard.hird:2
+twice(Handlers@) ->
+    _ = hird_tool_dispatch:call(ping, <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"a"/utf8>>}),
+    Answer = hird_tool_dispatch:call(ping, <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"b"/utf8>>}),
+    Answer.
+
+hird_tools@() ->
+    #{tools => #{
+            ping => #{
+                name => <<"Ping"/utf8>>,
+                args => {record, [{msg, string}]},
+                result => string,
+                error => dynamic}},
+        types => #{}}.

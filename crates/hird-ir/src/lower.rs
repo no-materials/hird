@@ -432,7 +432,16 @@ impl Lowerer<'_> {
                 value: Box::new(self.lower_expr(&value)),
                 body: Box::new(self.lower_expr(&body)),
             }),
-            // A destructuring binder is a one-arm match: the IR has no
+            // A wildcard binder discards the value: a let named `_`, which
+            // codegen emits as `_ = Value`, so sequencing an effect costs no
+            // `case` and no invented name.
+            Pattern::Wildcard(_) => IrExpr::Let(IrLet {
+                name: String::from("_"),
+                ty: self.expr_type(&value),
+                value: Box::new(self.lower_expr(&value)),
+                body: Box::new(self.lower_expr(&body)),
+            }),
+            // Any other destructuring binder is a one-arm match: the IR has no
             // pattern-let node, and the checker has proved the arm total.
             _ => IrExpr::Match(IrMatch {
                 scrutinee_type: self.expr_type(&value),

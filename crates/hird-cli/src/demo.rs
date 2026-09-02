@@ -53,10 +53,10 @@ const VARIANTS: [Variant; 3] = [
         name: "announce-first",
         summary: "logs each ticket before filing it, not after",
         edit: Some((
-            "      let ticket = create_ticket({ title: title, body: body }) in\n\
-             \x20     let logged = log({ level: \"info\", message: title }) in\n",
-            "      let logged = log({ level: \"info\", message: title }) in\n\
-             \x20     let ticket = create_ticket({ title: title, body: body }) in\n",
+            "      let _ = create_ticket({ title: title, body: body }) in\n\
+             \x20     let _ = log({ level: \"info\", message: title }) in\n",
+            "      let _ = log({ level: \"info\", message: title }) in\n\
+             \x20     let _ = create_ticket({ title: title, body: body }) in\n",
         )),
     },
     Variant {

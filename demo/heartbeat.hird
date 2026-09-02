@@ -33,13 +33,13 @@ actor Heart {
   // again on its own: a timer aimed at the old process is dropped.
   init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
     let HeartConfig(clock, period) = config in
-    let first = schedule(clock, self(), Beat, period) in
+    let _ = schedule(clock, self(), Beat, period) in
     HeartState(clock, period, 0),
 
   handle Beat, HeartState(clock, period, beats)
     ! {Tool<Log>, Schedule<HeartMsg>} =
-    let logged = log({ message: "beat" }) in
-    let next = schedule(clock, self(), Beat, period) in
+    let _ = log({ message: "beat" }) in
+    let _ = schedule(clock, self(), Beat, period) in
     Continue(HeartState(clock, period, beats + 1)),
 } ! {Tool<Log>, Schedule<HeartMsg>}
 
@@ -66,5 +66,5 @@ fn demo_log(args: { message: String }) → () = ()
 // what the supervised heart's log calls resolve through.
 fn main() → () ! {Install, Supervise, Stand} =
   install { Tool<Log> → demo_log } in
-  let started = supervise(HeartSup) in
+  let _ = supervise(HeartSup) in
   stand()
