@@ -947,3 +947,14 @@ fn let_pattern_binder() {
         "fn f(c: Cfg, p: (Int, Int)) = let Cfg(n, _) = c in let (a, b): (Int, Int) = p in a"
     ));
 }
+
+// ── sequencing ──────────────────────────────────────────────────
+
+#[test]
+fn sequence_binds_looser_than_operators_and_inside_bodies() {
+    // `;` is right-associative and the loosest operator: `x + 1; y` sequences
+    // the sum, and a `;` inside a `let` body or an `if` branch belongs to it.
+    insta::assert_snapshot!(render_cst(
+        "fn f(x: Int) -> Int = let y = x + 1 in log(y); if y > 0 then say(); y else y; y"
+    ));
+}

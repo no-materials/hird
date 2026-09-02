@@ -65,8 +65,10 @@ compiling the generated Erlang into `_build/hird/`; the emitted
 
 ### Values, functions, expressions
 
-Hirð is expression-oriented: every body is one bare expression, and
-sequencing is `let … in`. There are no statement blocks. A `let` binds
+Hirð is expression-oriented: every body is one bare expression. There
+are no statement blocks: `a; b` runs `a` for its effects (it must return
+`()`) and then evaluates to `b`, and `let x = e in …` names a value for
+what follows. A `let` binds
 a pattern, so a single-constructor value or a tuple destructures in
 place (`let Config(clock, period) = config in …`); a pattern that could
 fail to match (`Some(x)`) is rejected — that is what `match` is for.
@@ -248,12 +250,12 @@ actor Heart {
   message: HeartMsg = | Beat,
   init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
     let HeartConfig(clock, period) = config in
-    let _ = schedule(clock, self(), Beat, period) in
+    schedule(clock, self(), Beat, period);
     HeartState(clock, period, 0),
   handle Beat, HeartState(clock, period, beats)
     ! {Tool<Log>, Schedule<HeartMsg>} =
-    let _ = log({ message: "beat" }) in
-    let _ = schedule(clock, self(), Beat, period) in
+    log({ message: "beat" });
+    schedule(clock, self(), Beat, period);
     Continue(HeartState(clock, period, beats + 1)),
 } ! {Tool<Log>, Schedule<HeartMsg>}
 ```

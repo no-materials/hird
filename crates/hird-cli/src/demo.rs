@@ -54,8 +54,8 @@ const VARIANTS: [Variant; 3] = [
         summary: "logs each ticket before filing it, not after",
         edit: Some((
             "      let _ = create_ticket({ title: title, body: body }) in\n\
-             \x20     let _ = log({ level: \"info\", message: title }) in\n",
-            "      let _ = log({ level: \"info\", message: title }) in\n\
+             \x20     log({ level: \"info\", message: title });\n",
+            "      log({ level: \"info\", message: title });\n\
              \x20     let _ = create_ticket({ title: title, body: body }) in\n",
         )),
     },

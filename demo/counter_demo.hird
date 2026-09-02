@@ -28,7 +28,7 @@ actor Counter {
     Continue(CounterState(n + by)),
 
   handle GetCount(reply_to), CounterState(n) ! {Send<Int>} =
-    let _ = reply(reply_to, n) in
+    reply(reply_to, n);
     Continue(CounterState(n)),
 } ! {Send<Int>}
 
@@ -50,9 +50,9 @@ supervisor CounterSup {
 
 // Two increments against the supervised counter, then confirm the total.
 fn main() → () ! {Supervise, Send<CounterMsg>, Await<Int>} =
-  let _ = supervise(CounterSup) in
+  supervise(CounterSup);
   let counter = child(CounterSup, counter) in
-  let _ = send(counter, Increment(2)) in
-  let _ = send(counter, Increment(3)) in
+  send(counter, Increment(2));
+  send(counter, Increment(3));
   let total = request(counter, GetCount) in
   if total == 5 then () else crash!("the counter lost an increment")

@@ -229,6 +229,8 @@ pub enum SyntaxKind {
     EXTERN_DECL,
     /// `let ... = ... in ...` expression.
     LET_EXPR,
+    /// `first; rest`.
+    SEQ_EXPR,
     /// Lambda expression (`λx → ...`).
     LAMBDA_EXPR,
     /// Match expression.

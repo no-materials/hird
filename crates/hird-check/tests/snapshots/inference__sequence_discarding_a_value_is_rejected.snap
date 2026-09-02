@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn f(n: Int) -> Int = n + 1; n\\n\\\n         fn g(n: Int) -> Int = let _ = n + 1 in n\")"
+---
+f : Int → Int
+g : Int → Int
+error[C0058] 21..27: `;` discards a value of type `Int`; bind it with `let`, or drop it deliberately with `let _ = … in`

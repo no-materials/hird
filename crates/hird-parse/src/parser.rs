@@ -1049,9 +1049,25 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     // ── expressions ─────────────────────────────────────────────
 
-    /// Parses an expression.
+    /// Parses an expression: a Pratt expression, optionally followed by `;`
+    /// and another expression. Sequencing is right-associative and binds
+    /// looser than every operator, so `a; b; c` is `a; (b; c)` and a `;`
+    /// inside a `let` body, an `if` branch, or a match arm belongs to that
+    /// body.
     fn parse_expr(&mut self) {
+        if self.too_deep() {
+            return;
+        }
+        self.depth += 1;
+        let cp = self.checkpoint();
         self.parse_expr_bp(0);
+        if self.at(SyntaxKind::SEMICOLON) {
+            self.start_node_at(cp, SyntaxKind::SEQ_EXPR);
+            self.bump();
+            self.parse_expr();
+            self.finish_node();
+        }
+        self.depth -= 1;
     }
 
     /// Pratt loop: parses an expression whose operators bind at least as

@@ -702,6 +702,27 @@ ast_node! {
     LetExpr => LET_EXPR
 }
 
+ast_node! {
+    /// A sequence `first; rest`: evaluates `first` for its effects, requires
+    /// its value to be `()`, then evaluates `rest`. Sugar for
+    /// `let _ = first in rest`.
+    SeqExpr => SEQ_EXPR
+}
+
+impl SeqExpr {
+    /// The expression evaluated first, for its effects.
+    #[must_use]
+    pub fn first(&self) -> Option<Expr> {
+        exprs(&self.0).next()
+    }
+
+    /// The expression whose value is the sequence's value.
+    #[must_use]
+    pub fn rest(&self) -> Option<Expr> {
+        exprs(&self.0).nth(1)
+    }
+}
+
 impl LetExpr {
     /// The binder pattern.
     #[must_use]
@@ -1225,6 +1246,8 @@ impl NameRef {
 pub enum Expr {
     /// `let .. in ..`
     Let(LetExpr),
+    /// `.. ; ..`
+    Seq(SeqExpr),
     /// `λ.. → ..`
     Lambda(LambdaExpr),
     /// `if .. then .. else ..`
@@ -1282,6 +1305,7 @@ impl Expr {
     fn cast_node(node: SyntaxNode) -> Option<Self> {
         let expr = match node.kind() {
             SyntaxKind::LET_EXPR => Self::Let(LetExpr(node)),
+            SyntaxKind::SEQ_EXPR => Self::Seq(SeqExpr(node)),
             SyntaxKind::LAMBDA_EXPR => Self::Lambda(LambdaExpr(node)),
             SyntaxKind::IF_EXPR => Self::If(IfExpr(node)),
             SyntaxKind::MATCH_EXPR => Self::Match(MatchExpr(node)),
@@ -1336,6 +1360,7 @@ impl Expr {
     pub fn syntax(&self) -> Option<&SyntaxNode> {
         match self {
             Self::Let(n) => Some(n.syntax()),
+            Self::Seq(n) => Some(n.syntax()),
             Self::Lambda(n) => Some(n.syntax()),
             Self::If(n) => Some(n.syntax()),
             Self::Match(n) => Some(n.syntax()),

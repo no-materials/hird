@@ -280,6 +280,8 @@ unambiguously a record literal. Sequencing within a body uses nested
   the same bare-body rule.
 - If block expressions are ever wanted, they are introduced uniformly
   across all body positions in a single change that supersedes this ADR.
+- `a; b` is sequencing sugar for `let _ = a in b` (with `a` required to be
+  `()`), not a block: a body remains one expression tree.
 
 ---
 

@@ -511,6 +511,15 @@ fn let_polymorphic_lambda_and_application() {
 }
 
 #[test]
+fn sequence_round_trips() {
+    // `a; b` prints as the `let _` it lowers to and re-lowers identically.
+    assert_roundtrips(
+        "effect Log\n\
+         fn f(run: Int -> () ! {Log}) -> Int ! {Log} = run(0); run(1); 1",
+    );
+}
+
+#[test]
 fn let_wildcard_round_trips() {
     assert_roundtrips(
         "effect Log\n\

@@ -55,6 +55,18 @@ fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 - `! {}` is the empty effect row (pure). Elided in display.
 - `! {r}` is an open row variable (effect-polymorphic).
 
+```
+fn tick(clock: Clock, pid: Pid<Msg>) → () ! {Tool<Log>, Schedule<Msg>} =
+  log({ message: "tick" });
+  schedule(clock, pid, Tick, 1000)
+```
+
+- `a; b` sequences: `a` runs for its effects and must be `()` (C0058
+  otherwise), then `b` is the result. Sugar for `let _ = a in b`, which
+  accepts any type. Right-associative and looser than every operator, so a
+  `;` inside a `let` body, an `if` branch, or a match arm belongs to that
+  body. Bodies stay single expressions — there are no statement blocks.
+
 ---
 
 ## Type Declarations (ADTs)
@@ -92,7 +104,7 @@ match msg {
 ```
 let Config(clock, period) = config in …
 let (a, b) = pair in …
-let _ = log({ message: "done" }) in …
+let _ = compute() in …
 ```
 
 - `let` binds a pattern. A plain name is generalised (let-polymorphism); a
@@ -390,6 +402,8 @@ others are the shape the discipline takes for user-declared capabilities.
   (a `{` never starts an application argument).
 - **Relational operators do not chain**: `a == b == c` is a parse error
   (P0005); write `(a == b) == c`.
+- **`;` needs a `()` left operand** (C0058): `f(x); g()` requires `f(x)` to
+  return `()`. To drop a value on purpose, write `let _ = f(x) in g()`.
 - **`Cons`/`Nil` are not predefined**: `List` is a built-in type name with
   no constructors until list literals and patterns exist. `Option` (with
   `Some`/`None`), `Next` (with `Continue`/`Stop`), and `Bool` are

@@ -205,6 +205,36 @@ fn let_pattern_binding_is_monomorphic() {
 
 // ── predeclared Option ──────────────────────────────────────────
 
+/// `a; b` runs `a` for its effects and is `b`; both sides' effects join the
+/// row, and the `()` left operand is accepted.
+#[test]
+fn sequence_of_unit_effects() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(log: Int -> () ! {Log}, n: Int) -> Int ! {Log} = log(n); log(n + 1); n"
+    ));
+}
+
+/// A non-unit left operand is C0058, not a silent discard; `let _` remains
+/// the deliberate form.
+#[test]
+fn sequence_discarding_a_value_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "fn f(n: Int) -> Int = n + 1; n\n\
+         fn g(n: Int) -> Int = let _ = n + 1 in n"
+    ));
+}
+
+/// A `;` inside a `let` body belongs to that body, so the bound name is in
+/// scope on both sides of it.
+#[test]
+fn sequence_inside_let_body() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(log: Int -> () ! {Log}) -> Int ! {Log} = let n = 1 in log(n); n"
+    ));
+}
+
 /// `Option`, `Some`, and `None` are seeded like `Next`: usable with no
 /// declaration, and `Some` generalises over its payload.
 #[test]

@@ -12,6 +12,11 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **Sequencing with `;`.** `a; b` runs `a` for its effects and evaluates
+  to `b`; it is sugar for `let _ = a in b`, except that `a` must be `()`
+  (C0058 otherwise), so a result is never dropped by accident. Right-
+  associative and looser than every operator; bodies remain single
+  expressions. The demos and guides use it for effect sequencing.
 - **`Option` is predeclared.** `Option<a> = Some(a) | None` is seeded like
   `Next`, so `Some(1)` and a `match` over `Some`/`None` need no declaration;
   a user `type Option<a> = …` still shadows it. `List` stays a bare type

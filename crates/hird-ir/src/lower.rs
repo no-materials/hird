@@ -34,8 +34,8 @@ use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Decl,
     Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr,
     Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, ScheduleExpr,
-    SendExpr, SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField, ToolDecl,
-    TupleLit, TypeDecl,
+    SendExpr, SeqExpr, SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField,
+    ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -363,6 +363,7 @@ impl Lowerer<'_> {
                 None => self.lower_name(name.text(), self.expr_type(expr)),
             },
             Expr::Let(le) => self.lower_let(le),
+            Expr::Seq(seq) => self.lower_seq(seq),
             Expr::Lambda(lambda) => self.lower_lambda(lambda),
             Expr::If(ife) => self.lower_if(ife),
             Expr::Match(me) => self.lower_match(me),
@@ -453,6 +454,19 @@ impl Lowerer<'_> {
                 result_type: self.expr_type(&body),
             }),
         }
+    }
+
+    /// `first; rest` is the discard let it abbreviates: a let named `_`, which
+    /// codegen emits as `_ = First`.
+    fn lower_seq(&self, seq: &SeqExpr) -> IrExpr {
+        let first = seq.first().expect("sequence has a first expression");
+        let rest = seq.rest().expect("sequence has a rest expression");
+        IrExpr::Let(IrLet {
+            name: String::from("_"),
+            ty: self.expr_type(&first),
+            value: Box::new(self.lower_expr(&first)),
+            body: Box::new(self.lower_expr(&rest)),
+        })
     }
 
     /// `λparams → body`. Parameter types and the effect row come from the

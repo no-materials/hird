@@ -52,14 +52,14 @@ actor Planner {
 
   init: fn(config: FleetConfig) ! {Tool<Log>, Schedule<PlannerMsg>} =
     let FleetConfig(clock, period) = config in
-    let _ = log({ level: "info", message: "planner takes its post" }) in
-    let _ = schedule(clock, self(), Tick, period) in
+    log({ level: "info", message: "planner takes its post" });
+    schedule(clock, self(), Tick, period);
     PlannerState(clock, period, 1),
 
   handle Tick, PlannerState(clock, period, round)
     ! {Send<ExecutorMsg>, Schedule<PlannerMsg>} =
-    let _ = send(child(FleetSup, executor), Carry(Errands.forge(round))) in
-    let _ = schedule(clock, self(), Tick, period) in
+    send(child(FleetSup, executor), Carry(Errands.forge(round)));
+    schedule(clock, self(), Tick, period);
     Continue(PlannerState(clock, period, round + 1)),
 } ! {Tool<Log>, Send<ExecutorMsg>, Schedule<PlannerMsg>}
 
@@ -71,7 +71,7 @@ actor Executor {
   message: ExecutorMsg = | Carry(Order),
 
   init: fn(done: Int) ! {Tool<Log>} =
-    let _ = log({ level: "info", message: "executor takes its post" }) in
+    log({ level: "info", message: "executor takes its post" });
     ExecutorState(done),
 
   // Round 3 is dropped on purpose: the crash consumes the order, the
@@ -84,8 +84,7 @@ actor Executor {
       then crash!("round 3: the executor drops its errand")
       else
         let note = run_errand({ round: round, errand: errand }) in
-        let reported =
-          send(child(FleetSup, auditor), Record(Errands.conclude(order, note))) in
+        send(child(FleetSup, auditor), Record(Errands.conclude(order, note)));
         Continue(ExecutorState(done + 1)),
 } ! {Tool<Log>, Tool<RunErrand>, Send<AuditorMsg>}
 
@@ -97,13 +96,13 @@ actor Auditor {
   message: AuditorMsg = | Record(Outcome),
 
   init: fn(recorded: Int) ! {Tool<Log>} =
-    let _ = log({ level: "info", message: "auditor takes its post" }) in
+    log({ level: "info", message: "auditor takes its post" });
     AuditorState(recorded),
 
   handle Record(outcome), AuditorState(recorded)
     ! {Tool<Chronicle>} =
     let Outcome(round, note) = outcome in
-    let _ = chronicle({ round: round, note: note }) in
+    chronicle({ round: round, note: note });
     Continue(AuditorState(recorded + 1)),
 } ! {Tool<Log>, Tool<Chronicle>}
 
@@ -144,5 +143,5 @@ fn main() → () ! {Install, Supervise, Stand} =
     Tool<Chronicle> → demo_chronicle,
     Tool<Log> → demo_log,
   } in
-  let _ = supervise(FleetSup) in
+  supervise(FleetSup);
   stand()

@@ -124,6 +124,21 @@ fn let_pattern_lowers_to_one_arm_match() {
 }
 
 #[test]
+fn sequence_lowers_to_discard_let() {
+    // `a; b` is the discard let it abbreviates.
+    let module = lower(
+        "effect Log\n\
+         fn f(run: Int -> () ! {Log}) -> Int ! {Log} = run(0); 1",
+        "Main",
+    );
+    let IrExpr::Let(le) = &only_fn(&module).body else {
+        panic!("body should be a let");
+    };
+    assert_eq!(le.name, "_");
+    assert!(matches!(le.value.as_ref(), IrExpr::App(_)));
+}
+
+#[test]
 fn let_wildcard_lowers_to_discard_let() {
     // `let _ = e in b` is a let named `_`, not a one-arm match: codegen emits
     // `_ = E` for it.

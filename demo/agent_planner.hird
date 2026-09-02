@@ -58,7 +58,7 @@ fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
     EmptyBacklog → 0,
     Backlog(Task(_, title, body), rest) →
       let _ = create_ticket({ title: title, body: body }) in
-      let _ = log({ level: "info", message: title }) in
+      log({ level: "info", message: title });
       1 + file_tickets(rest),
   }
 
@@ -76,15 +76,15 @@ actor Planner {
 
   handle PlanRepo(path), PlannerState(repos, tickets)
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} =
-    let _ = log({ level: "info", message: "planning repository" }) in
+    log({ level: "info", message: "planning repository" });
     let repo = read_repo({ path: path }) in
     let filed = file_tickets(analyze(repo)) in
-    let _ = log({ level: "info", message: "planning complete" }) in
+    log({ level: "info", message: "planning complete" });
     Continue(PlannerState(repos + 1, tickets + filed)),
 
   handle GetStatus(reply_to), PlannerState(repos, tickets)
     ! {Send<PlannerStatus>} =
-    let _ = reply(reply_to, PlannerStatus(repos, tickets)) in
+    reply(reply_to, PlannerStatus(repos, tickets));
     Continue(PlannerState(repos, tickets)),
 
   // A deliberate stop, not a crash: the planner is a transient child, so
@@ -129,11 +129,11 @@ fn demo_log(args: { level: String, message: String }) → () = ()
 // tree, look up the child, plan a repository, confirm tickets were
 // filed, then ask the planner to stop itself.
 fn run_demo() → () ! {Supervise, Send<PlannerMsg>, Await<PlannerStatus>} =
-  let _ = supervise(PlannerSup) in
+  supervise(PlannerSup);
   let planner = child(PlannerSup, planner) in
-  let _ = send(planner, PlanRepo(Path("forest-rs/hird"))) in
+  send(planner, PlanRepo(Path("forest-rs/hird")));
   let PlannerStatus(_, tickets) = request(planner, GetStatus) in
-  let _ = send(planner, Shutdown) in
+  send(planner, Shutdown);
   if tickets > 0 then () else crash!("the planner filed no tickets")
 
 // Handler maps never cross the supervision boundary: the install block

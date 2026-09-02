@@ -9,13 +9,17 @@
 // tokens so a query can tell a constructor from a binding without help.
 
 const PREC = {
-  or: 1,
-  and: 2,
-  compare: 3,
-  add: 4,
-  mul: 5,
-  application: 6,
-  field: 7,
+  // `;` binds looser than every operator but tighter than the bodies of
+  // `let`/`if`/`match`/`handle`, so `let x = e in a; b` sequences inside
+  // the body and `x + y; z` sequences the sum.
+  sequence: 1,
+  or: 2,
+  and: 3,
+  compare: 4,
+  add: 5,
+  mul: 6,
+  application: 7,
+  field: 8,
 };
 
 // The lexer canonicalises each ASCII spelling to its Unicode form, so both
@@ -242,6 +246,7 @@ module.exports = grammar({
 
     _expression: ($) =>
       choice(
+        $.sequence_expression,
         $.let_expression,
         $.lambda_expression,
         $.if_expression,
@@ -273,6 +278,12 @@ module.exports = grammar({
         $.tuple,
         $.list,
         $.record,
+      ),
+
+    sequence_expression: ($) =>
+      prec.right(
+        PREC.sequence,
+        seq(field('first', $._expression), ';', field('rest', $._expression)),
       ),
 
     let_expression: ($) =>

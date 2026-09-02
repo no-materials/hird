@@ -1,0 +1,80 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f(x: Int) -> Int = let y = x + 1 in log(y); if y > 0 then say(); y else y; y\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "x"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Int"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "Int"
+    WHITESPACE " "
+    EQ "="
+    LET_EXPR
+      WHITESPACE " "
+      LET_KW "let"
+      BIND_PAT
+        WHITESPACE " "
+        IDENT "y"
+      WHITESPACE " "
+      EQ "="
+      BIN_EXPR
+        WHITESPACE " "
+        IDENT "x"
+        WHITESPACE " "
+        PLUS "+"
+        WHITESPACE " "
+        INT "1"
+      WHITESPACE " "
+      IN_KW "in"
+      SEQ_EXPR
+        APP_EXPR
+          WHITESPACE " "
+          IDENT "log"
+          PAREN_EXPR
+            L_PAREN "("
+            IDENT "y"
+            R_PAREN ")"
+        SEMICOLON ";"
+        IF_EXPR
+          WHITESPACE " "
+          IF_KW "if"
+          BIN_EXPR
+            WHITESPACE " "
+            IDENT "y"
+            WHITESPACE " "
+            GT ">"
+            WHITESPACE " "
+            INT "0"
+          WHITESPACE " "
+          THEN_KW "then"
+          SEQ_EXPR
+            APP_EXPR
+              WHITESPACE " "
+              IDENT "say"
+              TUPLE_LIT
+                L_PAREN "("
+                R_PAREN ")"
+            SEMICOLON ";"
+            WHITESPACE " "
+            IDENT "y"
+          WHITESPACE " "
+          ELSE_KW "else"
+          SEQ_EXPR
+            WHITESPACE " "
+            IDENT "y"
+            SEMICOLON ";"
+            WHITESPACE " "
+            IDENT "y"

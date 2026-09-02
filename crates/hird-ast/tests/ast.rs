@@ -266,6 +266,16 @@ fn let_expr_parts() {
 }
 
 #[test]
+fn seq_expr_parts() {
+    let Expr::Seq(e) = body("f(); g(); 1") else {
+        panic!("expected sequence");
+    };
+    assert!(matches!(e.first(), Some(Expr::App(_))));
+    // Right-associative: the rest is itself a sequence.
+    assert!(matches!(e.rest(), Some(Expr::Seq(_))));
+}
+
+#[test]
 fn let_pattern_parts() {
     // The binder is a pattern: a destructuring form sits where a name would.
     let Expr::Let(e) = body("let Cfg(a, _) = c in a") else {

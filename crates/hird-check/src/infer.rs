@@ -19,14 +19,15 @@ use core::mem;
 use hird_ast::{
     AppExpr, AstNode, BinOpExpr, ChildExpr, ClockExpr, CrashExpr, Expr, FieldExpr, HandleArm,
     HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr, MatchExpr, Pattern, RecordLit,
-    ReplyExpr, RequestExpr, ScheduleExpr, SelfExpr, SendExpr, SpawnExpr, StandExpr, SuperviseExpr,
+    ReplyExpr, RequestExpr, ScheduleExpr, SelfExpr, SendExpr, SeqExpr, SpawnExpr, StandExpr,
+    SuperviseExpr,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
 use hird_types::{Effect, EffectRow, Label, Name, Type, handle_row, unify};
 
 use crate::checker::{Aborted, Checked, Checker};
-use crate::diag::CheckCode;
+use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
 use crate::registry::CtorInfo;
 use crate::{
@@ -103,6 +104,7 @@ impl Checker {
                 Ok(self.subst.instantiate(&scheme))
             }
             Expr::Let(le) => self.infer_let(le),
+            Expr::Seq(seq) => self.infer_seq(seq),
             Expr::Lambda(lambda) => self.infer_lambda(lambda),
             Expr::If(ife) => self.infer_if(ife),
             Expr::Match(me) => self.infer_match(me),
@@ -203,6 +205,32 @@ impl Checker {
         };
         self.env.pop_scope();
         body_ty
+    }
+
+    /// `first; rest` — sequencing sugar for `let _ = first in rest`, except
+    /// that `first` must be `()`: a dropped non-unit value is reported (C0058)
+    /// rather than silently discarded. Both sides' effects join the row.
+    fn infer_seq(&mut self, seq: &SeqExpr) -> Checked<Type> {
+        let (Some(first), Some(rest)) = (seq.first(), seq.rest()) else {
+            return Err(Aborted);
+        };
+        let first_ty = self.infer_expr(&first)?;
+        let span = expr_span(&first, self.source_id);
+        match self.subst.resolve(&first_ty) {
+            Type::TyTuple(elems) if elems.is_empty() => {}
+            Type::TyVar(_) => self.unify_at(&Type::tuple(Vec::new()), &first_ty, span)?,
+            other => {
+                self.diags.push(CheckDiagnostic::error(
+                    CheckCode::C0058,
+                    span,
+                    format!(
+                        "`;` discards a value of type `{other}`; bind it with `let`, or drop it \
+                         deliberately with `let _ = … in`"
+                    ),
+                ));
+            }
+        }
+        self.infer_expr(&rest)
     }
 
     /// Infers with a fresh, empty effect accumulator, returning the result and

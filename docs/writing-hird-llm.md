@@ -37,7 +37,8 @@ an `effect` declaration of one is redundant (warning C0056). A head of
 your own (`Audit<t>`, `Log`) must be declared: `effect Audit<t>`.
 
 **Expression-oriented, no blocks.** Every body is one bare expression
-after `=`; sequence with `let x = e in …`. Braces in expression
+after `=`; sequence unit-valued effects with `a; b` (C0058 if `a` is not
+`()`), and name a value with `let x = e in …`. Braces in expression
 position are always record literals. `if` always has `then` and
 `else`. `match` arms are comma-separated and must be exhaustive.
 
@@ -123,6 +124,7 @@ not something visible in any one signature.
 |---|---|
 | Effectful body with `! {}` or no annotation | C0030 — declared row ≠ inferred row, anchored at the introducing call |
 | Declaring an effect the body never performs | C0030 (equality cuts both ways) |
+| `f(x); g()` where `f(x)` is not `()` | C0058 — bind the value with `let`, or drop it with `let _ = f(x) in` |
 | Naming a user effect head (`Audit<t>`) in a row without declaring it | C0027 unknown effect |
 | Declaring a built-in head (`effect Tool<t>`) | C0056 redundant declaration (warning) |
 | Non-exhaustive `match` over a sum type | C0015, listing the missing constructors |

@@ -214,3 +214,36 @@ fn f() → Int = Log.info
     body: (field_expression
       value: (type_identifier)
       field: (identifier))))
+
+================================================================================
+Sequencing binds looser than operators and extends the innermost body
+================================================================================
+
+fn f(x: Int) → Int =
+  let y = x + 1 in
+  log(y);
+  if y > 0 then say(); y else y;
+  y
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (let_expression
+      pattern: (bind_pattern)
+      value: (binary_expression left: (identifier) right: (integer))
+      body: (sequence_expression
+        first: (application
+          function: (identifier)
+          argument: (parenthesized_expression (identifier)))
+        rest: (if_expression
+          condition: (binary_expression left: (identifier) right: (integer))
+          consequence: (sequence_expression
+            first: (application function: (identifier) argument: (unit))
+            rest: (identifier))
+          alternative: (sequence_expression
+            first: (identifier)
+            rest: (identifier)))))))

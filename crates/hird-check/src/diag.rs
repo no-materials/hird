@@ -173,6 +173,9 @@ pub enum CheckCode {
     /// A `let` pattern is refutable: it does not cover every value of the
     /// bound type, so the binding could fail at runtime.
     C0057,
+    /// The left operand of `;` is not `()`: a value would be silently
+    /// discarded.
+    C0058,
 }
 
 /// A secondary source location attached to a diagnostic.

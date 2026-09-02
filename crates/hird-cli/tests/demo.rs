@@ -423,7 +423,7 @@ fn a_drifted_demo_diverges_from_the_golden_log() {
 fn announce_first_source() -> String {
     let demo = fs::read_to_string(demo_path()).expect("read the demo source");
     let filing = "      let _ = create_ticket({ title: title, body: body }) in\n";
-    let announcement = "      let _ = log({ level: \"info\", message: title }) in\n";
+    let announcement = "      log({ level: \"info\", message: title });\n";
     let swapped = demo.replace(
         &format!("{filing}{announcement}"),
         &format!("{announcement}{filing}"),
