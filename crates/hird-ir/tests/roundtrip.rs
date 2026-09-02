@@ -603,7 +603,6 @@ fn single_named_effect() {
 fn multiple_and_parametric_effects() {
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
          type Repo = MkRepo\n\
          fn read(run: Int -> Int ! {Log, Tool<Repo>}) -> Int ! {Log, Tool<Repo>} = run(0)",
     );
@@ -622,7 +621,6 @@ fn handle_block_round_trips() {
     // come back unchanged.
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
@@ -633,7 +631,6 @@ fn handle_block_round_trips() {
 fn handle_multi_arm_round_trips() {
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
            handle { Log -> lh, Tool<Repo> -> th } in f(0)",
@@ -645,9 +642,7 @@ fn generic_tool_round_trips() {
     // The tool declaration itself must survive: its declared parameter, args
     // record, result, and trailing row are re-emitted and re-lowered intact.
     assert_roundtrips(
-        "effect Tool<t>\n\
-         effect Exn<t>\n\
-         type Prompt = Prompt(String)\n\
+        "type Prompt = Prompt(String)\n\
          type Schema<t> = Schema(String)\n\
          type ParseError = ParseError(String)\n\
          tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\n\
@@ -675,8 +670,7 @@ fn handle_effect_only_in_arm_round_trips() {
 #[test]
 fn install_block_round_trips() {
     assert_roundtrips(
-        "effect Tool<t>\n\
-         tool Repo : { x: Int } -> Int\n\
+        "tool Repo : { x: Int } -> Int\n\
          fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
            install { Tool<Repo> -> h } in f(0)",
     );
@@ -686,7 +680,6 @@ fn install_block_round_trips() {
 fn install_multi_arm_round_trips() {
     assert_roundtrips(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn demo(f: Int -> Int ! {Log}, lh: Int -> Int, th: { x: Int } -> Int) -> Int ! {Install, Log} =\n\
            install { Log -> lh, Tool<Repo> -> th } in f(0)",
@@ -731,7 +724,6 @@ fn snapshot_handle_block() {
     // tool declaration backing the arm.
     let module = lower_src(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
@@ -743,8 +735,7 @@ fn snapshot_handle_block() {
 #[test]
 fn actor_round_trips() {
     assert_roundtrips(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          actor Planner {\n\
@@ -761,8 +752,7 @@ fn actor_round_trips() {
 #[test]
 fn spawn_round_trips() {
     assert_roundtrips(
-        "effect Spawn<t>\n\
-         type St = St(Int)\n\
+        "type St = St(Int)\n\
          actor Counter {\n\
            state: St,\n\
            message: Msg = | Inc,\n\
@@ -801,9 +791,7 @@ fn supervision_round_trips() {
 #[test]
 fn messaging_round_trips() {
     assert_roundtrips(
-        "effect Send<t>\n\
-         effect Await<t>\n\
-         type Status = Status(Int)\n\
+        "type Status = Status(Int)\n\
          type St = St(Int)\n\
          actor Counter {\n\
            state: St,\n\
@@ -821,8 +809,7 @@ fn messaging_round_trips() {
 #[test]
 fn time_round_trips() {
     assert_roundtrips(
-        "effect Schedule<t>\n\
-         type Cfg = Cfg(Clock, Int)\n\
+        "type Cfg = Cfg(Clock, Int)\n\
          actor Heart {\n\
            state: Cfg,\n\
            message: HeartMsg = | Beat,\n\
@@ -849,8 +836,7 @@ fn supervisor_round_trips() {
     // so re-checking re-derives the same row; the child's identifiers and pure
     // `start_args` must come back unchanged.
     assert_roundtrips(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          fn planner_config() -> St = St(0)\n\
@@ -877,8 +863,7 @@ fn multi_child_supervisor_round_trips() {
     // Two children with distinct actors and restart dispositions; the derived
     // row is the union of both per-actor summaries.
     assert_roundtrips(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type Title = Title(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
@@ -914,8 +899,7 @@ fn snapshot_supervisor_declaration() {
     // The printed supervisor keeps its strategy, restart budget, and typed
     // children, and omits the derived effect row.
     let module = lower_src(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          fn planner_config() -> St = St(0)\n\
@@ -944,8 +928,7 @@ fn snapshot_actor_declaration() {
     // The printed actor re-declares its message sum type inline, keeps the
     // trailing effect summary, and elides empty member rows.
     let module = lower_src(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          actor Planner {\n\
@@ -966,7 +949,6 @@ fn snapshot_effects_synthesise_declarations() {
     // and a row variable prints as an open row.
     let module = lower_src(
         "effect Log\n\
-         effect Tool<t>\n\
          type Repo = MkRepo\n\
          fn read(run: Int -> Int ! {Log, Tool<Repo>}) -> Int ! {Log, Tool<Repo>} = run(0)\n\
          fn apply(g: a -> b ! {r}, x: a) -> b ! {r} = g(x)",

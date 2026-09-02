@@ -35,7 +35,7 @@ mod subst;
 mod ty;
 mod unify;
 
-pub use effect::{Effect, EffectRow, RowVar, handle_row};
+pub use effect::{BUILTIN_EFFECTS, Effect, EffectRow, RowVar, builtin_effect_arity, handle_row};
 pub use error::TypeError;
 pub use name::{Label, Name};
 pub use subst::Subst;

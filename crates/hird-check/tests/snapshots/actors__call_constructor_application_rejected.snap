@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 forward : ∀a. a
-error[C0043] 438..441: `Get` carries a reply channel; it can only be used as the message builder of `request`
+error[C0043] 407..410: `Get` carries a reply channel; it can only be used as the message builder of `request`

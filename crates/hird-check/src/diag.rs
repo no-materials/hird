@@ -167,6 +167,9 @@ pub enum CheckCode {
     /// A `self` expression outside an actor's `init` or handler body; only
     /// an actor has an own typed pid.
     C0055,
+    /// An `effect` declaration names a built-in head (`Tool`, `Send`, …); the
+    /// declaration is redundant (warning).
+    C0056,
 }
 
 /// A secondary source location attached to a diagnostic.

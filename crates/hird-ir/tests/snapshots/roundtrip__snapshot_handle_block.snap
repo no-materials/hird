@@ -6,8 +6,6 @@ module Handle
 
 effect Log
 
-effect Tool<t0>
-
 tool Repo : { x: Int } → Int
 
 fn audited(f: Int → Int ! {Tool<Repo>}, logh: { x: Int } → Int ! {Log}) → Int ! {Log} = handle { Tool<Repo> → logh } in f(0)

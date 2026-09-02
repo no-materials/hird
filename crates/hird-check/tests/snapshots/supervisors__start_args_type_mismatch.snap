@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: planner, actor: Planner, start_args: Path(\\\"x\\\"), restart: permanent },\n  ]\n}\"))"
 ---
-error[C0001] 1139..1149: type mismatch: expected `St`, got `Path`
+error[C0001] 1124..1134: type mismatch: expected `St`, got `Path`
 supervisor Sup ! {Tool<ReadRepo>}

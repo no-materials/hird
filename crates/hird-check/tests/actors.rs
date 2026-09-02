@@ -41,8 +41,6 @@ fn check_str(source: &str) -> String {
 /// A well-formed counter actor whose handlers exercise tool effects, shared
 /// by the positive tests.
 const COUNTER: &str = "\
-effect Tool<t>
-effect Spawn<t>
 type Path = Path(String)
 type St = St(Int)
 tool ReadRepo : { path: Path } -> St
@@ -179,8 +177,7 @@ fn actor_name_is_not_a_value() {
 #[test]
 fn effect_summary_mismatch_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          actor A {\n\
@@ -197,8 +194,7 @@ fn effect_summary_mismatch_rejected() {
 #[test]
 fn effect_summary_overdeclaration_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          actor A {\n\
@@ -215,8 +211,7 @@ fn effect_summary_overdeclaration_rejected() {
 #[test]
 fn handler_row_mismatch_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool ReadRepo : { path: Path } -> St\n\
          actor A {\n\
@@ -232,8 +227,7 @@ fn handler_row_mismatch_rejected() {
 #[test]
 fn init_row_mismatch_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type St = St(Int)\n\
          tool Boot : { path: Path } -> St\n\
          actor A {\n\
@@ -379,8 +373,6 @@ fn duplicate_actor_rejected() {
 /// A counter actor with a request/reply protocol, shared by the messaging
 /// tests: `Get` carries a reply channel its handler answers with `reply`.
 const MESSAGING: &str = "\
-effect Send<t>
-effect Await<t>
 type Status = Status(Int)
 type St = St(Int)
 actor Counter {
@@ -697,8 +689,7 @@ fn message_can_carry_foreign_pid() {
 #[test]
 fn handler_can_spawn() {
     insta::assert_snapshot!(check_str(
-        "effect Spawn<t>\n\
-         type St = St(Int)\n\
+        "type St = St(Int)\n\
          actor Worker {\n\
            state: St,\n\
            message: WorkerMsg = | Run,\n\
@@ -720,9 +711,6 @@ fn handler_can_spawn() {
 /// The messaging fixture plus the `Schedule` head: what a self-driving actor
 /// declares.
 const TIMED: &str = "\
-effect Send<t>
-effect Await<t>
-effect Schedule<t>
 type Status = Status(Int)
 type St = St(Int)
 actor Counter {
@@ -800,8 +788,7 @@ fn schedule_rejects_call_constructor() {
 #[test]
 fn self_is_the_actors_own_pid() {
     insta::assert_snapshot!(check_str(
-        "effect Schedule<t>\n\
-         type Cfg = Cfg(Clock, Int)\n\
+        "type Cfg = Cfg(Clock, Int)\n\
          type St = St(Clock, Int)\n\
          actor Heart {\n\
            state: St,\n\
@@ -819,8 +806,5 @@ fn self_is_the_actors_own_pid() {
 /// `Clock` is an opaque capability: it cannot cross the tool wire boundary.
 #[test]
 fn clock_is_not_wire_representable() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Now : { clock: Clock } -> Int"
-    ));
+    insta::assert_snapshot!(check_str("tool Now : { clock: Clock } -> Int"));
 }

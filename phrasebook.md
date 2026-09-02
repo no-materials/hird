@@ -93,19 +93,16 @@ match msg {
 
 ```
 effect Log
-effect Tool<t>
+effect Audit<t>
 effect EtsRead<t>
-effect Send<t>
-effect Await<t>
-effect Spawn<t>
 ```
 
 Parametric effects reference specific capabilities or message types.
 
-Only `Install`, `Supervise`, `Stand`, and `Clock` are pre-declared. Every
-other head a row names — including `Tool`, `Send`, `Await`, `Spawn`,
-`Schedule`, `Exn` — needs an `effect` declaration like the above, even
-though the checker knows the keyword forms' semantics.
+Declarations are for user heads only. The checker-known heads are built in
+and need none: bare `Install`, `Supervise`, `Stand`, `Clock`, and
+parametric `Tool`, `Send`, `Await`, `Spawn`, `Schedule`, `Exn`. Declaring
+one of those is redundant and warns (C0056).
 
 ---
 
@@ -232,9 +229,8 @@ self() → Pid<PlannerMsg> ! {}          — inside Planner's init/handlers only
   milliseconds, 5000 when omitted; a timeout exits the caller (no `Exn` in
   the row — crash handling belongs to supervision). The timeout is not an
   effect: the row is the same with or without it.
-- `Spawn<t>`, `Send<t>`, `Await<t>`, `Schedule<t>` are ordinary declared
-  effect heads (see Effect Declarations) whose semantics the checker knows,
-  like `Tool<t>`.
+- `Spawn<t>`, `Send<t>`, `Await<t>`, `Schedule<t>` are built-in effect heads
+  (no declaration needed) whose semantics the checker knows, like `Tool<t>`.
 - `supervise` starts a declared supervisor's tree: the name resolves in the
   supervisor namespace (supervisor names are not values either). One running
   instance per declaration — a second `supervise` of the same name crashes.
@@ -361,9 +357,11 @@ others are the shape the discipline takes for user-declared capabilities.
 - **Opaque types outside their module**: constructing (C0022) or
   destructuring (C0021) an opaque type outside its declaring module is a
   compile error — that is the capability discipline doing its job.
-- **Undeclared effect heads** (C0027): only `Install`, `Supervise`,
-  `Stand`, and `Clock` are built in; declare `effect Tool<t>`,
-  `effect Send<t>`, `effect Schedule<t>`, … before a row names them.
+- **Undeclared effect heads** (C0027): only user heads (`Audit<t>`,
+  `EtsRead<t>`, …) need an `effect` declaration before a row names them.
+  `Tool`, `Send`, `Await`, `Spawn`, `Schedule`, `Exn`, `Install`,
+  `Supervise`, `Stand`, and `Clock` are built in; redeclaring one warns
+  (C0056).
 - **Milliseconds are bare `Int`s**: `request(p, Get, 60000)` and
   `schedule(c, p, Tick, 1000)` take millisecond counts; there is no
   duration type or literal.

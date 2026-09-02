@@ -63,6 +63,33 @@ pub(crate) fn write_row_var(f: &mut fmt::Formatter<'_>, id: u32) -> fmt::Result 
     Ok(())
 }
 
+/// The effect heads the checker knows without an `effect` declaration, with
+/// their arities: the bare heads of `install`, `supervise`, `stand`, and
+/// `clock`, and the parametric heads of tool calls, messaging, scheduling,
+/// and domain errors. A row may name any of these in any module; a user
+/// declaration of one is redundant.
+pub const BUILTIN_EFFECTS: &[(&str, usize)] = &[
+    ("Await", 1),
+    ("Clock", 0),
+    ("Exn", 1),
+    ("Install", 0),
+    ("Schedule", 1),
+    ("Send", 1),
+    ("Spawn", 1),
+    ("Stand", 0),
+    ("Supervise", 0),
+    ("Tool", 1),
+];
+
+/// The arity of built-in effect head `name`, or `None` for a user head.
+#[must_use]
+pub fn builtin_effect_arity(name: &str) -> Option<usize> {
+    BUILTIN_EFFECTS
+        .iter()
+        .find(|(head, _)| *head == name)
+        .map(|(_, arity)| *arity)
+}
+
 /// A single effect.
 ///
 /// Either a nullary effect (`Log`) or one applied to type arguments

@@ -6,7 +6,7 @@ expression: "emit(program(\"Boot\"), \"Boot\")"
 -module(hird_boot).
 -export([boot/2]).
 
-%% src/boot.hird:9
+%% src/boot.hird:8
 boot(S, _Handlers@) ->
     {ok, Pid@1} = hird_counter:start_link(S),
     Pid@1.

@@ -4,8 +4,6 @@ expression: pretty_print(&module)
 ---
 module Actors
 
-effect Tool<t0>
-
 type Path = Path(String)
 
 type St = St(Int)

@@ -10,9 +10,6 @@
 
 module Heartbeat
 
-effect Tool<t>
-effect Schedule<t>
-
 // ── domain types ─────────────────────────────────────────────────
 
 // The clock to schedule through and the beat period in milliseconds.

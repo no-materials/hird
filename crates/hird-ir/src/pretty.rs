@@ -29,7 +29,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt::{Display, Write as _};
 
-use hird_types::{Effect, EffectRow, RowVar, Type};
+use hird_types::{Effect, EffectRow, RowVar, Type, builtin_effect_arity};
 
 use crate::ir::{
     IrActorDef, IrApp, IrDecl, IrExpr, IrExternRef, IrFnDef, IrHandleArm, IrModule, IrPattern,
@@ -278,10 +278,12 @@ fn literal_text(value: &LiteralValue) -> &str {
 
 // ── effect-declaration synthesis ──────────────────────────────────
 
-/// Every effect the printer will emit, mapped from head name to type-argument
-/// count, collected from the declaration-level types it renders (function
-/// signatures, extern types, constructor fields, and tool signatures). Held
-/// name-sorted so the synthesised declarations print deterministically.
+/// Every effect the printer must declare, mapped from head name to
+/// type-argument count: the heads in the declaration-level types it renders
+/// (function signatures, extern types, constructor fields, and tool
+/// signatures) and in handler arms, minus the built-in heads, which need no
+/// declaration. Held name-sorted so the synthesised declarations print
+/// deterministically.
 fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
     let mut effects = BTreeMap::new();
     for decl in &module.declarations {
@@ -303,9 +305,6 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
                 }
             }
             IrDecl::Tool(t) => {
-                // The tool's implicit effect (elided from its printed form),
-                // plus anything its signature references.
-                effects.insert(String::from("Tool"), 1);
                 collect_type_effects(&t.input, &mut effects);
                 collect_type_effects(&t.output, &mut effects);
                 collect_row_effects(&t.effect_row, &mut effects);
@@ -338,6 +337,7 @@ fn collect_effects(module: &IrModule) -> BTreeMap<String, usize> {
             }
         }
     }
+    effects.retain(|head, _| builtin_effect_arity(head).is_none());
     effects
 }
 
@@ -450,29 +450,16 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
         }
         IrExpr::Field(field) => collect_expr_effects(&field.receiver, out),
         IrExpr::Spawn(spawn) => {
-            // The spawn's own effect (`Spawn<Msg>`), which the enclosing
-            // function's row must be able to name.
-            out.insert(String::from("Spawn"), 1);
             for arg in &spawn.args {
                 collect_expr_effects(arg, out);
             }
             collect_type_effects(&spawn.result_type, out);
         }
-        // The supervise's own bare `Supervise` effect; checker-known, but the
-        // printed source declares every effect it names.
-        IrExpr::Supervise(_) => {
-            out.insert(String::from("Supervise"), 0);
-        }
-        IrExpr::Stand(_) => {
-            out.insert(String::from("Stand"), 0);
-        }
-        IrExpr::Clock(_) => {
-            out.insert(String::from("Clock"), 0);
-        }
-        // Reading one's own pid is effect-free.
-        IrExpr::SelfRef(_) => {}
+        // The keyword forms' own heads (`Supervise`, `Spawn<Msg>`, `Send<Msg>`, …)
+        // are built in and need no declaration; only their operands can name
+        // effects worth declaring.
+        IrExpr::Supervise(_) | IrExpr::Stand(_) | IrExpr::Clock(_) | IrExpr::SelfRef(_) => {}
         IrExpr::Schedule(schedule) => {
-            out.insert(String::from("Schedule"), 1);
             collect_expr_effects(&schedule.clock, out);
             collect_expr_effects(&schedule.pid, out);
             collect_expr_effects(&schedule.message, out);
@@ -481,14 +468,10 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
         // A child lookup is effect-free.
         IrExpr::Child(_) => {}
         IrExpr::Send(send) => {
-            out.insert(String::from("Send"), 1);
             collect_expr_effects(&send.pid, out);
             collect_expr_effects(&send.message, out);
         }
         IrExpr::Request(request) => {
-            // A request performs both the send and the blocking wait.
-            out.insert(String::from("Send"), 1);
-            out.insert(String::from("Await"), 1);
             collect_expr_effects(&request.pid, out);
             collect_expr_effects(&request.message_fn, out);
             if let Some(timeout) = &request.timeout {
@@ -497,8 +480,6 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             collect_type_effects(&request.result_type, out);
         }
         IrExpr::Reply(reply) => {
-            // A reply is a send on the reply channel; no dedicated head.
-            out.insert(String::from("Send"), 1);
             collect_expr_effects(&reply.reply_to, out);
             collect_expr_effects(&reply.value, out);
         }

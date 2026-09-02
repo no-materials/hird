@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"tool Say : { message: String } -> ()\\n\\\n         fn main() -> () ! {Tool<Say>} = say({ message: \\\"hi\\\" })\")"
+---
+main : () → () ! {Tool<Say>}
+say : { message: String } → () ! {Tool<Say>}
+record SayInvocation : { args: { message: String }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }

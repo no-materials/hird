@@ -1,9 +1,9 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"effect Schedule<t>\\n\\\n         type Cfg = Cfg(Clock, Int)\\n\\\n         type St = St(Clock, Int)\\n\\\n         actor Heart {\\n\\\n           state: St,\\n\\\n           message: HeartMsg = | Beat,\\n\\\n           init: fn(c: Cfg) -> St ! {Schedule<HeartMsg>} =\\n\\\n             match c { Cfg(clock, period) ->\\n\\\n               let first = schedule(clock, self(), Beat, period) in St(clock, period) },\\n\\\n           handle Beat, St(clock, period) -> Next<St> ! {Schedule<HeartMsg>} =\\n\\\n             let next = schedule(clock, self(), Beat, period) in Continue(St(clock, period)),\\n\\\n         } ! {Schedule<HeartMsg>}\\n\\\n         fn me() -> Pid<HeartMsg> = self()\")"
+expression: "check_str(\"type Cfg = Cfg(Clock, Int)\\n\\\n         type St = St(Clock, Int)\\n\\\n         actor Heart {\\n\\\n           state: St,\\n\\\n           message: HeartMsg = | Beat,\\n\\\n           init: fn(c: Cfg) -> St ! {Schedule<HeartMsg>} =\\n\\\n             match c { Cfg(clock, period) ->\\n\\\n               let first = schedule(clock, self(), Beat, period) in St(clock, period) },\\n\\\n           handle Beat, St(clock, period) -> Next<St> ! {Schedule<HeartMsg>} =\\n\\\n             let next = schedule(clock, self(), Beat, period) in Continue(St(clock, period)),\\n\\\n         } ! {Schedule<HeartMsg>}\\n\\\n         fn me() -> Pid<HeartMsg> = self()\")"
 ---
 Beat : HeartMsg
 Cfg : Clock → Int → Cfg
 St : Clock → Int → St
 me : () → Pid<HeartMsg>
-error[C0055] 478..485: `self` can only be used inside an actor's `init` or handler body
+error[C0055] 459..466: `self` can only be used inside an actor's `init` or handler body

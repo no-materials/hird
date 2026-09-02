@@ -6,11 +6,11 @@ expression: "emit(program(\"Tree\"), \"Tree\")"
 -module(hird_tree).
 -export([default_config/0, boot/1, serve/1]).
 
-%% src/tree.hird:3
+%% src/tree.hird:2
 default_config() ->
     {st, 0}.
 
-%% src/tree.hird:18
+%% src/tree.hird:17
 boot(_Handlers@) ->
     _U = begin
         {ok, _} = hird_planner_sup:start_link(),
@@ -21,7 +21,7 @@ boot(_Handlers@) ->
         error -> erlang:error({no_child, planner})
     end, nop).
 
-%% src/tree.hird:21
+%% src/tree.hird:20
 serve(_Handlers@) ->
     _U = begin
         {ok, _} = hird_planner_sup:start_link(),

@@ -1,13 +1,10 @@
 ---
 source: crates/hird-ir/tests/roundtrip.rs
-assertion_line: 503
 expression: pretty_print(&module)
 ---
 module Eff
 
 effect Log
-
-effect Tool<t0>
 
 type Repo = MkRepo
 

@@ -3,7 +3,7 @@ source: crates/hird-codegen/tests/emit.rs
 expression: "behaviour_module(program(\"Timed\"), \"Timed\", \"hird_heart\")"
 ---
 %% Generated from src/timed.hird by the Hirð compiler. Do not edit.
-%% src/timed.hird:6
+%% src/timed.hird:3
 -module(hird_heart).
 -behaviour(gen_server).
 -export([start_link/1]).

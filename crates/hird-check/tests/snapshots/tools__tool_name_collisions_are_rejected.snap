@@ -1,9 +1,9 @@
 ---
 source: crates/hird-check/tests/tools.rs
-expression: "check_str(\"effect Tool<t>\\n\\\n         type Fetch = MkFetch(Int)\\n\\\n         tool Fetch : { x: Int } -> Int\\n\\\n         fn fetch(x: Int) -> Int = x\")"
+expression: "check_str(\"type Fetch = MkFetch(Int)\\n\\\n         tool Fetch : { x: Int } -> Int\\n\\\n         fn fetch(x: Int) -> Int = x\")"
 ---
 MkFetch : Int → Fetch
 fetch : Int → Int
 record FetchInvocation : { args: { x: Int }, caller: CallerId, result: Int, timestamp: Timestamp, tool: String }
-error[C0018] 46..51: duplicate type `Fetch`
-error[C0017] 75..80: duplicate definition of `fetch`
+error[C0018] 31..36: duplicate type `Fetch`
+error[C0017] 60..65: duplicate definition of `fetch`

@@ -31,8 +31,6 @@ stdout, so the smallest observable program is a tool call:
 ```
 module Hello
 
-effect Tool<t>
-
 tool Say : { message: String } → ()
 
 fn quiet_say(args: { message: String }) → () = ()
@@ -146,9 +144,10 @@ functions generic over their argument's effects, name a row variable:
 fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 ```
 
-Effect heads are declared like types (`effect Tool<t>`,
-`effect Send<t>`); only `Install`, `Supervise`, `Stand`, and `Clock` are
-built in.
+User effect heads are declared like types (`effect Log`,
+`effect Audit<t>`). The heads the compiler knows — `Tool`, `Send`, `Await`,
+`Spawn`, `Schedule`, `Exn`, `Install`, `Supervise`, `Stand`, `Clock` — are
+built in and need no declaration.
 
 ### Tools
 

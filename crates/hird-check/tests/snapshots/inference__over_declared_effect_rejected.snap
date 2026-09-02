@@ -1,7 +1,6 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 761
-expression: "check_str(\"effect Log\\n\\\n         effect Spawn\\n\\\n         fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Spawn} = run(0)\")"
+expression: "check_str(\"effect Log\\n\\\n         effect Fork\\n\\\n         fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Fork} = run(0)\")"
 ---
-f : (Int → Int ! {Log}) → Int ! {Log, Spawn}
-error[C0030] 77..84: declared {Log, Spawn} but body performs {Log}
+f : (Int → Int ! {Log}) → Int ! {Fork, Log}
+error[C0030] 75..82: declared {Fork, Log} but body performs {Log}

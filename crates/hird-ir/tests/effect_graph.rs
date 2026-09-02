@@ -8,9 +8,7 @@ use hird_ast::{AstNode, SourceFile};
 use hird_ir::{EFFECT_GRAPH_SCHEMA_VERSION, IrModule, TypeStructure, effect_graph, lower_module};
 
 /// A planner-shaped module: a tool, an actor using it, and a supervisor.
-const PLANNER: &str = "effect Tool<t>\n\
-     effect Send<t>\n\
-     type Path = Path(String)\n\
+const PLANNER: &str = "type Path = Path(String)\n\
      type RepoState = RepoState(String)\n\
      type St = St(Int)\n\
      type Status = Status(Int)\n\
@@ -36,8 +34,7 @@ const PLANNER: &str = "effect Tool<t>\n\
      }";
 
 /// A generic tool, checking its parameters render by their declared names.
-const GENERIC: &str = "effect Tool<t>\n\
-     tool Pick<t> : { first: t, second: t } -> t";
+const GENERIC: &str = "tool Pick<t> : { first: t, second: t } -> t";
 
 /// Parses, checks, and lowers `source`, panicking on any parse or type error.
 fn lower(source: &str, name: &str) -> IrModule {

@@ -263,10 +263,10 @@ Formatting:
   names and without the implicit `Tool<name>` effect; an empty trailing row is
   elided.
 - Effect declarations are reconstructed from the rows that reference them and
-  printed after the module header (`effect Log`, `effect Tool<t0>`). They are
+  printed after the module header (`effect Log`, `effect Audit<t0>`). They are
   not IR nodes, so without this the printed source would name effects it never
-  declares — including the `Tool` effect a tool declaration implies — and fail
-  to re-check.
+  declares and fail to re-check. Built-in heads (`Tool`, `Send`, `Supervise`,
+  …) need no declaration and are not synthesised.
 - Type-variable letters are renumbered to `a, b, c, …`, and row-variable letters
   to `r, r1, …`, in order of first appearance within each signature, so output
   does not depend on the unification-variable identities inference happened to

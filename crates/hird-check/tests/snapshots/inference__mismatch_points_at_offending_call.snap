@@ -1,8 +1,7 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 748
-expression: "check_str(\"effect Log\\n\\\n         effect Tool<t>\\n\\\n         type X = MkX\\n\\\n         fn f(logger: Int -> Int ! {Log}, tooler: Int -> Int ! {Tool<X>}) -> Int ! {Log} =\\n\\\n           let a = logger(0) in tooler(0)\")"
+expression: "check_str(\"effect Log\\n\\\n         type X = MkX\\n\\\n         fn f(logger: Int -> Int ! {Log}, tooler: Int -> Int ! {Tool<X>}) -> Int ! {Log} =\\n\\\n           let a = logger(0) in tooler(0)\")"
 ---
 MkX : X
 f : (Int → Int ! {Log}) → (Int → Int ! {Tool<X>}) → Int ! {Log}
-error[C0030] 141..151: declared {Log} but body performs {Log, Tool<X>}
+error[C0030] 126..136: declared {Log} but body performs {Log, Tool<X>}

@@ -47,10 +47,7 @@ const PROGRAMS: &[(&str, &str)] = &[
 /// A self-driving actor: handed a clock at init, it schedules its own next
 /// beat from `init` and from a handler; `main` acquires the clock in the
 /// child spec and requests with an explicit timeout.
-const TIMED: &str = "effect Send<t>\n\
-     effect Await<t>\n\
-     effect Schedule<t>\n\
-     type Status = Status(Int)\n\
+const TIMED: &str = "type Status = Status(Int)\n\
      type Cfg = Cfg(Clock, Int)\n\
      actor Heart {\n\
        state: Cfg,\n\
@@ -100,26 +97,22 @@ const VALUES: &str = "fn triple() -> (Int, String, Bool) = (1, \"a\", True)\n\
      fn nothing() = ()\n\
      fn pi() -> Float = 3.14";
 
-const REPO: &str = "effect Tool<t>\n\
-     type Path = Path(String)\n\
+const REPO: &str = "type Path = Path(String)\n\
      type St = St(Int)\n\
      tool ReadRepo : { path: Path } -> St\n\
      fn scan(p: Path) -> St ! {Tool<ReadRepo>} = read_repo({ path: p })";
 
 const AUDITED: &str = "effect Log\n\
-     effect Tool<t>\n\
      tool Repo : { x: Int } -> Int\n\
      fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
        handle { Tool<Repo> -> logh } in f(0)";
 
 const MULTI: &str = "effect Log\n\
-     effect Tool<t>\n\
      tool Repo : { x: Int } -> Int\n\
      fn run(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
        handle { Log -> lh, Tool<Repo> -> th } in f(0)";
 
 const DEPLOY: &str = "effect Log\n\
-     effect Tool<t>\n\
      type Path = Path(String)\n\
      type St = St(Int)\n\
      tool ReadRepo : { path: Path } -> St\n\
@@ -134,8 +127,7 @@ const ETA: &str = "fn apply(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = g(x)\n\
      fn absorb() -> Int = apply(inc, 1)\n\
      fn supply() -> Int = let id = \\x -> x in call_pure(id, 2)";
 
-const BOOT: &str = "effect Spawn<t>\n\
-     type St = St(Int)\n\
+const BOOT: &str = "type St = St(Int)\n\
      actor Counter {\n\
        state: St,\n\
        message: Msg = | Inc,\n\
@@ -144,9 +136,7 @@ const BOOT: &str = "effect Spawn<t>\n\
      }\n\
      fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)";
 
-const MSG: &str = "effect Send<t>\n\
-     effect Await<t>\n\
-     type Status = Status(Int)\n\
+const MSG: &str = "type Status = Status(Int)\n\
      type St = St(Int)\n\
      actor Counter {\n\
        state: St,\n\
@@ -167,8 +157,7 @@ const FFI: &str = "extern fn sqrt(x: Float) -> Float\n\
 const RESERVED: &str = "type Marker = End | Query\n\
      fn rem(m: Marker) -> Marker = match m { End -> Query, Query -> End, }";
 
-const WORKER: &str = "effect Tool<t>\n\
-     type St = St(Int)\n\
+const WORKER: &str = "type St = St(Int)\n\
      tool Audit : { n: Int } -> Int\n\
      actor Worker {\n\
        state: St,\n\
@@ -188,8 +177,7 @@ const CLOCK: &str = "type St = St(Int)\n\
        handle Via, St(n) -> Next<St> ! {} = let f = bump in Continue(St(f(n))),\n\
      }";
 
-const DUO: &str = "effect Spawn<t>\n\
-     type St = St(Int)\n\
+const DUO: &str = "type St = St(Int)\n\
      actor Pair {\n\
        state: St,\n\
        message: Msg = | Nop,\n\
@@ -198,8 +186,7 @@ const DUO: &str = "effect Spawn<t>\n\
      }\n\
      fn boot() -> Pid<Msg> ! {Spawn<Msg>} = spawn(Pair, 1, 2)";
 
-const ECHO: &str = "effect Send<t>\n\
-     type Ping = Ping\n\
+const ECHO: &str = "type Ping = Ping\n\
      type St = St(Int)\n\
      actor Responder {\n\
        state: St,\n\
@@ -225,8 +212,7 @@ const SOLO: &str = "type St = St(Int)\n\
        ]\n\
      }";
 
-const TREE: &str = "effect Send<t>\n\
-     type St = St(Int)\n\
+const TREE: &str = "type St = St(Int)\n\
      fn default_config() -> St = St(0)\n\
      actor Planner {\n\
        state: St,\n\
@@ -326,9 +312,7 @@ const IDLE: &str = "supervisor IdleSup {\n\
        children: []\n\
      }";
 
-const WIRE: &str = "effect Tool<t>\n\
-     effect Exn<t>\n\
-     type Option<a> = Some(a) | None\n\
+const WIRE: &str = "type Option<a> = Some(a) | None\n\
      type HttpError = HttpError(Int, String)\n\
      type TicketId = TicketId(String)\n\
      tool CreateTicket : { title: String, body: String } -> TicketId\n\

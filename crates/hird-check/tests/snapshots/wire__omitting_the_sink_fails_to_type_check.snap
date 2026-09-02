@@ -1,6 +1,6 @@
 ---
 source: crates/hird-check/tests/wire.rs
-expression: "render(&check(\"effect Tool<t>\\n\\\n         effect Audit<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         type AuditSink = AuditSink(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn audited_read(\\n\\\n           emit: { sink: AuditSink, line: String } -> () ! {Audit<sink>},\\n\\\n           args: { path: Path }\\n\\\n         ) -> RepoState ! {Audit<sink>, Tool<ReadRepo>} =\\n\\\n           let logged = emit({ sink: sink, line: \\\"ReadRepo\\\" }) in read_repo(args)\"))"
+expression: "render(&check(\"effect Audit<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         type AuditSink = AuditSink(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn audited_read(\\n\\\n           emit: { sink: AuditSink, line: String } -> () ! {Audit<sink>},\\n\\\n           args: { path: Path }\\n\\\n         ) -> RepoState ! {Audit<sink>, Tool<ReadRepo>} =\\n\\\n           let logged = emit({ sink: sink, line: \\\"ReadRepo\\\" }) in read_repo(args)\"))"
 ---
 AuditSink : String → AuditSink
 Path : String → Path
@@ -8,4 +8,4 @@ RepoState : String → RepoState
 audited_read : ∀a. ({ line: String, sink: AuditSink } → () ! {Audit<a>}) → { path: Path } → RepoState ! {Audit<a>, Tool<ReadRepo>}
 read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
 record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }
-error[C0003] 346..350: unbound name `sink`
+error[C0003] 331..335: unbound name `sink`

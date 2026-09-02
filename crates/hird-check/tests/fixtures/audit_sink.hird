@@ -2,7 +2,6 @@
 // sink parameter, and audited dispatch is a handler wrapping the tool
 // effect, so `Audit<sink>` stays visible in the enclosing effect row.
 
-effect Tool<t>
 effect Audit<t>
 
 type Path = Path(String)

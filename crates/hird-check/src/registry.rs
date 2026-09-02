@@ -6,7 +6,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use hird_types::{Name, Type};
+use hird_types::{BUILTIN_EFFECTS, Name, Type};
 
 use crate::ModuleName;
 
@@ -58,14 +58,11 @@ impl Registry {
             ctors: BTreeMap::new(),
             effects: BTreeMap::new(),
         };
-        // `Install`, `Supervise`, `Stand`, and `Clock` are the checker-known
-        // effects of `install` blocks and the `supervise`, `stand`, and
-        // `clock` expressions: rows may name them without a user declaration
-        // existing.
-        registry.declare_effect(Name::new("Install"), 0);
-        registry.declare_effect(Name::new("Supervise"), 0);
-        registry.declare_effect(Name::new("Stand"), 0);
-        registry.declare_effect(Name::new("Clock"), 0);
+        // The checker-known heads (`Tool`, `Send`, `Install`, …): rows may
+        // name them without a user declaration existing.
+        for (head, arity) in BUILTIN_EFFECTS {
+            registry.declare_effect(Name::new(*head), *arity);
+        }
         registry.declare_adt(
             Name::new("Bool"),
             0,

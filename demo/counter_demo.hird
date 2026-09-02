@@ -7,9 +7,6 @@
 
 module CounterDemo
 
-effect Send<t>
-effect Await<t>
-
 // ── domain types ─────────────────────────────────────────────────
 
 type CounterConfig = CounterConfig(Int)

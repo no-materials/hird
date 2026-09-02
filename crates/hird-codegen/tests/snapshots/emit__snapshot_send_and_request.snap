@@ -6,10 +6,10 @@ expression: "emit(program(\"Msg\"), \"Msg\")"
 -module(hird_msg).
 -export([poke/2, query/2]).
 
-%% src/msg.hird:12
+%% src/msg.hird:10
 poke(P, _Handlers@) ->
     gen_server:cast(P, inc).
 
-%% src/msg.hird:13
+%% src/msg.hird:11
 query(P, _Handlers@) ->
     gen_server:call(P, get, 5000).

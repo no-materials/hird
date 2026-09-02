@@ -1,6 +1,5 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 551
-expression: "check_str(\"effect Log\\n\\\n         effect Spawn\\n\\\n         fn worker(run: Int -> Int ! {Spawn, Log}) -> Int ! {Spawn, Log} = run(0)\")"
+expression: "check_str(\"effect Log\\n\\\n         effect Fork\\n\\\n         fn worker(run: Int -> Int ! {Fork, Log}) -> Int ! {Fork, Log} = run(0)\")"
 ---
-worker : (Int → Int ! {Log, Spawn}) → Int ! {Log, Spawn}
+worker : (Int → Int ! {Fork, Log}) → Int ! {Fork, Log}

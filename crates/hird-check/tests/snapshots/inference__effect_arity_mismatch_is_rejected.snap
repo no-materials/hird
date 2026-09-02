@@ -1,6 +1,5 @@
 ---
 source: crates/hird-check/tests/inference.rs
-assertion_line: 585
-expression: "check_str(\"effect Tool<t>\\n\\\n         fn f(x: Int) -> Int ! {Tool} = x\")"
+expression: "check_str(\"fn f(x: Int) -> Int ! {Tool} = x\")"
 ---
-error[C0028] 38..42: effect `Tool` expects 1 type argument(s), but 0 were given
+error[C0028] 23..27: effect `Tool` expects 1 type argument(s), but 0 were given

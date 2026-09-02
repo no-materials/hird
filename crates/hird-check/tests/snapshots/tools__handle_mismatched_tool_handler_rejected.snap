@@ -1,6 +1,6 @@
 ---
 source: crates/hird-check/tests/tools.rs
-expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn wrong(x: Int) -> Int = x\\n\\\n         fn dry_run(p: Path) -> RepoState = handle { Tool<ReadRepo> -> wrong } in read_repo({ path: p })\")"
+expression: "check_str(\"type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn wrong(x: Int) -> Int = x\\n\\\n         fn dry_run(p: Path) -> RepoState = handle { Tool<ReadRepo> -> wrong } in read_repo({ path: p })\")"
 ---
 Path : String → Path
 RepoState : String → RepoState
@@ -8,4 +8,4 @@ dry_run : Path → RepoState
 read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
 wrong : Int → Int
 record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }
-error[C0034] 209..214: handler for tool `ReadRepo` must have type `{ path: Path } → RepoState`, but this has type `Int → Int`
+error[C0034] 194..199: handler for tool `ReadRepo` must have type `{ path: Path } → RepoState`, but this has type `Int → Int`

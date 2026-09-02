@@ -30,10 +30,11 @@ effectful function *must* be annotated. Effect polymorphism is
 expressed with a row tail (`! {r}` or `! {Log, r}`), never by
 subsumption.
 
-**Effect heads need declarations.** Only `Install`, `Supervise`,
-`Stand`, and `Clock` are built in. Before a row can name `Tool<…>`,
-`Send<…>`, `Await<…>`, `Spawn<…>`, `Schedule<…>`, or `Exn<…>`, the program
-must declare them: `effect Tool<t>`, `effect Send<t>`, etc.
+**Only user effect heads need declarations.** `Tool<…>`, `Send<…>`,
+`Await<…>`, `Spawn<…>`, `Schedule<…>`, `Exn<…>`, `Install`, `Supervise`,
+`Stand`, and `Clock` are built in; a row may name them in any module, and
+an `effect` declaration of one is redundant (warning C0056). A head of
+your own (`Audit<t>`, `Log`) must be declared: `effect Audit<t>`.
 
 **Expression-oriented, no blocks.** Every body is one bare expression
 after `=`; sequence with `let x = e in …`. Braces in expression
@@ -122,7 +123,8 @@ not something visible in any one signature.
 |---|---|
 | Effectful body with `! {}` or no annotation | C0030 — declared row ≠ inferred row, anchored at the introducing call |
 | Declaring an effect the body never performs | C0030 (equality cuts both ways) |
-| Using `Tool`/`Send`/`Await`/`Spawn`/`Exn` in a row without `effect` declarations | C0027 unknown effect |
+| Naming a user effect head (`Audit<t>`) in a row without declaring it | C0027 unknown effect |
+| Declaring a built-in head (`effect Tool<t>`) | C0056 redundant declaration (warning) |
 | Non-exhaustive `match` over a sum type | C0015, listing the missing constructors |
 | Matching `Some`/`None` without declaring `type Option<a> = Some(a) \| None` (built-in `Option`/`List` carry no constructors) | C0007 unknown constructor |
 | Constructing or destructuring an opaque capability outside its module | C0022 / C0021 |
@@ -153,7 +155,8 @@ Two semantic traps that type-check but behave unexpectedly:
 
 ## Checklist before emitting a program
 
-1. Every effect head used in a row is declared (`effect Tool<t>`, …).
+1. Every user effect head used in a row is declared (`effect Audit<t>`, …);
+   built-in heads (`Tool`, `Send`, …) are not redeclared.
 2. Every function's row equals its body's effects exactly.
 3. Every `match` covers every constructor (or has `_`).
 4. Actor handler rows are per-handler, and the actor's trailing

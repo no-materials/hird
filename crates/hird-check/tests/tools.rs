@@ -43,14 +43,35 @@ fn check_str(source: &str) -> String {
 
 // ── declarations ────────────────────────────────────────────────
 
+/// The checker-known heads are built in: a row names `Tool<…>` with no
+/// `effect` declaration in the module.
+#[test]
+fn builtin_effect_heads_need_no_declaration() {
+    insta::assert_snapshot!(check_str(
+        "tool Say : { message: String } -> ()\n\
+         fn main() -> () ! {Tool<Say>} = say({ message: \"hi\" })"
+    ));
+}
+
+/// Declaring a built-in head is redundant: it warns and is otherwise ignored,
+/// so the program still checks and the built-in arity stands.
+#[test]
+fn redeclaring_builtin_effect_warns() {
+    insta::assert_snapshot!(check_str(
+        "effect Tool<t>\n\
+         effect Send<a, b>\n\
+         tool Say : { message: String } -> ()\n\
+         fn main() -> () ! {Tool<Say>} = say({ message: \"hi\" })"
+    ));
+}
+
 /// A tool declaration binds a `snake_case` function whose row carries
 /// `Tool<Name>` and derives a `{ tool, args, result, timestamp, caller }`
 /// invocation record under the generated `NameInvocation` name.
 #[test]
 fn tool_declares_function_and_record() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState"
     ));
@@ -61,9 +82,7 @@ fn tool_declares_function_and_record() {
 #[test]
 fn generic_tool_generalises_with_trailing_row() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         effect Exn<t>\n\
-         type Prompt = Prompt(String)\n\
+        "type Prompt = Prompt(String)\n\
          type Schema<t> = Schema(String)\n\
          type ParseError = ParseError(String)\n\
          tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}"
@@ -74,8 +93,7 @@ fn generic_tool_generalises_with_trailing_row() {
 #[test]
 fn invocation_record_accessor() {
     let parsed = hird_parse::parse(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState",
         0,
@@ -100,8 +118,7 @@ fn invocation_record_accessor() {
 #[test]
 fn tool_call_in_effect_row() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn plan(p: Path) -> RepoState ! {Tool<ReadRepo>} = read_repo({ path: p })"
@@ -112,8 +129,7 @@ fn tool_call_in_effect_row() {
 #[test]
 fn undeclared_tool_effect_is_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn plan(p: Path) -> RepoState = read_repo({ path: p })"
@@ -125,9 +141,7 @@ fn undeclared_tool_effect_is_rejected() {
 #[test]
 fn generic_tool_call_instantiates_result() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         effect Exn<t>\n\
-         type Prompt = Prompt(String)\n\
+        "type Prompt = Prompt(String)\n\
          type Schema<t> = Schema(String)\n\
          type ParseError = ParseError(String)\n\
          tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\n\
@@ -141,8 +155,7 @@ fn generic_tool_call_instantiates_result() {
 #[test]
 fn handle_substitutes_tool_effect() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn mock(args: { path: Path }) -> RepoState = RepoState(\"clean\")\n\
@@ -157,8 +170,7 @@ fn handle_substitutes_tool_effect() {
 #[test]
 fn handle_mismatched_tool_handler_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn wrong(x: Int) -> Int = x\n\
@@ -173,9 +185,7 @@ fn handle_mismatched_tool_handler_rejected() {
 #[test]
 fn generic_tool_monomorphic_handler_accepted() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         effect Exn<t>\n\
-         type Prompt = Prompt(String)\n\
+        "type Prompt = Prompt(String)\n\
          type Schema<t> = Schema(String)\n\
          type ParseError = ParseError(String)\n\
          tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}\n\
@@ -190,8 +200,7 @@ fn generic_tool_monomorphic_handler_accepted() {
 #[test]
 fn handle_non_tool_marker_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Repo = MkRepo\n\
+        "type Repo = MkRepo\n\
          fn bad(f: Int -> Int ! {Tool<Repo>}, h: Int -> Int) -> Int =\n\
            handle { Tool<Repo> -> h } in f(0)"
     ));
@@ -202,8 +211,7 @@ fn handle_non_tool_marker_rejected() {
 #[test]
 fn handle_non_function_tool_handler_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn bad(p: Path) -> RepoState = handle { Tool<ReadRepo> -> 42 } in read_repo({ path: p })"
@@ -216,8 +224,7 @@ fn handle_non_function_tool_handler_rejected() {
 #[test]
 fn install_tool_handler_signature_accepted() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn mock(args: { path: Path }) -> RepoState = RepoState(\"clean\")\n\
@@ -231,8 +238,7 @@ fn install_tool_handler_signature_accepted() {
 #[test]
 fn install_mismatched_tool_handler_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn wrong(x: Int) -> Int = x\n\
@@ -246,8 +252,7 @@ fn install_mismatched_tool_handler_rejected() {
 #[test]
 fn install_non_tool_marker_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Repo = MkRepo\n\
+        "type Repo = MkRepo\n\
          fn bad(f: Int -> Int ! {Tool<Repo>}, h: Int -> Int) -> Int ! {Tool<Repo>, Install} =\n\
            install { Tool<Repo> -> h } in f(0)"
     ));
@@ -269,8 +274,7 @@ fn standard_library_tools() {
 #[test]
 fn unknown_effect_in_tool_row_is_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Risky : { input: String } -> String ! {Nope}"
+        "tool Risky : { input: String } -> String ! {Nope}"
     ));
 }
 
@@ -279,8 +283,7 @@ fn unknown_effect_in_tool_row_is_rejected() {
 #[test]
 fn tool_effect_wrong_arity_is_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Path = Path(String)\n\
+        "type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          tool ReadRepo : { path: Path } -> RepoState\n\
          fn plan(p: Path) -> RepoState ! {Tool<ReadRepo, Path>} = read_repo({ path: p })"
@@ -292,8 +295,7 @@ fn tool_effect_wrong_arity_is_rejected() {
 #[test]
 fn tool_name_collisions_are_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Fetch = MkFetch(Int)\n\
+        "type Fetch = MkFetch(Int)\n\
          tool Fetch : { x: Int } -> Int\n\
          fn fetch(x: Int) -> Int = x"
     ));
@@ -303,20 +305,14 @@ fn tool_name_collisions_are_rejected() {
 /// ADT headers.
 #[test]
 fn generic_tool_duplicate_param_is_rejected() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Wrap<t, t> : { value: t } -> t"
-    ));
+    insta::assert_snapshot!(check_str("tool Wrap<t, t> : { value: t } -> t"));
 }
 
 /// Tool signatures elaborate in a closed scope: an undeclared row variable in
 /// the trailing row is rejected.
 #[test]
 fn open_row_in_tool_decl_is_rejected() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Leaky : { x: Int } -> Int ! {r}"
-    ));
+    insta::assert_snapshot!(check_str("tool Leaky : { x: Int } -> Int ! {r}"));
 }
 
 // ── wire-representability ───────────────────────────────────────
@@ -324,19 +320,13 @@ fn open_row_in_tool_decl_is_rejected() {
 /// A function type in a tool's args cannot cross the wire boundary.
 #[test]
 fn tool_function_arg_is_rejected() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Apply : { f: Int -> Int } -> Int"
-    ));
+    insta::assert_snapshot!(check_str("tool Apply : { f: Int -> Int } -> Int"));
 }
 
 /// A function type in a tool's result is rejected too.
 #[test]
 fn tool_function_result_is_rejected() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Make : { seed: Int } -> (Int -> Int)"
-    ));
+    insta::assert_snapshot!(check_str("tool Make : { seed: Int } -> (Int -> Int)"));
 }
 
 /// An opaque capability in a tool signature is rejected: a capability minted
@@ -344,8 +334,7 @@ fn tool_function_result_is_rejected() {
 #[test]
 fn tool_capability_arg_is_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         pub opaque type Sink = Sink(String)\n\
+        "pub opaque type Sink = Sink(String)\n\
          tool Emit : { sink: Sink, line: String } -> ()"
     ));
 }
@@ -355,8 +344,7 @@ fn tool_capability_arg_is_rejected() {
 #[test]
 fn tool_nested_function_is_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Callback = MkCallback(Int -> Int)\n\
+        "type Callback = MkCallback(Int -> Int)\n\
          tool Sneaky : { cb: Callback } -> Int"
     ));
 }
@@ -366,8 +354,7 @@ fn tool_nested_function_is_rejected() {
 #[test]
 fn tool_recursive_adt_is_accepted() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Tree = Leaf(Int) | Node(Tree, Tree)\n\
+        "type Tree = Leaf(Int) | Node(Tree, Tree)\n\
          tool Sum : { tree: Tree } -> Int"
     ));
 }

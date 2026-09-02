@@ -14,14 +14,15 @@ use tower_lsp::{ClientSocket, LspService};
 
 /// A simple, well-typed Hirð file exercising every definition kind the
 /// server resolves: effects, types, tools, functions, and actors.
-const FIXTURE: &str = r#"effect Tool<t>
-effect Spawn<t>
+const FIXTURE: &str = r#"effect Log
 
 type Path = Path(String)
 
 tool ReadFile : { path: Path } -> String
 
 fn greet(name: String) -> String = name
+
+fn audit(run: Int -> Int ! {Log}) -> Int ! {Log} = run(0)
 
 fn read(p: Path) -> String ! {Tool<ReadFile>} = read_file({ path: p })
 
@@ -242,7 +243,7 @@ async fn definitions_resolve_functions_types_actors_and_effects() {
     let cases = [
         ("read_file({ path: p })", "read_file", "tool ReadFile"),
         ("spawn(Echo", "Echo", "actor Echo"),
-        ("! {Tool<ReadFile>}", "Tool", "effect Tool<t>"),
+        ("! {Log}) -> Int", "Log", "effect Log"),
         ("greet", "greet", "fn greet"),
     ];
     for (id, (reference_context, name, definition_context)) in cases.into_iter().enumerate() {

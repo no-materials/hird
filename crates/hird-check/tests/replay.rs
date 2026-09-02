@@ -17,8 +17,6 @@ use proptest::prelude::*;
 /// The planner demo's tool declarations, which the golden log's records
 /// draw their signatures from.
 const PLANNER_TOOLS: &str = "\
-effect Tool<t>
-effect Exn<t>
 type TicketId = TicketId(String)
 type HttpError = HttpError(Int, String)
 tool ReadRepo : { path: String } -> { files: List<String>, status: String }

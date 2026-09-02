@@ -6,7 +6,7 @@ expression: "emit(program(\"Repo\"), \"Repo\")"
 -module(hird_repo).
 -export([scan/2, hird_tools@/0]).
 
-%% src/repo.hird:5
+%% src/repo.hird:4
 scan(P, Handlers@) ->
     hird_tool_dispatch:call(read_repo, <<"Repo.scan"/utf8>>, Handlers@, #{path => P}).
 

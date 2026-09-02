@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: ghost, actor: Ghost, start_args: planner_config(), restart: permanent },\n  ]\n}\"))"
 ---
-error[C0047] 1117..1122: supervisor `Sup`'s child `ghost` references undeclared actor `Ghost`
+error[C0047] 1102..1107: supervisor `Sup`'s child `ghost` references undeclared actor `Ghost`
 supervisor Sup ! {}

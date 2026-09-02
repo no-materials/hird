@@ -16,7 +16,9 @@ use hird_ast::{
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::{Effect, EffectRow, Label, Name, Subst, Type, TypeError, unify, unify_row};
+use hird_types::{
+    Effect, EffectRow, Label, Name, Subst, Type, TypeError, builtin_effect_arity, unify, unify_row,
+};
 
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
@@ -480,9 +482,21 @@ impl Checker {
     // ── effect declarations ─────────────────────────────────────
 
     /// Registers an effect declaration's name and type-parameter count, so
-    /// effect annotations can resolve and arity-check it.
+    /// effect annotations can resolve and arity-check it. A declaration of a
+    /// built-in head is redundant: it is reported and otherwise ignored, so
+    /// the built-in arity stands.
     fn register_effect(&mut self, decl: &EffectDecl) {
         let Some(name) = decl.name() else { return };
+        if builtin_effect_arity(name).is_some() {
+            self.diags.push(CheckDiagnostic::warning(
+                CheckCode::C0056,
+                name_token_span(decl.syntax(), self.source_id),
+                format!(
+                    "effect `{name}` is built in; this declaration is redundant and can be removed"
+                ),
+            ));
+            return;
+        }
         let arity = decl.type_params().count();
         self.registry.declare_effect(Name::new(name), arity);
     }

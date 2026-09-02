@@ -388,7 +388,6 @@ fn json_pretty_snapshot() {
 fn handle_block_lowers_to_handle_node() {
     let module = lower(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
@@ -413,7 +412,6 @@ fn handle_block_lowers_to_handle_node() {
 fn handle_block_json_snapshot() {
     let module = lower(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)",
@@ -427,8 +425,7 @@ fn handle_block_json_snapshot() {
 #[test]
 fn install_block_lowers_to_install_node() {
     let module = lower(
-        "effect Tool<t>\n\
-         tool Repo : { x: Int } -> Int\n\
+        "tool Repo : { x: Int } -> Int\n\
          fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
            install { Tool<Repo> -> h } in f(0)",
         "Install",
@@ -451,8 +448,7 @@ fn install_block_lowers_to_install_node() {
 #[test]
 fn install_block_json_snapshot() {
     let module = lower(
-        "effect Tool<t>\n\
-         tool Repo : { x: Int } -> Int\n\
+        "tool Repo : { x: Int } -> Int\n\
          fn demo(f: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Install, Tool<Repo>} =\n\
            install { Tool<Repo> -> h } in f(0)",
         "Install",
@@ -465,9 +461,7 @@ fn install_block_json_snapshot() {
 #[test]
 fn tool_decl_lowers_to_tool_node() {
     let module = lower(
-        "effect Tool<t>\n\
-         effect Exn<t>\n\
-         type Prompt = Prompt(String)\n\
+        "type Prompt = Prompt(String)\n\
          type Schema<t> = Schema(String)\n\
          type ParseError = ParseError(String)\n\
          tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } -> t ! {Exn<ParseError>}",
@@ -495,7 +489,6 @@ fn tool_decl_lowers_to_tool_node() {
 
 /// The counter actor plus a spawner, shared by the actor lowering tests.
 const COUNTER: &str = "\
-effect Spawn<t>
 type St = St(Int)
 actor Counter {
   state: St,
@@ -563,8 +556,6 @@ fn actor_json_snapshot() {
 
 /// A request/reply counter plus senders, shared by the messaging tests.
 const MESSAGING: &str = "\
-effect Send<t>
-effect Await<t>
 type Status = Status(Int)
 type St = St(Int)
 actor Counter {
@@ -645,7 +636,6 @@ fn messaging_json_snapshot() {
 /// A planner actor supervised by a `one_for_one` supervisor, shared by the
 /// supervisor lowering tests.
 const SUPERVISED: &str = "\
-effect Tool<t>
 type Path = Path(String)
 type St = St(Int)
 tool ReadRepo : { path: Path } -> St
@@ -842,9 +832,6 @@ fn lambda_carries_its_effect_row() {
 /// nodes with the checked types, `request` carries its optional timeout, and
 /// the rows record `Clock` and `Schedule<Msg>`.
 const TIMED: &str = "\
-effect Send<t>
-effect Await<t>
-effect Schedule<t>
 type Status = Status(Int)
 type Cfg = Cfg(Clock, Int)
 actor Heart {

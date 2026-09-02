@@ -2,9 +2,6 @@
 // the test suite. They graduate unchanged to a real prelude module once a
 // library search path exists; until then user programs cannot import them.
 
-effect Tool<t>
-effect Exn<t>
-
 type Path = Path(String)
 type Url = Url(String)
 type Headers = Headers(List<(String, String)>)

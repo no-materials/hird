@@ -363,7 +363,7 @@ record that variant live with `--audit-file` and diff the two recordings.
 
 | | regular effect | tool effect |
 |---|---|---|
-| declared by | `effect Log`, `effect Exn<t>` | `tool ReadRepo : …` |
+| declared by | `effect Log`, `effect Audit<t>` | `tool ReadRepo : …` |
 | carries | a name and type arguments | a full operation signature |
 | generates | nothing | function + invocation record |
 | in a row | `{Log}` | `{Tool<ReadRepo>}` — one shared `Tool` effect per marker |

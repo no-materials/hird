@@ -19,10 +19,6 @@ module AgentFleet
 use Errands
 use Errands.{Order, Outcome}
 
-effect Tool<t>
-effect Send<t>
-effect Schedule<t>
-
 // ── domain types ─────────────────────────────────────────────────
 
 // The clock to schedule rounds through and the round period in ms.

@@ -6,7 +6,7 @@ expression: "emit(program(\"Multi\"), \"Multi\")"
 -module(hird_multi).
 -export([run/3, hird_tools@/0]).
 
-%% src/multi.hird:4
+%% src/multi.hird:3
 run(F, Lh, Th) ->
     Handlers@5 = #{
         log => fun(Args@1, _Handlers@2) -> Lh(Args@1) end,

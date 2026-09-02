@@ -7,14 +7,14 @@ expression: "emit_joined(program(\"Duo\"), \"Duo\")"
 -module(hird_duo).
 -export([boot/1]).
 
-%% src/duo.hird:9
+%% src/duo.hird:8
 boot(_Handlers@) ->
     {ok, Pid@1} = hird_pair:start_link(1, 2),
     Pid@1.
 
 %%%% hird_pair.erl
 %% Generated from src/duo.hird by the Hirð compiler. Do not edit.
-%% src/duo.hird:3
+%% src/duo.hird:2
 -module(hird_pair).
 -behaviour(gen_server).
 -export([start_link/2]).

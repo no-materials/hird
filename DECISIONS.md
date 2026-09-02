@@ -742,6 +742,10 @@ only modules handed to the checker.
   effect row's head-keyed index meaningful (`Tool<ReadRepo>` and
   `Tool<CreateTicket>` share the `Tool` bucket — ADR-011) and needs no per-tool
   effect registration.
+  As a built-in, `Tool` is pre-declared by the checker like `Install` — and so
+  are the other checker-known parametric heads (`Send`, `Await`, `Spawn`,
+  `Schedule`, `Exn`); a user `effect` declaration of any of them is redundant
+  and warns.
 - The invocation-record representation is deliberately not frozen. The audit-log
   work that consumes records inherits an unconstrained choice of wire schema and
   pins field-ordering and singleton-tag concerns then; this decision fixes only

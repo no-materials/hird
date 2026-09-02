@@ -1,7 +1,7 @@
 ---
 source: crates/hird-check/tests/tools.rs
-expression: "check_str(\"effect Tool<t>\\n\\\n         tool Wrap<t, t> : { value: t } -> t\")"
+expression: "check_str(\"tool Wrap<t, t> : { value: t } -> t\")"
 ---
 wrap : ∀a. { value: a } → a ! {Tool<Wrap>}
 record WrapInvocation : { args: { value: a }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }
-error[C0013] 20..24: type parameter `t` is declared twice
+error[C0013] 5..9: type parameter `t` is declared twice

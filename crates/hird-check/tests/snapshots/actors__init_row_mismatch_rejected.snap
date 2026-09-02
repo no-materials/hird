@@ -1,9 +1,9 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type St = St(Int)\\n\\\n         tool Boot : { path: Path } -> St\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Halt,\\n\\\n           init: fn(p: Path) -> St ! {} = boot({ path: p }),\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
+expression: "check_str(\"type Path = Path(String)\\n\\\n         type St = St(Int)\\n\\\n         tool Boot : { path: Path } -> St\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Halt,\\n\\\n           init: fn(p: Path) -> St ! {} = boot({ path: p }),\\n\\\n           handle Halt, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\")"
 ---
 Halt : Msg
 Path : String → Path
 St : Int → St
 boot : { path: Path } → St ! {Tool<Boot>}
-error[C0030] 165..183: declared {} but body performs {Tool<Boot>}
+error[C0030] 150..168: declared {} but body performs {Tool<Boot>}

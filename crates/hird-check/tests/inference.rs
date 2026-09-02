@@ -550,8 +550,8 @@ fn single_effect_on_signature() {
 fn multiple_effects_on_signature() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Spawn\n\
-         fn worker(run: Int -> Int ! {Spawn, Log}) -> Int ! {Spawn, Log} = run(0)"
+         effect Fork\n\
+         fn worker(run: Int -> Int ! {Fork, Log}) -> Int ! {Fork, Log} = run(0)"
     ));
 }
 
@@ -559,8 +559,7 @@ fn multiple_effects_on_signature() {
 #[test]
 fn parametric_effect_on_signature() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         type Repo = MkRepo\n\
+        "type Repo = MkRepo\n\
          fn read(run: Int -> Int ! {Tool<Repo>}) -> Int ! {Tool<Repo>} = run(0)"
     ));
 }
@@ -583,10 +582,7 @@ fn unknown_effect_is_rejected() {
 /// Applying an effect to the wrong number of type arguments is an error.
 #[test]
 fn effect_arity_mismatch_is_rejected() {
-    insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         fn f(x: Int) -> Int ! {Tool} = x"
-    ));
+    insta::assert_snapshot!(check_str("fn f(x: Int) -> Int ! {Tool} = x"));
 }
 
 /// A row may name at most one row variable.
@@ -611,8 +607,8 @@ fn pure_application_adds_no_effect() {
 fn sequential_lets_union_effects() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Spawn\n\
-         fn f(a: Int -> Int ! {Log}, b: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+         effect Fork\n\
+         fn f(a: Int -> Int ! {Log}, b: Int -> Int ! {Fork}) -> Int ! {Log, Fork} =\n\
            let x = a(0) in b(x)"
     ));
 }
@@ -622,8 +618,8 @@ fn sequential_lets_union_effects() {
 fn match_unions_scrutinee_and_arms() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Spawn\n\
-         fn f(s: Int -> Bool ! {Log}, a: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+         effect Fork\n\
+         fn f(s: Int -> Bool ! {Log}, a: Int -> Int ! {Fork}) -> Int ! {Log, Fork} =\n\
            match s(0) { True -> a(0), False -> 0, }"
     ));
 }
@@ -633,8 +629,8 @@ fn match_unions_scrutinee_and_arms() {
 fn if_unions_branch_effects() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Spawn\n\
-         fn f(c: Int -> Bool ! {Log}, t: Int -> Int ! {Spawn}) -> Int ! {Log, Spawn} =\n\
+         effect Fork\n\
+         fn f(c: Int -> Bool ! {Log}, t: Int -> Int ! {Fork}) -> Int ! {Log, Fork} =\n\
            if c(0) then t(0) else 0"
     ));
 }
@@ -747,7 +743,6 @@ fn under_declared_effect_rejected() {
 fn mismatch_points_at_offending_call() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Tool<t>\n\
          type X = MkX\n\
          fn f(logger: Int -> Int ! {Log}, tooler: Int -> Int ! {Tool<X>}) -> Int ! {Log} =\n\
            let a = logger(0) in tooler(0)"
@@ -760,8 +755,8 @@ fn mismatch_points_at_offending_call() {
 fn over_declared_effect_rejected() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Spawn\n\
-         fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Spawn} = run(0)"
+         effect Fork\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log, Fork} = run(0)"
     ));
 }
 
@@ -786,7 +781,6 @@ fn handle_subtracts_handled_effect() {
 fn handle_leaves_unhandled_effect() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Tool<t>\n\
          type Repo = MkRepo\n\
          fn partial(f: Int -> Int ! {Log, Tool<Repo>}, h: Int -> Int) -> Int ! {Tool<Repo>} =\n\
            handle { Log -> h } in f(0)"
@@ -799,7 +793,6 @@ fn handle_leaves_unhandled_effect() {
 fn handle_adds_handler_effects() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn audited(f: Int -> Int ! {Tool<Repo>}, logh: { x: Int } -> Int ! {Log}) -> Int ! {Log} =\n\
            handle { Tool<Repo> -> logh } in f(0)"
@@ -812,7 +805,6 @@ fn handle_adds_handler_effects() {
 fn handle_multiple_arms() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn multi(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
            handle { Log -> lh, Tool<Repo> -> th } in f(0)"
@@ -825,7 +817,6 @@ fn handle_multiple_arms() {
 fn handle_nested_blocks() {
     insta::assert_snapshot!(check_str(
         "effect Log\n\
-         effect Tool<t>\n\
          tool Repo : { x: Int } -> Int\n\
          fn nested(f: Int -> Int ! {Log, Tool<Repo>}, lh: Int -> Int, th: { x: Int } -> Int) -> Int =\n\
            handle { Log -> lh } in handle { Tool<Repo> -> th } in f(0)"
@@ -845,8 +836,7 @@ fn handle_unknown_effect_rejected() {
 #[test]
 fn handle_effect_arity_mismatch_rejected() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         fn bad(h: Int -> Int) -> Int = handle { Tool -> h } in 0"
+        "fn bad(h: Int -> Int) -> Int = handle { Tool -> h } in 0"
     ));
 }
 
@@ -882,8 +872,7 @@ fn install_adds_install_effect() {
 #[test]
 fn install_keeps_body_effects() {
     insta::assert_snapshot!(check_str(
-        "effect Tool<t>\n\
-         tool Repo : { x: Int } -> Int\n\
+        "tool Repo : { x: Int } -> Int\n\
          fn f(g: Int -> Int ! {Tool<Repo>}, h: { x: Int } -> Int) -> Int ! {Tool<Repo>, Install} =\n\
            install { Tool<Repo> -> h } in g(0)"
     ));
@@ -964,8 +953,7 @@ fn crash_carries_no_effect_but_domain_errors_do() {
     // `Exn` entry in the row (`recover`), while a crash is invisible to the row
     // (`abort` is pure-rowed despite never returning).
     insta::assert_snapshot!(check_str(
-        "effect Exn<t>\n\
-         type ParseError = ParseError(String)\n\
+        "type ParseError = ParseError(String)\n\
          fn recover(f: Int -> Int ! {Exn<ParseError>}) -> Int ! {Exn<ParseError>} = f(0)\n\
          fn abort() -> Int = crash!(\"unrecoverable\")"
     ));

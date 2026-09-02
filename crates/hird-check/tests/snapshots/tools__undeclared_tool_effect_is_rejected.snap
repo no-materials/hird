@@ -1,10 +1,10 @@
 ---
 source: crates/hird-check/tests/tools.rs
-expression: "check_str(\"effect Tool<t>\\n\\\n         type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn plan(p: Path) -> RepoState = read_repo({ path: p })\")"
+expression: "check_str(\"type Path = Path(String)\\n\\\n         type RepoState = RepoState(String)\\n\\\n         tool ReadRepo : { path: Path } -> RepoState\\n\\\n         fn plan(p: Path) -> RepoState = read_repo({ path: p })\")"
 ---
 Path : String → Path
 RepoState : String → RepoState
 plan : Path → RepoState
 read_repo : { path: Path } → RepoState ! {Tool<ReadRepo>}
 record ReadRepoInvocation : { args: { path: Path }, caller: CallerId, result: RepoState, timestamp: Timestamp, tool: String }
-error[C0030] 150..173: declared {} but body performs {Tool<ReadRepo>}
+error[C0030] 135..158: declared {} but body performs {Tool<ReadRepo>}

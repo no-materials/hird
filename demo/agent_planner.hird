@@ -11,10 +11,6 @@
 
 module AgentPlanner
 
-effect Tool<t>
-effect Send<t>
-effect Await<t>
-
 // ── domain types ─────────────────────────────────────────────────
 
 type Path = Path(String)

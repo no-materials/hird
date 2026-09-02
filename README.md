@@ -71,8 +71,6 @@ so the smallest observable program is a tool call. Save this as
 ```
 module Hello
 
-effect Tool<t>
-
 tool Say : { message: String } → ()
 
 fn quiet_say(args: { message: String }) → () = ()

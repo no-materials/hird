@@ -2,4 +2,4 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"fn boot() ! {Supervise} = supervise(GhostSup)\"))"
 ---
-error[C0052] 1043..1051: `GhostSup` is not a declared supervisor
+error[C0052] 1028..1036: `GhostSup` is not a declared supervisor

@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(&format!(\"{PLANNER_SUP}fn planner() -> Pid<PlannerMsg> ! {{}} = child(PlannerSup, ghost)\")))"
 ---
-error[C0053] 1250..1255: supervisor `PlannerSup` declares no child with id `ghost`
+error[C0053] 1235..1240: supervisor `PlannerSup` declares no child with id `ghost`
 supervisor PlannerSup ! {Tool<ReadRepo>}

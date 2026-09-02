@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"effect Tool<t>\\n\\\n         effect Send<a, b>\\n\\\n         tool Say : { message: String } -> ()\\n\\\n         fn main() -> () ! {Tool<Say>} = say({ message: \\\"hi\\\" })\")"
+---
+main : () → () ! {Tool<Say>}
+say : { message: String } → () ! {Tool<Say>}
+record SayInvocation : { args: { message: String }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }
+warning[C0056] 7..11: effect `Tool` is built in; this declaration is redundant and can be removed
+warning[C0056] 22..26: effect `Send` is built in; this declaration is redundant and can be removed

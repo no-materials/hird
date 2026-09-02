@@ -47,7 +47,6 @@ fn check_str(source: &str) -> String {
 /// cannot be supervised, and pure/effectful config helpers — the surface the
 /// supervisor tests declare children over.
 const PRELUDE: &str = "\
-effect Tool<t>
 type Path = Path(String)
 type Title = Title(String)
 type St = St(Int)
@@ -440,8 +439,7 @@ fn child_unknown_id() {
 #[test]
 fn install_supervise_lookup_composes() {
     insta::assert_snapshot!(check_str(&with_prelude(&format!(
-        "{PLANNER_SUP}effect Send<t>
-fn planner_mock(args: {{ path: Path }}) -> St = St(9)
+        "{PLANNER_SUP}fn planner_mock(args: {{ path: Path }}) -> St = St(9)
 fn main() ! {{Install, Supervise, Send<PlannerMsg>}} =
   install {{ Tool<ReadRepo> -> planner_mock }} in
   let u = supervise(PlannerSup) in
@@ -455,8 +453,7 @@ fn main() ! {{Install, Supervise, Send<PlannerMsg>}} =
 #[test]
 fn start_args_may_acquire_clock() {
     insta::assert_snapshot!(check_str(&with_prelude(
-        "effect Schedule<t>
-type Cfg = Cfg(Clock, Int)
+        "type Cfg = Cfg(Clock, Int)
 actor Heart {
   state: Cfg,
   message: HeartMsg = | Beat,

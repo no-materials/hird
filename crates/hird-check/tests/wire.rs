@@ -20,8 +20,6 @@ use proptest::prelude::*;
 /// The planner demo's tool declarations, which the golden records draw
 /// their signatures from.
 const PLANNER_TOOLS: &str = "\
-effect Tool<t>
-effect Exn<t>
 type TicketId = TicketId(String)
 type HttpError = HttpError(Int, String)
 tool ReadRepo : { path: String } -> { files: List<String>, status: String }
@@ -209,8 +207,7 @@ fn audit_sink_is_a_capability() {
 #[test]
 fn omitting_the_sink_fails_to_type_check() {
     insta::assert_snapshot!(render(&check(
-        "effect Tool<t>\n\
-         effect Audit<t>\n\
+        "effect Audit<t>\n\
          type Path = Path(String)\n\
          type RepoState = RepoState(String)\n\
          type AuditSink = AuditSink(String)\n\

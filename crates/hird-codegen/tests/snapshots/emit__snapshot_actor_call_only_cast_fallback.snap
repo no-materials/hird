@@ -3,7 +3,7 @@ source: crates/hird-codegen/tests/emit.rs
 expression: "behaviour_module(program(\"Echo\"), \"Echo\", \"hird_responder\")"
 ---
 %% Generated from src/echo.hird by the Hirð compiler. Do not edit.
-%% src/echo.hird:4
+%% src/echo.hird:3
 -module(hird_responder).
 -behaviour(gen_server).
 -export([start_link/1]).

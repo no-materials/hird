@@ -6,7 +6,7 @@ expression: "emit(program(\"Wire\"), \"Wire\")"
 -module(hird_wire).
 -export([file/2, hird_tools@/0]).
 
-%% src/wire.hird:9
+%% src/wire.hird:7
 file(T, Handlers@) ->
     hird_tool_dispatch:call(create_ticket, <<"Wire.file"/utf8>>, Handlers@, #{title => T, body => <<"filed"/utf8>>}).
 

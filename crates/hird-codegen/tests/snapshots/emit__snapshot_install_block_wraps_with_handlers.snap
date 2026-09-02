@@ -6,15 +6,15 @@ expression: "emit(program(\"Deploy\"), \"Deploy\")"
 -module(hird_deploy).
 -export([mock/1, unit_log/1, demo/2, hird_tools@/0]).
 
-%% src/deploy.hird:6
+%% src/deploy.hird:5
 mock(_Args) ->
     {st, 0}.
 
-%% src/deploy.hird:7
+%% src/deploy.hird:6
 unit_log(_Msg) ->
     {st, 1}.
 
-%% src/deploy.hird:8
+%% src/deploy.hird:7
 demo(Run, Handlers@) ->
     hird_handlers:with_handlers(
         [

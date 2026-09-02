@@ -8,6 +8,19 @@ minor versions may break the language surface and the tooling APIs.
 The tree-sitter grammar (`tree-sitter-hird/`) versions on its own
 schedule and is not covered by these entries.
 
+## [Unreleased]
+
+### Changed
+
+- **Built-in effect heads need no declaration.** `Tool`, `Send`, `Await`,
+  `Spawn`, `Schedule`, and `Exn` are pre-declared like `Install`,
+  `Supervise`, `Stand`, and `Clock`, so a module no longer opens with
+  `effect Tool<t>` before its rows may name a tool call or a message send.
+  A declaration of a built-in head is accepted with a warning (C0056) and
+  otherwise ignored; user heads (`effect Audit<t>`) are declared as before.
+  The IR pretty-printer no longer synthesises declarations for built-in
+  heads. The demos, fixtures, and docs drop the redundant lines.
+
 ## [0.2.0] — 2026-09-01
 
 ### Added

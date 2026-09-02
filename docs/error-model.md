@@ -36,8 +36,6 @@ A recoverable failure is an `Exn<E>` effect, where `E` is the error type. It
 appears in the row exactly like any other effect:
 
 ```
-effect Exn<t>
-
 fn parse_config(raw: String) → Config ! {Exn<ParseError>} = ...
 ```
 

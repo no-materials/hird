@@ -9,4 +9,4 @@ Status : Int → Status
 handed : Clock → Pid<Msg> → () ! {Schedule<Msg>}
 quiet : Pid<Msg> → () ! {Clock, Schedule<Msg>}
 tick : Pid<Msg> → () ! {Clock, Schedule<Msg>}
-error[C0030] 599..606: declared {Schedule<Msg>} but body performs {Clock, Schedule<Msg>}
+error[C0030] 549..556: declared {Schedule<Msg>} but body performs {Clock, Schedule<Msg>}

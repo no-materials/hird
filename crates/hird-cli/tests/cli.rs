@@ -13,16 +13,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 /// A self-contained program with a tool, a mock handler, and `fn main`.
-const PING: &str = "effect Tool<t>\n\
-     tool Ping : { msg: String } -> String\n\
+const PING: &str = "tool Ping : { msg: String } -> String\n\
      fn fake_ping(args: { msg: String }) -> String ! {} = \"pong\"\n\
      fn main() ! {} =\n\
        handle { Tool<Ping> -> fake_ping } in\n\
          match ping({ msg: \"hi\" }) { _ -> () }";
 
 /// An actor and supervisor module with a tool, for the effect graph.
-const PLANNER: &str = "effect Tool<t>\n\
-     type Path = Path(String)\n\
+const PLANNER: &str = "type Path = Path(String)\n\
      type RepoState = RepoState(String)\n\
      type St = St(Int)\n\
      tool ReadRepo : { path: Path } -> RepoState\n\
@@ -46,9 +44,7 @@ const PLANNER: &str = "effect Tool<t>\n\
 
 /// A standing program: a supervised actor that logs each note it is sent,
 /// and a `main` that supervises it, sends one note, then stands.
-const STANDING: &str = "effect Tool<t>\n\
-     effect Send<t>\n\
-     type St = St(Int)\n\
+const STANDING: &str = "type St = St(Int)\n\
      tool Log : { message: String } -> ()\n\
      fn fake_log(args: { message: String }) -> () = ()\n\
      fn config() -> St = St(0)\n\
@@ -75,9 +71,7 @@ const STANDING: &str = "effect Tool<t>\n\
 /// A standing program whose two actors stop themselves deliberately: the
 /// permanent one is restarted (its init logs again), the transient one
 /// stays stopped (its init logs exactly once).
-const STOPPING: &str = "effect Tool<t>\n\
-     effect Send<t>\n\
-     type St = St(Int)\n\
+const STOPPING: &str = "type St = St(Int)\n\
      tool Log : { message: String } -> ()\n\
      fn fake_log(args: { message: String }) -> () = ()\n\
      fn config() -> St = St(0)\n\
@@ -114,9 +108,7 @@ const STOPPING: &str = "effect Tool<t>\n\
 /// A standing program with two permanent actors under a `one_for_all`
 /// supervisor: stopping the last child restarts the whole group, so both
 /// inits log a second time.
-const ALL: &str = "effect Tool<t>\n\
-     effect Send<t>\n\
-     type St = St(Int)\n\
+const ALL: &str = "type St = St(Int)\n\
      tool Log : { message: String } -> ()\n\
      fn fake_log(args: { message: String }) -> () = ()\n\
      fn config() -> St = St(0)\n\
@@ -152,9 +144,7 @@ const ALL: &str = "effect Tool<t>\n\
 /// A standing program with three permanent actors under a `rest_for_one`
 /// supervisor: stopping the middle child restarts it and the later sibling,
 /// while the earlier one keeps standing (its init logs exactly once).
-const REST: &str = "effect Tool<t>\n\
-     effect Send<t>\n\
-     type St = St(Int)\n\
+const REST: &str = "type St = St(Int)\n\
      tool Log : { message: String } -> ()\n\
      fn fake_log(args: { message: String }) -> () = ()\n\
      fn config() -> St = St(0)\n\
@@ -196,8 +186,7 @@ const REST: &str = "effect Tool<t>\n\
        stand()";
 
 /// A program whose `main` leaks a tool effect (no `handle` block).
-const LEAKY: &str = "effect Tool<t>\n\
-     tool Ping : { msg: String } -> String\n\
+const LEAKY: &str = "tool Ping : { msg: String } -> String\n\
      fn main() ! {Tool<Ping>} = match ping({ msg: \"hi\" }) { _ -> () }";
 
 /// A module with no `fn main`.
@@ -872,10 +861,7 @@ fn run_rest_for_one_restarts_later_siblings() {
 // ── time: scheduled sends and request timeouts ─────────────────
 
 /// An actor that swallows its requests: the handler never replies.
-const MUTE: &str = "effect Spawn<t>\n\
-     effect Send<t>\n\
-     effect Await<t>\n\
-     type St = St(Int)\n\
+const MUTE: &str = "type St = St(Int)\n\
      actor Mute {\n\
        state: St,\n\
        message: MuteMsg = | Get(ReplyTo<Int>),\n\
@@ -995,7 +981,6 @@ fn run_request_timeout_override_is_honoured() {
 /// The pure half of a two-module program: types and functions the main
 /// module imports unqualified.
 const BACKLOG: &str = "module Backlog\n\
-     effect Tool<t>\n\
      tool Note : { message: String } -> ()\n\
      pub type Task = Task(Int, String)\n\
      pub type Tasks = Cons(Task, Tasks) | Nil\n\
@@ -1022,9 +1007,6 @@ const BACKLOG: &str = "module Backlog\n\
 /// unless every use behaved.
 const IMPORTER: &str = "module App\n\
      use Backlog.{Task, Tasks, Cons, Nil, actionable, announce}\n\
-     effect Tool<t>\n\
-     effect Send<t>\n\
-     effect Await<t>\n\
      tool Note : { message: String } -> ()\n\
      fn demo_note(args: { message: String }) -> () = ()\n\
      type St = St(Int)\n\

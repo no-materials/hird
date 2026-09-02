@@ -8,7 +8,7 @@ expression: "graph.to_json_pretty().expect(\"graph serializes\")"
   "actors": [
     {
       "name": "Planner",
-      "line": 11,
+      "line": 9,
       "state": {
         "display": "St",
         "structure": {
@@ -173,7 +173,7 @@ expression: "graph.to_json_pretty().expect(\"graph serializes\")"
   "supervisors": [
     {
       "name": "PlannerSup",
-      "line": 19,
+      "line": 17,
       "strategy": "one_for_one",
       "intensity": 5,
       "period": 60,
@@ -223,7 +223,7 @@ expression: "graph.to_json_pretty().expect(\"graph serializes\")"
   "tools": [
     {
       "name": "ReadRepo",
-      "line": 7,
+      "line": 5,
       "params": [],
       "input": {
         "display": "{ path: Path }",
