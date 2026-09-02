@@ -632,7 +632,8 @@ code rather than a placeholder.
 ## ADR-015: Tool declarations — desugaring, invocation records, and the standard-library boundary
 
 **Date**: 2026-07-01
-**Status**: Accepted (resolves OD2)
+**Status**: Accepted (resolves OD2; the named-record / type-alias question
+clause 2 deferred is decided by ADR-029)
 
 ### Context
 
@@ -1919,6 +1920,156 @@ deliberate stop is not a crash.
   the ADR-019 dropped-`ReplyTo` caveat, unchanged.
 - The planner demo's `Shutdown` handler is `= Stop` and the child is
   `transient`; the stop is real and the tree leaves it stopped.
+
+---
+
+## ADR-029: Naming record shapes — structural type aliases, not nominal records
+
+**Date**: 2026-09-02
+**Status**: Accepted (decides the question ADR-015 clause 2 deferred)
+
+### Context
+
+A record shape cannot be named. A tool's argument record is spelled once in
+the `tool` declaration and again in the signature of every function that
+implements it:
+
+```
+tool Log : { level: String, message: String } → ()
+
+fn demo_log(args: { level: String, message: String }) → () = ()
+fn quiet_log(args: { level: String, message: String }) → () = ()
+```
+
+Actor state is positional for the same reason — `HeartState(Clock, Int, Int)`
+— so every handler destructures three anonymous fields to reach one, and a
+reader has to remember which `Int` is the period. ADR-015 met the gap when it
+needed a *named structural record* for the derived invocation record, found
+no form that was both named and record-shaped, and rejected adding one as a
+side effect of tool work while calling it "a language feature in its own
+right". This decision takes that feature on.
+
+The type system today has exactly two kinds of type: structural records
+(anonymous, keyed by label, closed) and nominal ADTs built from positional
+constructors, with `opaque` on an ADT as the capability discipline (ADR-006,
+ADR-010). Tool arguments and results must be wire-representable and serialise
+as JSON objects (ADR-015, ADR-016). Any way of naming a record shape has to
+say where it sits between those two kinds and what it does to the wire.
+
+### Decision
+
+1. **A `type alias` names a type; it is not a new type.**
+   `type alias Name<params> = T` binds `Name` in the type namespace to the
+   type expression `T`, and every use of `Name<args>` elaborates to `T` with
+   the parameters substituted. An alias has no identity: two aliases of the
+   same shape, or an alias and the shape written out, are the same type. Any
+   type expression may be aliased — a record is the motivating case, tuples
+   and function types come for free.
+
+   ```
+   type alias LogArgs = { level: String, message: String }
+   type alias HeartState = { clock: Clock, period: Int, beats: Int }
+   type alias Handler<a> = a → () ! {Tool<Log>}
+
+   tool Log : LogArgs → ()
+   fn demo_log(args: LogArgs) → () = ()
+   ```
+
+   The keyword pair `type alias` is chosen over reusing `type Name = T`
+   because the latter is ambiguous with a nullary constructor list
+   (`type Flag = Active`): the reader, and the parser, would have to decide
+   from the shape of the right-hand side whether a nominal type or a name
+   for a shape was meant. `alias` is a contextual keyword, like `opaque`.
+
+2. **Nominal identity stays with ADTs.** There is no nominal record form.
+   Where a type's identity matters — a capability that must not be forged, a
+   message type, a wire type that must not unify with a look-alike — it is an
+   ADT, opaque when its constructor must stay module-private. Records, named
+   or not, are for shape. An alias therefore cannot be `opaque` (there is
+   nothing to hide: the shape is the type), and `pub opaque type alias` is a
+   compile error.
+
+3. **Aliases are transparent to everything downstream.** Elaboration expands
+   them, so unification, effect rows, exhaustiveness, the wire-representability
+   check, the audit wire format, the IR, and codegen see the expanded type and
+   change in no way. A `tool` whose arguments are an alias of a record
+   serialises exactly as one written out. The IR carries expanded types and
+   the pretty-printer prints them; alias-preserving display in diagnostics and
+   tooling is a later refinement and is additive.
+
+4. **Aliases are non-recursive and arity-checked.** An alias that mentions
+   itself, directly or through other aliases, is a compile error — recursion
+   is what ADTs are for. A parametric alias is applied at its declared arity,
+   under the existing arity diagnostics. A module exports an alias with
+   `pub type alias`; an importer sees the expansion, so the module interface
+   needs no alias-specific entry beyond the name and its expansion.
+
+5. **Record update is the alias's companion.** Naming the state shape only
+   pays off if a handler can rebuild it without respelling every field:
+
+   ```
+   handle Beat, st ! {Tool<Log>, Schedule<HeartMsg>} =
+     log({ message: "beat" });
+     schedule(st.clock, self(), Beat, st.period);
+     Continue({ beats: st.beats + 1, ..st }),
+   ```
+
+   A record literal may end in `..base`: the listed fields are taken from
+   the literal and every other field from `base`, so a literal and an update
+   are one construct, not two. The result has the type of `base`, which must
+   resolve to a record type carrying every listed field (an unresolved base
+   needs an annotation, as field access already requires — C0009; a field
+   the base lacks is C0010). It cannot add or remove fields: records are
+   closed. Exactly one base, in the last position; `{ ..base }` with no
+   fields is an error, not a copy. It lowers to an Erlang map update, the
+   encoding records already have. The `..` token is new to the lexer and is
+   reserved for "the rest" — a later record pattern `{ clock, .. }` reuses
+   it. This form is chosen over `{ base with f: v }` because it adds no
+   contextual keyword, keeps one record construct, and pairs with the
+   `label: value` literal the way Rust's does, where `with` pairs with the
+   `label = value` records of OCaml and Elm.
+
+### Alternatives considered
+
+- **Nominal record types** (`type HeartState = { clock: Clock, … }` as a
+  distinct type with field access and update). Rejected: it would be a second
+  nominal mechanism beside ADTs and would need its own answers to opacity,
+  module export, exhaustiveness over sums that contain records, and — the
+  decisive point — its representation on the wire, the very question that
+  made ADR-015 reject a constructor-wrapped invocation record. Everything a
+  nominal record offers over an alias is identity, and ADTs already provide
+  identity.
+- **Record-bodied constructors**
+  (`type HeartState = HeartState { clock: Clock, … }`). Reuses the
+  constructor machinery and keeps identity, but names the fields of a nominal
+  type without giving tools a name for a *structural* shape, so it leaves the
+  argument-record duplication in place; and field access on a
+  multi-constructor sum has no natural meaning. It remains an additive option
+  on top of this decision if nominal records with named fields are ever
+  wanted.
+- **No new form.** Lambdas in `install` and `handle` arms are inferred from
+  the tool signature, so the duplication can be avoided by convention.
+  Rejected: named top-level handler functions are the readable form the demos
+  use, actor state stays positional, and ADR-015's invocation record still
+  has no surface form.
+
+### Consequences
+
+- The language keeps one structural and one nominal kind of type. An alias
+  is a name, an ADT is an identity, and the rule for choosing is a sentence.
+- Tool signatures and their handlers name a shape once. Actor state can be a
+  record with field access and update; state encapsulation is unaffected,
+  since the state value was already unreachable structurally (ADR-018).
+- The wire format, the IR, codegen, and the effect graph do not change.
+- A structurally identical record from elsewhere is accepted where an alias
+  is expected. That is the trade-off of shape over identity; where it is not
+  acceptable, the answer is an ADT.
+- The derived invocation record of ADR-015 can become an ordinary exported
+  alias when the standard library exists, with no migration of user code.
+- Diagnostics may print the expanded shape where the source wrote an alias
+  name; preserving the name is additive and deferred.
+- ADR-009 is untouched: an alias declaration is a declaration, and a record
+  literal with a `..base` is an expression form, not a block.
 
 ---
 
