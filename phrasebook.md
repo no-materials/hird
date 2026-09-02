@@ -143,15 +143,15 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) → PlannerState ! {Tool<Log>} = initial_state(config),
+  init: fn(config: PlannerConfig) ! {Tool<Log>} = initial_state(config),
 
-  handle PlanRepo(path), st → Next<PlannerState>
+  handle PlanRepo(path), st
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} = plan_repo(path, st),
 
-  handle GetStatus(reply_to), st → Next<PlannerState>
+  handle GetStatus(reply_to), st
     ! {Send<PlannerStatus>} = reply_status(reply_to, st),
 
-  handle Shutdown, _ → Next<PlannerState> ! {} = Stop,
+  handle Shutdown, _ ! {} = Stop,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
 ```
 
@@ -162,6 +162,9 @@ actor Planner {
   is the declared `state` type; the binder name is the author's choice.
 - A handler body produces a `Next<State>` outcome, never a bare state:
   `Continue(next)` keeps the actor running, `Stop` stops it deliberately.
+  Neither a handler nor `init` writes a return type — the outcome type is
+  fixed by `state:`, and a `→ …` in either position is a parse error
+  (P0006).
   `Next<a> = Continue(a) | Stop` is predeclared (constructors and all, like
   `Bool`), so helpers may build and return outcomes. A deliberate stop is
   not a crash: a `transient` child stays stopped, a `permanent` one is

@@ -776,9 +776,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `handle Pattern, State → ReturnType ! {Effects} = body`. The message
-    /// pattern is followed by the current-state pattern; the body is a bare
-    /// expression after `=` (no brace-delimited block form).
+    /// `handle Pattern, State ! {Effects} = body`. The message pattern is
+    /// followed by the current-state pattern; the body is a bare expression
+    /// after `=` (no brace-delimited block form). A handler has no return
+    /// type — the outcome is always `Next<State>` — so a `→ …` here is
+    /// reported and skipped.
     fn parse_actor_handler(&mut self) {
         self.start_node(SyntaxKind::ACTOR_HANDLER);
         self.expect(SyntaxKind::HANDLE_KW);
@@ -793,6 +795,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             );
         }
         if self.at(SyntaxKind::ARROW) {
+            self.emit(
+                DiagnosticCode::P0006,
+                "a handler has no return type",
+                Some("the outcome type is fixed by `state:` as `Next<State>`; remove `\u{2192} …`"),
+            );
             self.parse_return_type();
         }
         if self.at(SyntaxKind::BANG) {
@@ -809,7 +816,9 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `fn ( params ) → Ret ! {Effects}` — an unnamed, bodyless signature.
+    /// `fn ( params ) ! {Effects}` — an unnamed, bodyless signature (an actor
+    /// `init`). It has no return type — init always returns the state — so a
+    /// `→ …` here is reported and skipped.
     fn parse_fn_sig(&mut self) {
         self.start_node(SyntaxKind::FN_SIG);
         self.expect(SyntaxKind::FN_KW);
@@ -819,6 +828,11 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
         self.expect(SyntaxKind::R_PAREN);
         if self.at(SyntaxKind::ARROW) {
+            self.emit(
+                DiagnosticCode::P0006,
+                "init has no return type",
+                Some("init returns the `state:` type; remove `\u{2192} …`"),
+            );
             self.parse_return_type();
         }
         if self.at(SyntaxKind::BANG) {

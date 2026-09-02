@@ -8,4 +8,4 @@ Plan : Path → PlannerMsg
 St : Int → St
 boot : ∀a. a
 read_repo : { path: Path } → St ! {Tool<ReadRepo>}
-error[C0001] 384..386: type mismatch: expected `St`, got `Int`
+error[C0001] 354..356: type mismatch: expected `St`, got `Int`

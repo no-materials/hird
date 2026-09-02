@@ -1,9 +1,9 @@
 ---
 source: crates/hird-check/tests/actors.rs
-expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc | Dec,\\n\\\n           init: fn(s: St) -> St ! {} = s,\\n\\\n           handle Inc, st -> Next<St> ! {} = Continue(st),\\n\\\n           handle Dec, st -> Next<St> ! {} = Continue(st),\\n\\\n         }\\n\\\n         fn describe(m: Msg) -> Int = match m { Inc -> 1 }\")"
+expression: "check_str(\"type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Msg = | Inc | Dec,\\n\\\n           init: fn(s: St) ! {} = s,\\n\\\n           handle Inc, st ! {} = Continue(st),\\n\\\n           handle Dec, st ! {} = Continue(st),\\n\\\n         }\\n\\\n         fn describe(m: Msg) -> Int = match m { Inc -> 1 }\")"
 ---
 Dec : Msg
 Inc : Msg
 St : Int → St
 describe : Msg → Int
-error[C0015] 225..246: non-exhaustive match: missing case(s): `Dec`
+error[C0015] 195..216: non-exhaustive match: missing case(s): `Dec`

@@ -2,6 +2,6 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: []\n}\nsupervisor Sup {\n  strategy: one_for_one,\n  intensity: 1,\n  period: 1,\n  children: []\n}\"))"
 ---
-error[C0046] 1092..1095: duplicate supervisor `Sup`
+error[C0046] 1014..1017: duplicate supervisor `Sup`
 supervisor Sup ! {}
 supervisor Sup ! {}

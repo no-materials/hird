@@ -224,7 +224,7 @@ pub struct IrActorDef {
     pub span: IrSpan,
 }
 
-/// An actor's init function (`init: fn(params) → State ! {row} = body`).
+/// An actor's init function (`init: fn(params) ! {row} = body`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrActorInit {
     /// The parameters `spawn` arguments are checked against, in order.
@@ -238,7 +238,7 @@ pub struct IrActorInit {
 }
 
 /// One actor message handler
-/// (`handle Ctor(payload), st → State ! {row} = body`).
+/// (`handle Ctor(payload), st ! {row} = body`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrActorHandler {
     /// The message pattern (a constructor of the actor's message type).

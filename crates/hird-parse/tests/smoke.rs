@@ -277,14 +277,14 @@ fn actor_message_leading_pipe() {
 #[test]
 fn actor_init_signature() {
     insta::assert_snapshot!(render_cst(
-        "actor A { init: fn(c: Config) -> St ! {Log} = create(c) }"
+        "actor A { init: fn(c: Config) ! {Log} = create(c) }"
     ));
 }
 
 #[test]
 fn actor_handler_clause() {
     insta::assert_snapshot!(render_cst(
-        "actor A { handle Msg(x), st -> St ! {Log} = f(x, st) }"
+        "actor A { handle Msg(x), st ! {Log} = f(x, st) }"
     ));
 }
 
@@ -292,7 +292,24 @@ fn actor_handler_clause() {
 fn actor_handler_missing_state_pattern() {
     // The state pattern is required; its absence is reported but the rest of
     // the handler still parses.
-    insta::assert_snapshot!(render_cst("actor A { handle Msg(x) -> St = f(x) }"));
+    insta::assert_snapshot!(render_cst("actor A { handle Msg(x) ! {Log} = f(x) }"));
+}
+
+#[test]
+fn actor_handler_return_type_rejected() {
+    // A handler's outcome is always `Next<State>`, so a written return type
+    // is a P0006; it is skipped and the handler still parses.
+    insta::assert_snapshot!(render_cst(
+        "actor A { handle Msg(x), st -> Next<St> ! {Log} = f(x, st) }"
+    ));
+}
+
+#[test]
+fn actor_init_return_type_rejected() {
+    // Init always returns the state, so a written return type is a P0006.
+    insta::assert_snapshot!(render_cst(
+        "actor A { init: fn(c: Config) -> St ! {Log} = create(c) }"
+    ));
 }
 
 #[test]
@@ -305,9 +322,9 @@ actor Planner {
     | PlanRepo(Path)
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
-  init: fn(config: PlannerConfig) -> PlannerState ! {Log} = initial_state(config),
-  handle PlanRepo(path), st -> PlannerState ! {Tool<ReadRepo>, Log} = update(path, st),
-  handle Shutdown, st -> PlannerState ! {} = st,
+  init: fn(config: PlannerConfig) ! {Log} = initial_state(config),
+  handle PlanRepo(path), st ! {Tool<ReadRepo>, Log} = update(path, st),
+  handle Shutdown, st ! {} = st,
 } ! {Tool<ReadRepo>, Log}"
     ));
 }

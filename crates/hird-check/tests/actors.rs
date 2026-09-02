@@ -47,9 +47,9 @@ tool ReadRepo : { path: Path } -> St
 actor Planner {
   state: St,
   message: PlannerMsg = | Plan(Path) | Halt,
-  init: fn(start: St) -> St ! {} = start,
-  handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
-  handle Halt, st -> Next<St> ! {} = Continue(st),
+  init: fn(start: St) ! {} = start,
+  handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Halt, st ! {} = Continue(st),
 } ! {Tool<ReadRepo>}
 ";
 
@@ -73,9 +73,9 @@ fn reply_to_in_message_constructor() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Get(ReplyTo<Status>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Get(reply_to), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Get(reply_to), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -89,9 +89,9 @@ fn message_type_is_ordinary_adt() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Inc | Dec,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, st -> Next<St> ! {} = Continue(st),\n\
-           handle Dec, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, st ! {} = Continue(st),\n\
+           handle Dec, st ! {} = Continue(st),\n\
          }\n\
          fn describe(m: Msg) -> Int = match m { Inc -> 1 }"
     ));
@@ -183,8 +183,8 @@ fn effect_summary_mismatch_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Plan(Path),\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
-           init: fn(s: St) -> St ! {} = s,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           init: fn(s: St) ! {} = s,\n\
          }"
     ));
 }
@@ -200,8 +200,8 @@ fn effect_summary_overdeclaration_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Halt, st ! {} = Continue(st),\n\
          } ! {Tool<ReadRepo>}"
     ));
 }
@@ -217,8 +217,8 @@ fn handler_row_mismatch_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Plan(Path),\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Plan(p), st -> Next<St> ! {} = Continue(read_repo({ path: p })),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Plan(p), st ! {} = Continue(read_repo({ path: p })),\n\
          }"
     ));
 }
@@ -233,8 +233,8 @@ fn init_row_mismatch_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(p: Path) -> St ! {} = boot({ path: p }),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(p: Path) ! {} = boot({ path: p }),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -250,9 +250,9 @@ fn duplicate_handler_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Halt, st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -266,8 +266,8 @@ fn handler_unknown_constructor_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Nope, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Nope, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -282,8 +282,8 @@ fn handler_foreign_constructor_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Whoops, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Whoops, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -297,8 +297,8 @@ fn handler_body_must_return_next_outcome() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Halt, st -> Next<St> ! {} = 42,\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Halt, st ! {} = 42,\n\
          }"
     ));
 }
@@ -312,8 +312,8 @@ fn state_pattern_binds_state() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Inc,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
          }"
     ));
 }
@@ -328,7 +328,7 @@ fn missing_init_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -342,8 +342,8 @@ fn unknown_member_rejected() {
            state: St,\n\
            mailbox: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -356,14 +356,14 @@ fn duplicate_actor_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }\n\
          actor A {\n\
            state: St,\n\
            message: Msg2 = | Quit,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Quit, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Quit, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -378,9 +378,9 @@ type St = St(Int)
 actor Counter {
   state: St,
   message: Msg = | Inc | Get(ReplyTo<Status>),
-  init: fn(s: St) -> St ! {} = s,
-  handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),
-  handle Get(r), St(n) -> Next<St> ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),
+  init: fn(s: St) ! {} = s,
+  handle Inc, St(n) ! {} = Continue(St(n + 1)),
+  handle Get(r), St(n) ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),
 } ! {Send<Status>}
 ";
 
@@ -525,9 +525,9 @@ fn message_nested_reply_to_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Ask(Option<ReplyTo<Status>>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Ask(r), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Ask(r), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -543,9 +543,9 @@ fn message_reply_to_through_named_type_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Ask(Wrapper) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Ask(w), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Ask(w), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -562,9 +562,9 @@ fn message_reply_to_as_type_argument_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Ask(Box<ReplyTo<Status>>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Ask(b), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Ask(b), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -579,9 +579,9 @@ fn message_repeated_reply_to_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Two(ReplyTo<Status>, ReplyTo<Status>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Two(a, b), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Two(a, b), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -596,9 +596,9 @@ fn message_reply_to_with_payload_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Query(String, ReplyTo<Status>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Query(name, r), st -> Next<St> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Query(name, r), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -613,9 +613,9 @@ fn reply_to_in_state_type_accepted() {
          actor A {\n\
            state: Pending,\n\
            message: Msg = | Ask(ReplyTo<Status>) | Halt,\n\
-           init: fn(s: Pending) -> Pending ! {} = s,\n\
-           handle Ask(r), st -> Next<Pending> ! {} = Continue(st),\n\
-           handle Halt, st -> Next<Pending> ! {} = Continue(st),\n\
+           init: fn(s: Pending) ! {} = s,\n\
+           handle Ask(r), st ! {} = Continue(st),\n\
+           handle Halt, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -640,8 +640,8 @@ fn missing_handler_rejected() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Inc | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -655,8 +655,8 @@ fn missing_handlers_all_listed() {
          actor A {\n\
            state: St,\n\
            message: Msg = | Inc | Get(ReplyTo<Status>) | Halt,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -672,14 +672,14 @@ fn message_can_carry_foreign_pid() {
          actor Worker {\n\
            state: St,\n\
            message: WorkerMsg = | Run,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Run, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Run, st ! {} = Continue(st),\n\
          }\n\
          actor Boss {\n\
            state: St,\n\
            message: BossMsg = | Register(Pid<WorkerMsg>),\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Register(worker), st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Register(worker), st ! {} = Continue(st),\n\
          }"
     ));
 }
@@ -693,14 +693,14 @@ fn handler_can_spawn() {
          actor Worker {\n\
            state: St,\n\
            message: WorkerMsg = | Run,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Run, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Run, st ! {} = Continue(st),\n\
          }\n\
          actor Boss {\n\
            state: St,\n\
            message: BossMsg = | Hire,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Hire, st -> Next<St> ! {Spawn<WorkerMsg>} =\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Hire, st ! {Spawn<WorkerMsg>} =\n\
              let worker = spawn(Worker, st) in Continue(st),\n\
          } ! {Spawn<WorkerMsg>}"
     ));
@@ -716,9 +716,9 @@ type St = St(Int)
 actor Counter {
   state: St,
   message: Msg = | Inc | Get(ReplyTo<Status>),
-  init: fn(s: St) -> St ! {} = s,
-  handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),
-  handle Get(r), St(n) -> Next<St> ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),
+  init: fn(s: St) ! {} = s,
+  handle Inc, St(n) ! {} = Continue(St(n + 1)),
+  handle Get(r), St(n) ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),
 } ! {Send<Status>}
 ";
 
@@ -793,10 +793,10 @@ fn self_is_the_actors_own_pid() {
          actor Heart {\n\
            state: St,\n\
            message: HeartMsg = | Beat,\n\
-           init: fn(c: Cfg) -> St ! {Schedule<HeartMsg>} =\n\
+           init: fn(c: Cfg) ! {Schedule<HeartMsg>} =\n\
              match c { Cfg(clock, period) ->\n\
                let first = schedule(clock, self(), Beat, period) in St(clock, period) },\n\
-           handle Beat, St(clock, period) -> Next<St> ! {Schedule<HeartMsg>} =\n\
+           handle Beat, St(clock, period) ! {Schedule<HeartMsg>} =\n\
              let next = schedule(clock, self(), Beat, period) in Continue(St(clock, period)),\n\
          } ! {Schedule<HeartMsg>}\n\
          fn me() -> Pid<HeartMsg> = self()"

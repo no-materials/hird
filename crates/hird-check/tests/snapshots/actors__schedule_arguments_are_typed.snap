@@ -9,6 +9,6 @@ Status : Int → Status
 bad_clock : ∀a. a
 bad_delay : ∀a. a
 bad_message : ∀a. a
-error[C0001] 394..395: type mismatch: expected `Clock`, got `Int`
-error[C0001] 483..493: type mismatch: expected `Msg`, got `Status`
-error[C0001] 577..584: type mismatch: expected `Int`, got `String`
+error[C0001] 364..365: type mismatch: expected `Clock`, got `Int`
+error[C0001] 453..463: type mismatch: expected `Msg`, got `Status`
+error[C0001] 547..554: type mismatch: expected `Int`, got `String`

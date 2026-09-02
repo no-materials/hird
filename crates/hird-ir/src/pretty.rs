@@ -695,8 +695,7 @@ impl Printer {
             self.push(": ");
             self.push_display(&param.ty);
         }
-        self.push(") \u{2192} ");
-        self.push_display(&a.state);
+        self.push(")");
         if !a.init.effect_row.is_empty() {
             self.push(" ! ");
             self.push_display(&a.init.effect_row);
@@ -709,9 +708,6 @@ impl Printer {
             self.pattern(&handler.message);
             self.push(", ");
             self.pattern(&handler.state);
-            self.push(" \u{2192} Next<");
-            self.push_display(&a.state);
-            self.push(">");
             if !handler.effect_row.is_empty() {
                 self.push(" ! ");
                 self.push_display(&handler.effect_row);

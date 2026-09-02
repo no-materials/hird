@@ -38,6 +38,9 @@ pub enum DiagnosticCode {
     P0004,
     /// Non-associative operator used in a chain.
     P0005,
+    /// A return type written where the language fixes it: an actor handler
+    /// (always `Next<State>`) or `init` (always the state type).
+    P0006,
 }
 
 impl DiagnosticCode {
@@ -50,6 +53,7 @@ impl DiagnosticCode {
             Self::P0003 => "P0003",
             Self::P0004 => "P0004",
             Self::P0005 => "P0005",
+            Self::P0006 => "P0006",
         }
     }
 }

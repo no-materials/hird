@@ -12,6 +12,12 @@ schedule and is not covered by these entries.
 
 ### Changed
 
+- **Actor handlers and `init` no longer carry return types.** A handler's
+  outcome is always `Next<State>` and `init` always returns the state, both
+  fixed by the actor's `state:` field, so the grammar drops the slot:
+  `handle Tick, st ! {…} = …` and `init: fn(c: Cfg) ! {…} = …`. Writing a
+  `→ …` there is now a parse error (P0006) with a removal hint. The IR
+  pretty-printer prints the new form; demos, fixtures, and docs follow.
 - **Built-in effect heads need no declaration.** `Tool`, `Send`, `Await`,
   `Spawn`, `Schedule`, and `Exn` are pre-declared like `Install`,
   `Supervise`, `Stand`, and `Clock`, so a module no longer opens with

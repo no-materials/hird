@@ -203,15 +203,15 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) → PlannerState ! {} = PlannerState(0, 0),
+  init: fn(config: PlannerConfig) ! {} = PlannerState(0, 0),
 
-  handle PlanRepo(path), PlannerState(repos, tickets) → PlannerState
+  handle PlanRepo(path), PlannerState(repos, tickets)
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} = ...,
 
-  handle GetStatus(reply_to), st → PlannerState
+  handle GetStatus(reply_to), st
     ! {Send<PlannerStatus>} = ...,
 
-  handle Shutdown, st → PlannerState ! {} = st,
+  handle Shutdown, st ! {} = st,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
 ```
 
@@ -243,13 +243,13 @@ is the actor's own `Pid<Msg>`. Together they make a periodic actor:
 actor Heart {
   state: HeartState,
   message: HeartMsg = | Beat,
-  init: fn(config: HeartConfig) → HeartState ! {Schedule<HeartMsg>} =
+  init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
     match config {
       HeartConfig(clock, period) →
         let first = schedule(clock, self(), Beat, period) in
         HeartState(clock, period, 0),
     },
-  handle Beat, HeartState(clock, period, beats) → HeartState
+  handle Beat, HeartState(clock, period, beats)
     ! {Tool<Log>, Schedule<HeartMsg>} =
     let logged = log({ message: "beat" }) in
     let next = schedule(clock, self(), Beat, period) in

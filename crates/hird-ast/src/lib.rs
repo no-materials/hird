@@ -527,7 +527,7 @@ impl ActorField {
 
 ast_node! {
     /// An actor message handler
-    /// (`handle Pattern, State → Type ! { … } = body`).
+    /// (`handle Pattern, State ! { … } = body`).
     ActorHandler => ACTOR_HANDLER
 }
 
@@ -544,12 +544,6 @@ impl ActorHandler {
         children::<Pattern>(&self.0).nth(1)
     }
 
-    /// The declared return type (after `→`), if annotated.
-    #[must_use]
-    pub fn return_type(&self) -> Option<TypeExpr> {
-        type_in(&self.0, SyntaxKind::RETURN_TYPE)
-    }
-
     /// The handler's effect-row annotation (`! { … }`), if present.
     #[must_use]
     pub fn effect_ann(&self) -> Option<EffectAnn> {
@@ -564,8 +558,8 @@ impl ActorHandler {
 }
 
 ast_node! {
-    /// An unnamed function signature (`fn(params) → Ret ! { … }`), the value
-    /// of an actor `init` field.
+    /// An unnamed function signature (`fn(params) ! { … }`), the value of an
+    /// actor `init` field. It has no return type: init returns the state.
     FnSig => FN_SIG
 }
 
@@ -573,12 +567,6 @@ impl FnSig {
     /// The declared parameters, in order.
     pub fn params(&self) -> impl Iterator<Item = Param> + '_ {
         params(&self.0)
-    }
-
-    /// The declared return type (after `→`), if annotated.
-    #[must_use]
-    pub fn return_type(&self) -> Option<TypeExpr> {
-        type_in(&self.0, SyntaxKind::RETURN_TYPE)
     }
 
     /// The declared effect-row annotation (`! { … }`), if present.

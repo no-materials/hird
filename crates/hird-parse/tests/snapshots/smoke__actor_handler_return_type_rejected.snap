@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"actor A { handle Msg(x) ! {Log} = f(x) }\")"
+expression: "render_cst(\"actor A { handle Msg(x), st -> Next<St> ! {Log} = f(x, st) }\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -19,6 +19,20 @@ SOURCE_FILE
         BIND_PAT
           IDENT "x"
         R_PAREN ")"
+      COMMA ","
+      BIND_PAT
+        WHITESPACE " "
+        IDENT "st"
+      RETURN_TYPE
+        WHITESPACE " "
+        ARROW "->"
+        APP_TYPE
+          WHITESPACE " "
+          IDENT "Next"
+          TYPE_ARGS
+            LT "<"
+            IDENT "St"
+            GT ">"
       EFFECT_ANN
         WHITESPACE " "
         BANG "!"
@@ -31,11 +45,14 @@ SOURCE_FILE
       APP_EXPR
         WHITESPACE " "
         IDENT "f"
-        PAREN_EXPR
+        TUPLE_LIT
           L_PAREN "("
           IDENT "x"
+          COMMA ","
+          WHITESPACE " "
+          IDENT "st"
           R_PAREN ")"
     WHITESPACE " "
     R_BRACE "}"
 ---
-P0001 24..25: missing state pattern after the message pattern
+P0006 28..30: a handler has no return type

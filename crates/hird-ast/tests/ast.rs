@@ -806,9 +806,9 @@ fn actor_body_members() {
 actor Planner {
   state: St,
   message: Msg = | Plan(Path) | Stop,
-  init: fn(s: St) -> St ! {Log} = boot(s),
-  handle Plan(p), st -> St ! {Log} = go(p, st),
-  handle Stop, st -> St = st,
+  init: fn(s: St) ! {Log} = boot(s),
+  handle Plan(p), st ! {Log} = go(p, st),
+  handle Stop, st = st,
 } ! {Log}";
     let actor_file = file(src);
     let actor = actor_file
@@ -843,11 +843,10 @@ actor Planner {
     assert!(init.ty().is_none());
     let sig = init.fn_sig().expect("init has a signature");
     assert_eq!(sig.params().count(), 1);
-    assert!(sig.return_type().is_some());
     assert!(sig.effect_ann().is_some());
     assert!(matches!(init.body(), Some(Expr::App(_))));
 
-    // Handlers: message pattern, state pattern, return type, row, body.
+    // Handlers: message pattern, state pattern, row, body.
     let handlers: Vec<_> = actor.handlers().collect();
     assert_eq!(handlers.len(), 2);
     let plan = &handlers[0];
@@ -859,7 +858,6 @@ actor Planner {
         plan.state_pattern(),
         Some(Pattern::Bind(ref b)) if b.name() == Some("st")
     ));
-    assert!(plan.return_type().is_some());
     assert!(plan.effect_ann().is_some());
     assert!(matches!(plan.body(), Some(Expr::App(_))));
     assert!(handlers[1].effect_ann().is_none());

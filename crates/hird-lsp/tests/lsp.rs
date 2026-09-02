@@ -31,9 +31,9 @@ actor Echo {
 
   message: EchoMsg = Ping,
 
-  init: fn(start: Int) -> Int ! {} = start,
+  init: fn(start: Int) ! {} = start,
 
-  handle Ping, n -> Next<Int> ! {} = Continue(n),
+  handle Ping, n ! {} = Continue(n),
 } ! {}
 
 fn boot(n: Int) -> Pid<EchoMsg> ! {Spawn<EchoMsg>} = spawn(Echo, n)

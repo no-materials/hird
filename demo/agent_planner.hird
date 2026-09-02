@@ -72,9 +72,9 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) → PlannerState ! {} = PlannerState(0, 0),
+  init: fn(config: PlannerConfig) ! {} = PlannerState(0, 0),
 
-  handle PlanRepo(path), PlannerState(repos, tickets) → Next<PlannerState>
+  handle PlanRepo(path), PlannerState(repos, tickets)
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} =
     let started = log({ level: "info", message: "planning repository" }) in
     let repo = read_repo({ path: path }) in
@@ -82,14 +82,14 @@ actor Planner {
     let done = log({ level: "info", message: "planning complete" }) in
     Continue(PlannerState(repos + 1, tickets + filed)),
 
-  handle GetStatus(reply_to), PlannerState(repos, tickets) → Next<PlannerState>
+  handle GetStatus(reply_to), PlannerState(repos, tickets)
     ! {Send<PlannerStatus>} =
     let sent = reply(reply_to, PlannerStatus(repos, tickets)) in
     Continue(PlannerState(repos, tickets)),
 
   // A deliberate stop, not a crash: the planner is a transient child, so
   // the supervisor leaves it stopped.
-  handle Shutdown, _ → Next<PlannerState> ! {} = Stop,
+  handle Shutdown, _ ! {} = Stop,
 } ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}
 
 fn default_config() → PlannerConfig = PlannerConfig("planner")

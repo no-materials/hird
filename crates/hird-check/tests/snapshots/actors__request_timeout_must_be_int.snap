@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 hasty : Pid<Msg> → Status ! {Await<Status>, Send<Msg>}
-error[C0001] 418..424: type mismatch: expected `Int`, got `String`
+error[C0001] 388..394: type mismatch: expected `Int`, got `String`

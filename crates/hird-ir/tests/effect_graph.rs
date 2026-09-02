@@ -19,10 +19,10 @@ const PLANNER: &str = "type Path = Path(String)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | PlanRepo(Path) | GetStatus(ReplyTo<Status>) | Shutdown,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle PlanRepo(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
-       handle GetStatus(r), St(n) -> Next<St> ! {Send<Status>} = let ack = reply(r, Status(n)) in Continue(St(n)),\n\
-       handle Shutdown, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle PlanRepo(p), st ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
+       handle GetStatus(r), St(n) ! {Send<Status>} = let ack = reply(r, Status(n)) in Continue(St(n)),\n\
+       handle Shutdown, st ! {} = Continue(st),\n\
      } ! {Tool<ReadRepo>, Send<Status>}\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\

@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"\\\nactor Planner {\n  state: PlannerState,\n  message: PlannerMsg =\n    | PlanRepo(Path)\n    | GetStatus(ReplyTo<PlannerStatus>)\n    | Shutdown,\n  init: fn(config: PlannerConfig) -> PlannerState ! {Log} = initial_state(config),\n  handle PlanRepo(path), st -> PlannerState ! {Tool<ReadRepo>, Log} = update(path, st),\n  handle Shutdown, st -> PlannerState ! {} = st,\n} ! {Tool<ReadRepo>, Log}\")"
+expression: "render_cst(\"\\\nactor Planner {\n  state: PlannerState,\n  message: PlannerMsg =\n    | PlanRepo(Path)\n    | GetStatus(ReplyTo<PlannerStatus>)\n    | Shutdown,\n  init: fn(config: PlannerConfig) ! {Log} = initial_state(config),\n  handle PlanRepo(path), st ! {Tool<ReadRepo>, Log} = update(path, st),\n  handle Shutdown, st ! {} = st,\n} ! {Tool<ReadRepo>, Log}\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -68,11 +68,6 @@ SOURCE_FILE
             WHITESPACE " "
             IDENT "PlannerConfig"
         R_PAREN ")"
-        RETURN_TYPE
-          WHITESPACE " "
-          ARROW "->"
-          WHITESPACE " "
-          IDENT "PlannerState"
         EFFECT_ANN
           WHITESPACE " "
           BANG "!"
@@ -104,11 +99,6 @@ SOURCE_FILE
       BIND_PAT
         WHITESPACE " "
         IDENT "st"
-      RETURN_TYPE
-        WHITESPACE " "
-        ARROW "->"
-        WHITESPACE " "
-        IDENT "PlannerState"
       EFFECT_ANN
         WHITESPACE " "
         BANG "!"
@@ -147,11 +137,6 @@ SOURCE_FILE
       BIND_PAT
         WHITESPACE " "
         IDENT "st"
-      RETURN_TYPE
-        WHITESPACE " "
-        ARROW "->"
-        WHITESPACE " "
-        IDENT "PlannerState"
       EFFECT_ANN
         WHITESPACE " "
         BANG "!"

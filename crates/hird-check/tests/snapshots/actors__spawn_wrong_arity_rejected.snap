@@ -8,4 +8,4 @@ Plan : Path → PlannerMsg
 St : Int → St
 boot : ∀a. a
 read_repo : { path: Path } → St ! {Tool<ReadRepo>}
-error[C0039] 368..383: this spawn supplies 0 argument(s), but actor `Planner`'s init takes 1
+error[C0039] 338..353: this spawn supplies 0 argument(s), but actor `Planner`'s init takes 1

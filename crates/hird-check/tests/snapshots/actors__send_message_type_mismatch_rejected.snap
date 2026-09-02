@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 poke : ∀a. a
-error[C0001] 383..393: type mismatch: expected `Msg`, got `Status`
+error[C0001] 353..363: type mismatch: expected `Msg`, got `Status`

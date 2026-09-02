@@ -52,11 +52,11 @@ const TIMED: &str = "type Status = Status(Int)\n\
      actor Heart {\n\
        state: Cfg,\n\
        message: HeartMsg = | Beat | Get(ReplyTo<Status>),\n\
-       init: fn(c: Cfg) -> Cfg ! {Schedule<HeartMsg>} =\n\
+       init: fn(c: Cfg) ! {Schedule<HeartMsg>} =\n\
          match c { Cfg(clock, period) -> let first = schedule(clock, self(), Beat, period) in c },\n\
-       handle Beat, Cfg(clock, period) -> Next<Cfg> ! {Schedule<HeartMsg>} =\n\
+       handle Beat, Cfg(clock, period) ! {Schedule<HeartMsg>} =\n\
          let next = schedule(clock, self(), Beat, period) in Continue(Cfg(clock, period)),\n\
-       handle Get(r), st -> Next<Cfg> ! {Send<Status>} = let sent = reply(r, Status(1)) in Continue(st),\n\
+       handle Get(r), st ! {Send<Status>} = let sent = reply(r, Status(1)) in Continue(st),\n\
      } ! {Schedule<HeartMsg>, Send<Status>}\n\
      supervisor HeartSup {\n\
        strategy: one_for_one,\n\
@@ -131,8 +131,8 @@ const BOOT: &str = "type St = St(Int)\n\
      actor Counter {\n\
        state: St,\n\
        message: Msg = | Inc,\n\
-       init: fn(s: St) -> St ! {} = s,\n\
-       handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
+       init: fn(s: St) ! {} = s,\n\
+       handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
      }\n\
      fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)";
 
@@ -141,9 +141,9 @@ const MSG: &str = "type Status = Status(Int)\n\
      actor Counter {\n\
        state: St,\n\
        message: Msg = | Inc | Get(ReplyTo<Status>),\n\
-       init: fn(s: St) -> St ! {} = s,\n\
-       handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
-       handle Get(r), St(n) -> Next<St> ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),\n\
+       init: fn(s: St) ! {} = s,\n\
+       handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
+       handle Get(r), St(n) ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),\n\
      } ! {Send<Status>}\n\
      fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)\n\
      fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)";
@@ -162,9 +162,9 @@ const WORKER: &str = "type St = St(Int)\n\
      actor Worker {\n\
        state: St,\n\
        message: Msg = | Set(Int) | Bump,\n\
-       init: fn(s: St) -> St ! {} = s,\n\
-       handle Set(x), St(_) -> Next<St> ! {} = Continue(St(x)),\n\
-       handle Bump, St(n) -> Next<St> ! {Tool<Audit>} = Continue(St(audit({ n: n }))),\n\
+       init: fn(s: St) ! {} = s,\n\
+       handle Set(x), St(_) ! {} = Continue(St(x)),\n\
+       handle Bump, St(n) ! {Tool<Audit>} = Continue(St(audit({ n: n }))),\n\
      } ! {Tool<Audit>}";
 
 const CLOCK: &str = "type St = St(Int)\n\
@@ -172,17 +172,17 @@ const CLOCK: &str = "type St = St(Int)\n\
      actor Ticker {\n\
        state: St,\n\
        message: Msg = | Tick | Via,\n\
-       init: fn(s: St) -> St ! {} = s,\n\
-       handle Tick, St(n) -> Next<St> ! {} = Continue(St(bump(n))),\n\
-       handle Via, St(n) -> Next<St> ! {} = let f = bump in Continue(St(f(n))),\n\
+       init: fn(s: St) ! {} = s,\n\
+       handle Tick, St(n) ! {} = Continue(St(bump(n))),\n\
+       handle Via, St(n) ! {} = let f = bump in Continue(St(f(n))),\n\
      }";
 
 const DUO: &str = "type St = St(Int)\n\
      actor Pair {\n\
        state: St,\n\
        message: Msg = | Nop,\n\
-       init: fn(a: Int, b: Int) -> St ! {} = St(a + b),\n\
-       handle Nop, St(n) -> Next<St> ! {} = Continue(St(n)),\n\
+       init: fn(a: Int, b: Int) ! {} = St(a + b),\n\
+       handle Nop, St(n) ! {} = Continue(St(n)),\n\
      }\n\
      fn boot() -> Pid<Msg> ! {Spawn<Msg>} = spawn(Pair, 1, 2)";
 
@@ -191,8 +191,8 @@ const ECHO: &str = "type Ping = Ping\n\
      actor Responder {\n\
        state: St,\n\
        message: Msg = | Get(ReplyTo<Ping>),\n\
-       init: fn(s: St) -> St ! {} = s,\n\
-       handle Get(r), St(n) -> Next<St> ! {Send<Ping>} = let ack = reply(r, Ping) in Continue(St(n)),\n\
+       init: fn(s: St) ! {} = s,\n\
+       handle Get(r), St(n) ! {Send<Ping>} = let ack = reply(r, Ping) in Continue(St(n)),\n\
      } ! {Send<Ping>}";
 
 const SOLO: &str = "type St = St(Int)\n\
@@ -200,8 +200,8 @@ const SOLO: &str = "type St = St(Int)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | Nop,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Nop, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Nop, st ! {} = Continue(st),\n\
      }\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\
@@ -217,8 +217,8 @@ const TREE: &str = "type St = St(Int)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | Nop,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Nop, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Nop, st ! {} = Continue(st),\n\
      }\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\
@@ -240,20 +240,20 @@ const FLEET: &str = "type St = St(Int)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | Plan,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Plan, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Plan, st ! {} = Continue(st),\n\
      }\n\
      actor Worker {\n\
        state: St,\n\
        message: WorkerMsg = | Work,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Work, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Work, st ! {} = Continue(st),\n\
      }\n\
      actor Logger {\n\
        state: St,\n\
        message: LoggerMsg = | Note,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Note, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Note, st ! {} = Continue(st),\n\
      }\n\
      supervisor RootSup {\n\
        strategy: one_for_one,\n\
@@ -270,14 +270,14 @@ const NEST: &str = "type St = St(Int)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | Nop,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Nop, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Nop, st ! {} = Continue(st),\n\
      }\n\
      actor Worker {\n\
        state: St,\n\
        message: WorkerMsg = | Nap,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Nap, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Nap, st ! {} = Continue(st),\n\
      }\n\
      supervisor NestSup {\n\
        strategy: one_for_one,\n\
@@ -293,8 +293,8 @@ const DRIFT: &str = "type St = St(Int)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | Nop,\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Nop, st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Nop, st ! {} = Continue(st),\n\
      }\n\
      supervisor DriftSup {\n\
        strategy: one_for_all,\n\

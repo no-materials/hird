@@ -30,8 +30,8 @@ const PLANNER: &str = "type Path = Path(String)\n\
      actor Planner {\n\
        state: St,\n\
        message: PlannerMsg = | PlanRepo(Path),\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle PlanRepo(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle PlanRepo(p), st ! {Tool<ReadRepo>} = Continue(read(p, st)),\n\
      } ! {Tool<ReadRepo>}\n\
      supervisor PlannerSup {\n\
        strategy: one_for_one,\n\
@@ -51,8 +51,8 @@ const STANDING: &str = "type St = St(Int)\n\
      actor Keeper {\n\
        state: St,\n\
        message: KeeperMsg = | Note(String),\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Note(m), st -> Next<St> ! {Tool<Log>} = match log({ message: m }) { _ -> Continue(st) },\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Note(m), st ! {Tool<Log>} = match log({ message: m }) { _ -> Continue(st) },\n\
      } ! {Tool<Log>}\n\
      supervisor KeeperSup {\n\
        strategy: one_for_one,\n\
@@ -78,16 +78,16 @@ const STOPPING: &str = "type St = St(Int)\n\
      actor Keeper {\n\
        state: St,\n\
        message: KeeperMsg = | Rest,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"keeper up\" }) { _ -> c },\n\
-       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+       handle Rest, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      actor Drifter {\n\
        state: St,\n\
        message: DrifterMsg = | Leave,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"drifter up\" }) { _ -> c },\n\
-       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+       handle Leave, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      supervisor MixedSup {\n\
        strategy: one_for_one,\n\
@@ -115,16 +115,16 @@ const ALL: &str = "type St = St(Int)\n\
      actor First {\n\
        state: St,\n\
        message: FirstMsg = | Rest,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"first up\" }) { _ -> c },\n\
-       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+       handle Rest, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      actor Last {\n\
        state: St,\n\
        message: LastMsg = | Leave,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"last up\" }) { _ -> c },\n\
-       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+       handle Leave, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      supervisor AllSup {\n\
        strategy: one_for_all,\n\
@@ -151,23 +151,23 @@ const REST: &str = "type St = St(Int)\n\
      actor First {\n\
        state: St,\n\
        message: FirstMsg = | Rest,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"first up\" }) { _ -> c },\n\
-       handle Rest, _ -> Next<St> ! {} = Stop,\n\
+       handle Rest, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      actor Middle {\n\
        state: St,\n\
        message: MiddleMsg = | Leave,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"middle up\" }) { _ -> c },\n\
-       handle Leave, _ -> Next<St> ! {} = Stop,\n\
+       handle Leave, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      actor Last {\n\
        state: St,\n\
        message: LastMsg = | Nap,\n\
-       init: fn(c: St) -> St ! {Tool<Log>} =\n\
+       init: fn(c: St) ! {Tool<Log>} =\n\
          match log({ message: \"last up\" }) { _ -> c },\n\
-       handle Nap, _ -> Next<St> ! {} = Stop,\n\
+       handle Nap, _ ! {} = Stop,\n\
      } ! {Tool<Log>}\n\
      supervisor RestSup {\n\
        strategy: rest_for_one,\n\
@@ -865,8 +865,8 @@ const MUTE: &str = "type St = St(Int)\n\
      actor Mute {\n\
        state: St,\n\
        message: MuteMsg = | Get(ReplyTo<Int>),\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Get(r), st -> Next<St> ! {} = Continue(st),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Get(r), st ! {} = Continue(st),\n\
      }\n\
      fn main() ! {Spawn<MuteMsg>, Send<MuteMsg>, Await<Int>} =\n\
        let p = spawn(Mute, St(0)) in\n\
@@ -1013,10 +1013,10 @@ const IMPORTER: &str = "module App\n\
      actor Counter {\n\
        state: St,\n\
        message: CounterMsg = | Count(Tasks) | Get(ReplyTo<Int>),\n\
-       init: fn(c: St) -> St ! {} = c,\n\
-       handle Count(tasks), St(n) -> Next<St> ! {Tool<Note>} =\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Count(tasks), St(n) ! {Tool<Note>} =\n\
          Continue(St(n + announce(tasks))),\n\
-       handle Get(r), St(n) -> Next<St> ! {Send<Int>} =\n\
+       handle Get(r), St(n) ! {Send<Int>} =\n\
          let sent = reply(r, n) in\n\
          Continue(St(n)),\n\
      } ! {Tool<Note>, Send<Int>}\n\

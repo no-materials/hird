@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: pair, actor: Pair, start_args: planner_config(), restart: permanent },\n  ]\n}\"))"
 ---
-error[C0048] 1118..1135: actor `Pair` cannot be a supervised child: its init takes 2 parameters, but a supervised actor's init must take exactly one
+error[C0048] 1040..1057: actor `Pair` cannot be a supervised child: its init takes 2 parameters, but a supervised actor's init must take exactly one
 supervisor Sup ! {}

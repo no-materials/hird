@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"actor A { init: fn(c: Config) ! {Log} = create(c) }\")"
+expression: "render_cst(\"actor A { init: fn(c: Config) -> St ! {Log} = create(c) }\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -24,6 +24,11 @@ SOURCE_FILE
             WHITESPACE " "
             IDENT "Config"
         R_PAREN ")"
+        RETURN_TYPE
+          WHITESPACE " "
+          ARROW "->"
+          WHITESPACE " "
+          IDENT "St"
         EFFECT_ANN
           WHITESPACE " "
           BANG "!"
@@ -42,3 +47,5 @@ SOURCE_FILE
           R_PAREN ")"
     WHITESPACE " "
     R_BRACE "}"
+---
+P0006 30..32: init has no return type

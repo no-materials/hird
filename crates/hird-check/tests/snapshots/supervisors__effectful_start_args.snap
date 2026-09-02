@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: planner, actor: Planner, start_args: read_config(), restart: permanent },\n  ]\n}\"))"
 ---
-error[C0049] 1124..1138: supervisor `Sup`'s child `planner` has effectful `start_args`; start arguments run during supervisor init and must be pure (acquiring the clock with `clock()` is the one exception)
+error[C0049] 1046..1060: supervisor `Sup`'s child `planner` has effectful `start_args`; start arguments run during supervisor init and must be pure (acquiring the clock with `clock()` is the one exception)
 supervisor Sup ! {Tool<ReadRepo>}

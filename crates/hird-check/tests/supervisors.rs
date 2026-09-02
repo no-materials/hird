@@ -58,22 +58,22 @@ fn read_config() -> St ! {Tool<ReadRepo>} = read_repo({ path: Path(\"repo\") })
 actor Planner {
   state: St,
   message: PlannerMsg = | Plan(Path) | Quit,
-  init: fn(c: St) -> St ! {} = c,
-  handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
-  handle Quit, st -> Next<St> ! {} = Continue(st),
+  init: fn(c: St) ! {} = c,
+  handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Quit, st ! {} = Continue(st),
 } ! {Tool<ReadRepo>}
 actor Worker {
   state: St,
   message: WorkerMsg = | Work(Title) | Halt,
-  init: fn(c: St) -> St ! {} = c,
-  handle Work(t), st -> Next<St> ! {Tool<CreateTicket>} = Continue(create_ticket({ title: t })),
-  handle Halt, st -> Next<St> ! {} = Continue(st),
+  init: fn(c: St) ! {} = c,
+  handle Work(t), st ! {Tool<CreateTicket>} = Continue(create_ticket({ title: t })),
+  handle Halt, st ! {} = Continue(st),
 } ! {Tool<CreateTicket>}
 actor Pair {
   state: St,
   message: PairMsg = | Ping,
-  init: fn(a: St, b: St) -> St ! {} = a,
-  handle Ping, st -> Next<St> ! {} = Continue(st),
+  init: fn(a: St, b: St) ! {} = a,
+  handle Ping, st ! {} = Continue(st),
 }
 ";
 
@@ -401,8 +401,8 @@ fn stand_rejected_in_actor_bodies() {
 actor Parker {
   state: Cfg,
   message: ParkerMsg = | Park,
-  init: fn(c: Cfg) -> Cfg ! {Stand} = let u = stand() in c,
-  handle Park, st -> Next<Cfg> ! {Stand} = let u = stand() in Continue(st),
+  init: fn(c: Cfg) ! {Stand} = let u = stand() in c,
+  handle Park, st ! {Stand} = let u = stand() in Continue(st),
 } ! {Stand}"
     )));
 }
@@ -457,8 +457,8 @@ fn start_args_may_acquire_clock() {
 actor Heart {
   state: Cfg,
   message: HeartMsg = | Beat,
-  init: fn(c: Cfg) -> Cfg ! {} = c,
-  handle Beat, Cfg(clock, period) -> Next<Cfg> ! {Schedule<HeartMsg>} =
+  init: fn(c: Cfg) ! {} = c,
+  handle Beat, Cfg(clock, period) ! {Schedule<HeartMsg>} =
     let next = schedule(clock, self(), Beat, period) in Continue(Cfg(clock, period)),
 } ! {Schedule<HeartMsg>}
 supervisor HeartSup {

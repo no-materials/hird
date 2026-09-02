@@ -7,4 +7,4 @@ Inc : Msg
 St : Int → St
 Status : Int → Status
 answer : ∀a. a
-error[C0001] 392..398: type mismatch: expected `Status`, got `St`
+error[C0001] 362..368: type mismatch: expected `Status`, got `St`

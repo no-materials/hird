@@ -15,9 +15,9 @@ fn planner_config() → St = St(0)
 actor Planner {
   state: St,
   message: Msg = Plan(Path) | Quit,
-  init: fn(c: St) → St = c,
-  handle Plan(p), st → Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
-  handle Quit, st → Next<St> = Continue(st),
+  init: fn(c: St) = c,
+  handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),
+  handle Quit, st = Continue(st),
 } ! {Tool<ReadRepo>}
 
 supervisor PlannerSup {

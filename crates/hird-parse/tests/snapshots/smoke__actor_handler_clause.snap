@@ -1,6 +1,6 @@
 ---
 source: crates/hird-parse/tests/smoke.rs
-expression: "render_cst(\"actor A { handle Msg(x), st -> St ! {Log} = f(x, st) }\")"
+expression: "render_cst(\"actor A { handle Msg(x), st ! {Log} = f(x, st) }\")"
 ---
 SOURCE_FILE
   ACTOR_DECL
@@ -23,11 +23,6 @@ SOURCE_FILE
       BIND_PAT
         WHITESPACE " "
         IDENT "st"
-      RETURN_TYPE
-        WHITESPACE " "
-        ARROW "->"
-        WHITESPACE " "
-        IDENT "St"
       EFFECT_ANN
         WHITESPACE " "
         BANG "!"

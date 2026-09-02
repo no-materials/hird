@@ -741,10 +741,10 @@ fn actor_round_trips() {
          actor Planner {\n\
            state: St,\n\
            message: PlannerMsg = | Plan(Path) | Get(ReplyTo<St>) | Quit,\n\
-           init: fn(start: St) -> St ! {} = start,\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
-           handle Get(reply_to), St(n) -> Next<St> ! {} = Continue(St(n)),\n\
-           handle Quit, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(start: St) ! {} = start,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           handle Get(reply_to), St(n) ! {} = Continue(St(n)),\n\
+           handle Quit, st ! {} = Continue(st),\n\
          } ! {Tool<ReadRepo>}",
     );
 }
@@ -756,8 +756,8 @@ fn spawn_round_trips() {
          actor Counter {\n\
            state: St,\n\
            message: Msg = | Inc,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
          }\n\
          fn boot(s: St) -> Pid<Msg> ! {Spawn<Msg>} = spawn(Counter, s)",
     );
@@ -771,8 +771,8 @@ fn supervision_round_trips() {
          actor Counter {\n\
            state: St,\n\
            message: Msg = | Inc,\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
          }\n\
          supervisor CounterSup {\n\
            strategy: one_for_one,\n\
@@ -796,9 +796,9 @@ fn messaging_round_trips() {
          actor Counter {\n\
            state: St,\n\
            message: Msg = | Inc | Get(ReplyTo<Status>),\n\
-           init: fn(s: St) -> St ! {} = s,\n\
-           handle Inc, St(n) -> Next<St> ! {} = Continue(St(n + 1)),\n\
-           handle Get(r), St(n) -> Next<St> ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Inc, St(n) ! {} = Continue(St(n + 1)),\n\
+           handle Get(r), St(n) ! {Send<Status>} = let sent = reply(r, Status(n)) in Continue(St(n)),\n\
          } ! {Send<Status>}\n\
          fn poke(p: Pid<Msg>) ! {Send<Msg>} = send(p, Inc)\n\
          fn query(p: Pid<Msg>) -> Status ! {Send<Msg>, Await<Status>} = request(p, Get)\n\
@@ -813,9 +813,9 @@ fn time_round_trips() {
          actor Heart {\n\
            state: Cfg,\n\
            message: HeartMsg = | Beat,\n\
-           init: fn(c: Cfg) -> Cfg ! {Schedule<HeartMsg>} =\n\
+           init: fn(c: Cfg) ! {Schedule<HeartMsg>} =\n\
              match c { Cfg(clock, period) -> let first = schedule(clock, self(), Beat, period) in c },\n\
-           handle Beat, Cfg(clock, period) -> Next<Cfg> ! {Schedule<HeartMsg>} =\n\
+           handle Beat, Cfg(clock, period) ! {Schedule<HeartMsg>} =\n\
              let next = schedule(clock, self(), Beat, period) in Continue(Cfg(clock, period)),\n\
          } ! {Schedule<HeartMsg>}\n\
          supervisor HeartSup {\n\
@@ -843,9 +843,9 @@ fn supervisor_round_trips() {
          actor Planner {\n\
            state: St,\n\
            message: Msg = | Plan(Path) | Quit,\n\
-           init: fn(c: St) -> St ! {} = c,\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
-           handle Quit, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(c: St) ! {} = c,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           handle Quit, st ! {} = Continue(st),\n\
          } ! {Tool<ReadRepo>}\n\
          supervisor PlannerSup {\n\
            strategy: one_for_one,\n\
@@ -873,14 +873,14 @@ fn multi_child_supervisor_round_trips() {
          actor Planner {\n\
            state: St,\n\
            message: PMsg = | Plan(Path),\n\
-           init: fn(c: St) -> St ! {} = c,\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           init: fn(c: St) ! {} = c,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
          } ! {Tool<ReadRepo>}\n\
          actor Worker {\n\
            state: St,\n\
            message: WMsg = | Work(Title),\n\
-           init: fn(c: St) -> St ! {} = c,\n\
-           handle Work(t), st -> Next<St> ! {Tool<CreateTicket>} = Continue(create_ticket({ title: t })),\n\
+           init: fn(c: St) ! {} = c,\n\
+           handle Work(t), st ! {Tool<CreateTicket>} = Continue(create_ticket({ title: t })),\n\
          } ! {Tool<CreateTicket>}\n\
          supervisor RootSup {\n\
            strategy: one_for_one,\n\
@@ -906,9 +906,9 @@ fn snapshot_supervisor_declaration() {
          actor Planner {\n\
            state: St,\n\
            message: Msg = | Plan(Path) | Quit,\n\
-           init: fn(c: St) -> St ! {} = c,\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
-           handle Quit, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(c: St) ! {} = c,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           handle Quit, st ! {} = Continue(st),\n\
          } ! {Tool<ReadRepo>}\n\
          supervisor PlannerSup {\n\
            strategy: one_for_one,\n\
@@ -934,9 +934,9 @@ fn snapshot_actor_declaration() {
          actor Planner {\n\
            state: St,\n\
            message: PlannerMsg = | Plan(Path) | Quit,\n\
-           init: fn(start: St) -> St ! {} = start,\n\
-           handle Plan(p), st -> Next<St> ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
-           handle Quit, st -> Next<St> ! {} = Continue(st),\n\
+           init: fn(start: St) ! {} = start,\n\
+           handle Plan(p), st ! {Tool<ReadRepo>} = Continue(read_repo({ path: p })),\n\
+           handle Quit, st ! {} = Continue(st),\n\
          } ! {Tool<ReadRepo>}",
         "Actors",
     );

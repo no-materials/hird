@@ -8,4 +8,4 @@ Plan : Path → PlannerMsg
 St : Int → St
 peek : ∀a. a
 read_repo : { path: Path } → St ! {Tool<ReadRepo>}
-error[C0040] 369..376: `Planner` is an actor, not a value; its state is only accessible within its own handlers
+error[C0040] 339..346: `Planner` is an actor, not a value; its state is only accessible within its own handlers

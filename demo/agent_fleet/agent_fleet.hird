@@ -50,7 +50,7 @@ actor Planner {
 
   message: PlannerMsg = | Tick,
 
-  init: fn(config: FleetConfig) → PlannerState ! {Tool<Log>, Schedule<PlannerMsg>} =
+  init: fn(config: FleetConfig) ! {Tool<Log>, Schedule<PlannerMsg>} =
     match config {
       FleetConfig(clock, period) →
         let posted = log({ level: "info", message: "planner takes its post" }) in
@@ -58,7 +58,7 @@ actor Planner {
         PlannerState(clock, period, 1),
     },
 
-  handle Tick, PlannerState(clock, period, round) → Next<PlannerState>
+  handle Tick, PlannerState(clock, period, round)
     ! {Send<ExecutorMsg>, Schedule<PlannerMsg>} =
     let ordered = send(child(FleetSup, executor), Carry(Errands.forge(round))) in
     let next = schedule(clock, self(), Tick, period) in
@@ -72,14 +72,14 @@ actor Executor {
 
   message: ExecutorMsg = | Carry(Order),
 
-  init: fn(done: Int) → ExecutorState ! {Tool<Log>} =
+  init: fn(done: Int) ! {Tool<Log>} =
     let posted = log({ level: "info", message: "executor takes its post" }) in
     ExecutorState(done),
 
   // Round 3 is dropped on purpose: the crash consumes the order, the
   // supervisor restarts the executor, and the next round proceeds — the
   // gap stays visible in the audit stream.
-  handle Carry(order), ExecutorState(done) → Next<ExecutorState>
+  handle Carry(order), ExecutorState(done)
     ! {Tool<RunErrand>, Send<AuditorMsg>} =
     match order {
       Order(round, errand) →
@@ -100,11 +100,11 @@ actor Auditor {
 
   message: AuditorMsg = | Record(Outcome),
 
-  init: fn(recorded: Int) → AuditorState ! {Tool<Log>} =
+  init: fn(recorded: Int) ! {Tool<Log>} =
     let posted = log({ level: "info", message: "auditor takes its post" }) in
     AuditorState(recorded),
 
-  handle Record(outcome), AuditorState(recorded) → Next<AuditorState>
+  handle Record(outcome), AuditorState(recorded)
     ! {Tool<Chronicle>} =
     match outcome {
       Outcome(round, note) →

@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(\"supervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  children: []\n}\"))"
 ---
-error[C0046] 1003..1006: supervisor `Sup` is missing its `period` field
+error[C0046] 925..928: supervisor `Sup` is missing its `period` field
 supervisor Sup ! {}

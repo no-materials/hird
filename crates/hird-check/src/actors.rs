@@ -29,7 +29,7 @@ use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::elaborate::Scope;
 use crate::registry::{CtorInfo, is_reply_to};
-use crate::{NodeKey, expr_span, name_token_span, node_span, type_expr_span};
+use crate::{NodeKey, expr_span, name_token_span, node_span};
 
 /// A registered actor: the interface `spawn` and encapsulation checks consult.
 #[derive(Debug, Clone)]
@@ -248,8 +248,8 @@ impl Checker {
     }
 
     /// Elaborates the init signature: parameter types (recorded as
-    /// capabilities so the row may reference them), a return type that must be
-    /// the state type, and the declared row. The body is checked later, in
+    /// capabilities so the row may reference them) and the declared row; the
+    /// result is always the state type. The body is checked later, in
     /// [`Checker::check_actor`].
     fn register_init(
         &mut self,
@@ -264,7 +264,7 @@ impl Checker {
                 span,
                 format!(
                     "actor `{actor}`'s init member must be a function, \
-                     e.g. `init: fn(c: Config) \u{2192} State ! {{}} = e`"
+                     e.g. `init: fn(c: Config) ! {{}} = e`"
                 ),
             ));
         };
@@ -286,10 +286,6 @@ impl Checker {
                 scope.insert_cap(param_name, ty.clone());
             }
             params.push(ty);
-        }
-        if let Some(ret) = sig.return_type() {
-            let ret_ty = self.elaborate_closed(&ret, &mut scope)?;
-            self.unify_at(state, &ret_ty, type_expr_span(&ret, self.source_id))?;
         }
         let row = match sig.effect_ann() {
             Some(ann) => self.elaborate_row_closed(&ann, &mut scope)?,
@@ -568,14 +564,6 @@ impl Checker {
             };
         }
         let next_ty = Type::con("Next", Vec::from([info.state.clone()]));
-        if result.is_ok()
-            && let Some(ret) = handler.return_type()
-        {
-            let span = type_expr_span(&ret, self.source_id);
-            result = self
-                .elaborate_closed(&ret, &mut scope)
-                .and_then(|ret_ty| self.unify_at(&next_ty, &ret_ty, span));
-        }
         let body_res = match (&result, handler.body()) {
             (Ok(()), Some(body)) => {
                 self.begin_effect_scope();

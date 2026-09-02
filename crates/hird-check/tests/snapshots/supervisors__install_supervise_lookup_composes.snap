@@ -2,5 +2,5 @@
 source: crates/hird-check/tests/supervisors.rs
 expression: "check_str(&with_prelude(&format!(\"{PLANNER_SUP}fn planner_mock(args: {{ path: Path }}) -> St = St(9)\nfn main() ! {{Install, Supervise, Send<PlannerMsg>}} =\n  install {{ Tool<ReadRepo> -> planner_mock }} in\n  let u = supervise(PlannerSup) in\n  send(child(PlannerSup, planner), Stop)\")))"
 ---
-error[C0001] 1401..1405: type mismatch: expected `PlannerMsg`, got `Next<d>`
+error[C0001] 1323..1327: type mismatch: expected `PlannerMsg`, got `Next<d>`
 supervisor PlannerSup ! {Tool<ReadRepo>}

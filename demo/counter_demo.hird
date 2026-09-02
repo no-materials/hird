@@ -21,13 +21,13 @@ actor Counter {
     | Increment(Int)
     | GetCount(ReplyTo<Int>),
 
-  init: fn(config: CounterConfig) → CounterState ! {} =
+  init: fn(config: CounterConfig) ! {} =
     match config { CounterConfig(start) → CounterState(start) },
 
-  handle Increment(by), CounterState(n) → Next<CounterState> ! {} =
+  handle Increment(by), CounterState(n) ! {} =
     Continue(CounterState(n + by)),
 
-  handle GetCount(reply_to), CounterState(n) → Next<CounterState> ! {Send<Int>} =
+  handle GetCount(reply_to), CounterState(n) ! {Send<Int>} =
     let sent = reply(reply_to, n) in
     Continue(CounterState(n)),
 } ! {Send<Int>}
