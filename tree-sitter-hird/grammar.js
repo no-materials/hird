@@ -278,7 +278,7 @@ module.exports = grammar({
     let_expression: ($) =>
       seq(
         'let',
-        field('name', $.identifier),
+        field('pattern', $._pattern),
         optional(seq(':', field('type', $._type))),
         '=',
         field('value', $._expression),

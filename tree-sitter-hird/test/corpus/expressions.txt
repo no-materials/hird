@@ -14,7 +14,7 @@ fn f() → Int =
     parameters: (parameter_list)
     return_type: (return_type (type_identifier))
     body: (let_expression
-      name: (identifier)
+      pattern: (bind_pattern)
       type: (type_identifier)
       value: (integer)
       body: (if_expression
@@ -110,30 +110,30 @@ fn f() → () =
     parameters: (parameter_list)
     return_type: (return_type (unit_type))
     body: (let_expression
-      name: (identifier)
+      pattern: (bind_pattern)
       value: (spawn_expression
         actor: (type_identifier)
         argument: (identifier))
       body: (let_expression
-        name: (identifier)
+        pattern: (bind_pattern)
         value: (supervise_expression supervisor: (type_identifier))
         body: (let_expression
-          name: (identifier)
+          pattern: (bind_pattern)
           value: (child_expression
             supervisor: (type_identifier)
             id: (identifier))
           body: (let_expression
-            name: (identifier)
+            pattern: (bind_pattern)
             value: (send_expression
               target: (identifier)
               message: (type_identifier))
             body: (let_expression
-              name: (identifier)
+              pattern: (bind_pattern)
               value: (request_expression
                 target: (identifier)
                 message: (type_identifier))
               body: (let_expression
-                name: (identifier)
+                pattern: (bind_pattern)
                 value: (reply_expression
                   target: (identifier)
                   value: (integer))

@@ -75,3 +75,37 @@ fn f(x: Int) → Int = match x { __ → 0 }
     body: (match_expression
       value: (identifier)
       (match_arm pattern: (bind_pattern) body: (integer)))))
+
+================================================================================
+A let binder is a pattern: name, constructor, tuple, or wildcard
+================================================================================
+
+fn f(c: Cfg, p: (Int, Int)) → Int =
+  let Cfg(n, _) = c in
+  let (a, b): (Int, Int) = p in
+  let _ = a in
+  n
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (tuple_type (type_identifier) (type_identifier))))
+    return_type: (return_type (type_identifier))
+    body: (let_expression
+      pattern: (constructor_pattern
+        name: (type_identifier)
+        (bind_pattern)
+        (wildcard_pattern))
+      value: (identifier)
+      body: (let_expression
+        pattern: (tuple_pattern (bind_pattern) (bind_pattern))
+        type: (tuple_type (type_identifier) (type_identifier))
+        value: (identifier)
+        body: (let_expression
+          pattern: (wildcard_pattern)
+          value: (identifier)
+          body: (identifier))))))
