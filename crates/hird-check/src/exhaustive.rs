@@ -175,10 +175,10 @@ fn render_witness(witness: &Witness) -> String {
     }
 }
 
-/// Builds the C0015 message from reconstructed witnesses: a missing-case list,
-/// or — when the only witness is a bare wildcard (an open type) — a prompt to
-/// add a catch-all.
-fn non_exhaustive_message(witnesses: &[Vec<Witness>]) -> String {
+/// The distinct value shapes in `witnesses`, rendered, sorted, and capped at
+/// six with an "and N more" tail. `None` when the only witness is a bare
+/// wildcard: an open type with no constructor to name.
+fn missing_cases(witnesses: &[Vec<Witness>]) -> Option<String> {
     let mut cases: Vec<String> = witnesses
         .iter()
         .map(|row| {
@@ -189,9 +189,7 @@ fn non_exhaustive_message(witnesses: &[Vec<Witness>]) -> String {
     cases.sort();
     cases.dedup();
     if cases.iter().all(|case| case == "_") {
-        return String::from(
-            "non-exhaustive match: add a wildcard `_` arm to cover the remaining values",
-        );
+        return None;
     }
     const MAX: usize = 6;
     let extra = cases.len().saturating_sub(MAX);
@@ -203,13 +201,53 @@ fn non_exhaustive_message(witnesses: &[Vec<Witness>]) -> String {
     if extra > 0 {
         shown.push(format!("and {extra} more"));
     }
-    format!(
-        "non-exhaustive match: missing case(s): {}",
-        shown.join(", ")
-    )
+    Some(shown.join(", "))
+}
+
+/// Builds the C0015 message from reconstructed witnesses: a missing-case list,
+/// or — when the only witness is a bare wildcard (an open type) — a prompt to
+/// add a catch-all.
+fn non_exhaustive_message(witnesses: &[Vec<Witness>]) -> String {
+    match missing_cases(witnesses) {
+        Some(cases) => format!("non-exhaustive match: missing case(s): {cases}"),
+        None => String::from(
+            "non-exhaustive match: add a wildcard `_` arm to cover the remaining values",
+        ),
+    }
+}
+
+/// Builds the C0057 message for a refutable `let` pattern.
+fn refutable_message(witnesses: &[Vec<Witness>]) -> String {
+    match missing_cases(witnesses) {
+        Some(cases) => format!(
+            "refutable pattern in `let`: does not cover {cases}; use `match` to handle every case"
+        ),
+        None => String::from(
+            "refutable pattern in `let`: it does not cover every value of the bound type; \
+             use `match`",
+        ),
+    }
 }
 
 impl Checker {
+    /// Reports a refutable `let` pattern (error): the binder must cover every
+    /// value of `ty`, as a one-arm `match` would have to.
+    ///
+    /// Call once the pattern has type-checked against `ty`.
+    pub(crate) fn check_irrefutable(&mut self, pattern: &Pattern, ty: &Type) {
+        let Some(pat) = lower(pattern) else { return };
+        let span = node_span(pattern.syntax(), self.source_id);
+        let rows = [alloc::vec![pat]];
+        let witnesses = self.useful(&rows, &[Pat::Wild], core::slice::from_ref(ty), span);
+        if !witnesses.is_empty() {
+            self.diags.push(CheckDiagnostic::error(
+                CheckCode::C0057,
+                span,
+                refutable_message(&witnesses),
+            ));
+        }
+    }
+
     /// Reports redundant arms (warnings) and a non-exhaustive match (error).
     ///
     /// Call once the scrutinee and every arm have type-checked cleanly: a

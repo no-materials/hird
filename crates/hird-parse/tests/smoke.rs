@@ -936,3 +936,14 @@ fn schedule_expr() {
 fn request_expr_with_timeout() {
     insta::assert_snapshot!(render_cst("fn go() = request(pid, Get, 60000)"));
 }
+
+// ── let patterns ────────────────────────────────────────────────
+
+#[test]
+fn let_pattern_binder() {
+    // The binder position takes a pattern, with an optional annotation after
+    // it, so a destructuring `let` parses like a one-arm match would.
+    insta::assert_snapshot!(render_cst(
+        "fn f(c: Cfg, p: (Int, Int)) = let Cfg(n, _) = c in let (a, b): (Int, Int) = p in a"
+    ));
+}

@@ -32,11 +32,9 @@ actor Heart {
   // The first beat is scheduled here, so a restarted heart starts beating
   // again on its own: a timer aimed at the old process is dropped.
   init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
-    match config {
-      HeartConfig(clock, period) →
-        let first = schedule(clock, self(), Beat, period) in
-        HeartState(clock, period, 0),
-    },
+    let HeartConfig(clock, period) = config in
+    let first = schedule(clock, self(), Beat, period) in
+    HeartState(clock, period, 0),
 
   handle Beat, HeartState(clock, period, beats)
     ! {Tool<Log>, Schedule<HeartMsg>} =

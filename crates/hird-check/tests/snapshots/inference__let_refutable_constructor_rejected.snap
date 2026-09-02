@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Opt = Some(Int) | None\\n\\\n         fn get(o: Opt) -> Int = let Some(n) = o in n\")"
+---
+None : Opt
+Some : Int → Opt
+get : Opt → Int
+error[C0057] 55..63: refutable pattern in `let`: does not cover `None`; use `match` to handle every case

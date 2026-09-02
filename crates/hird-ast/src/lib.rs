@@ -696,15 +696,17 @@ impl AstNode for Decl {
 // ── expressions ─────────────────────────────────────────────────
 
 ast_node! {
-    /// A `let name [: Type] = value in body` expression.
+    /// A `let pattern [: Type] = value in body` expression. The binder is a
+    /// pattern: a plain name, or an irrefutable destructuring (`(a, b)`,
+    /// `Config(c, p)`, `_`).
     LetExpr => LET_EXPR
 }
 
 impl LetExpr {
-    /// The bound name.
+    /// The binder pattern.
     #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        name(&self.0)
+    pub fn pattern(&self) -> Option<Pattern> {
+        child(&self.0)
     }
 
     /// The type annotation (`: Type`), if present.

@@ -148,13 +148,13 @@ impl Checker {
         }
     }
 
-    /// `let name [: T] = value in body` — generalise the value, bind the
-    /// scheme, infer the body.
+    /// `let pattern [: T] = value in body`. A plain name generalises the value
+    /// and binds the scheme; a destructuring pattern binds its variables
+    /// monomorphically and must be irrefutable (C0057). Then infer the body.
     fn infer_let(&mut self, le: &LetExpr) -> Checked<Type> {
-        let Some(name) = le.name() else {
+        let Some(pattern) = le.pattern() else {
             return Err(Aborted);
         };
-        let name = String::from(name);
         let Some(value) = le.value() else {
             return Err(Aborted);
         };
@@ -173,14 +173,33 @@ impl Checker {
         }
         self.subst.exit_level();
         let value_ty = value_ty?;
-        let scheme = self.subst.generalize(&value_ty);
 
         self.env.push_scope();
-        let span = name_token_span(le.syntax(), self.source_id);
-        self.bind_value(&name, scheme, span);
-        let body_ty = match le.body() {
-            Some(body) => self.infer_expr(&body),
-            None => Err(Aborted),
+        let bound = match &pattern {
+            // A plain name is generalised (let-polymorphism).
+            Pattern::Bind(bind) => match bind.name() {
+                Some(name) => {
+                    let scheme = self.subst.generalize(&value_ty);
+                    let span = name_token_span(bind.syntax(), self.source_id);
+                    self.bind_value(name, scheme, span);
+                    Ok(())
+                }
+                None => Err(Aborted),
+            },
+            // A destructuring pattern binds monomorphically, as a match arm
+            // does, and must be irrefutable.
+            _ => {
+                let checked = self.check_pattern(&pattern, &value_ty);
+                if checked.is_ok() {
+                    let resolved = self.subst.resolve(&value_ty);
+                    self.check_irrefutable(&pattern, &resolved);
+                }
+                checked
+            }
+        };
+        let body_ty = match (bound, le.body()) {
+            (Ok(()), Some(body)) => self.infer_expr(&body),
+            _ => Err(Aborted),
         };
         self.env.pop_scope();
         body_ty

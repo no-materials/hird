@@ -51,12 +51,10 @@ actor Planner {
   message: PlannerMsg = | Tick,
 
   init: fn(config: FleetConfig) ! {Tool<Log>, Schedule<PlannerMsg>} =
-    match config {
-      FleetConfig(clock, period) →
-        let posted = log({ level: "info", message: "planner takes its post" }) in
-        let first = schedule(clock, self(), Tick, period) in
-        PlannerState(clock, period, 1),
-    },
+    let FleetConfig(clock, period) = config in
+    let posted = log({ level: "info", message: "planner takes its post" }) in
+    let first = schedule(clock, self(), Tick, period) in
+    PlannerState(clock, period, 1),
 
   handle Tick, PlannerState(clock, period, round)
     ! {Send<ExecutorMsg>, Schedule<PlannerMsg>} =
@@ -81,16 +79,14 @@ actor Executor {
   // gap stays visible in the audit stream.
   handle Carry(order), ExecutorState(done)
     ! {Tool<RunErrand>, Send<AuditorMsg>} =
-    match order {
-      Order(round, errand) →
-        if round == 3
-          then crash!("round 3: the executor drops its errand")
-          else
-            let note = run_errand({ round: round, errand: errand }) in
-            let reported =
-              send(child(FleetSup, auditor), Record(Errands.conclude(order, note))) in
-            Continue(ExecutorState(done + 1)),
-    },
+    let Order(round, errand) = order in
+    if round == 3
+      then crash!("round 3: the executor drops its errand")
+      else
+        let note = run_errand({ round: round, errand: errand }) in
+        let reported =
+          send(child(FleetSup, auditor), Record(Errands.conclude(order, note))) in
+        Continue(ExecutorState(done + 1)),
 } ! {Tool<Log>, Tool<RunErrand>, Send<AuditorMsg>}
 
 // ── the auditor: chronicles outcomes ─────────────────────────────
@@ -106,11 +102,9 @@ actor Auditor {
 
   handle Record(outcome), AuditorState(recorded)
     ! {Tool<Chronicle>} =
-    match outcome {
-      Outcome(round, note) →
-        let chronicled = chronicle({ round: round, note: note }) in
-        Continue(AuditorState(recorded + 1)),
-    },
+    let Outcome(round, note) = outcome in
+    let chronicled = chronicle({ round: round, note: note }) in
+    Continue(AuditorState(recorded + 1)),
 } ! {Tool<Log>, Tool<Chronicle>}
 
 // ── supervision ──────────────────────────────────────────────────

@@ -87,6 +87,17 @@ match msg {
 - Exhaustiveness is required. Missing constructors are compile errors.
 - Patterns: constructors, variables, wildcards (`_`), literals, tuples, nested.
 
+```
+let Config(clock, period) = config in …
+let (a, b) = pair in …
+let _ = log({ message: "done" }) in …
+```
+
+- `let` binds a pattern. A plain name is generalised (let-polymorphism); a
+  destructuring pattern binds its variables monomorphically, like a match
+  arm, and must be irrefutable: `let Some(x) = o in …` is a compile error
+  (C0057) — use `match`.
+
 ---
 
 ## Effect Declarations

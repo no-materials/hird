@@ -170,6 +170,9 @@ pub enum CheckCode {
     /// An `effect` declaration names a built-in head (`Tool`, `Send`, …); the
     /// declaration is redundant (warning).
     C0056,
+    /// A `let` pattern is refutable: it does not cover every value of the
+    /// bound type, so the binding could fail at runtime.
+    C0057,
 }
 
 /// A secondary source location attached to a diagnostic.

@@ -260,9 +260,26 @@ fn let_expr_parts() {
     let Expr::Let(e) = body("let x = 42 in x") else {
         panic!("expected let");
     };
-    assert_eq!(e.name(), Some("x"));
+    assert!(matches!(e.pattern(), Some(Pattern::Bind(ref b)) if b.name() == Some("x")));
     assert!(matches!(e.value(), Some(Expr::Literal(_))));
     assert!(matches!(e.body(), Some(Expr::Name(_))));
+}
+
+#[test]
+fn let_pattern_parts() {
+    // The binder is a pattern: a destructuring form sits where a name would.
+    let Expr::Let(e) = body("let Cfg(a, _) = c in a") else {
+        panic!("expected let");
+    };
+    assert!(matches!(
+        e.pattern(),
+        Some(Pattern::Constructor(ref p)) if p.name() == Some("Cfg")
+    ));
+    let Expr::Let(tuple) = body("let (a, b): (Int, Int) = p in a") else {
+        panic!("expected let");
+    };
+    assert!(matches!(tuple.pattern(), Some(Pattern::Tuple(_))));
+    assert!(tuple.annotation().is_some());
 }
 
 #[test]

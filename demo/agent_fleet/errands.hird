@@ -27,4 +27,4 @@ pub fn forge(round: Int) → Order = Order(round, duty_of(cycle(round)))
 
 // A run errand and the runner's note, shaped for the auditor.
 pub fn conclude(order: Order, note: String) → Outcome =
-  match order { Order(round, _) → Outcome(round, note) }
+  let Order(round, _) = order in Outcome(round, note)

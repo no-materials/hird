@@ -1,0 +1,83 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f(c: Cfg, p: (Int, Int)) = let Cfg(n, _) = c in let (a, b): (Int, Int) = p in a\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "c"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "Cfg"
+      COMMA ","
+      PARAM
+        WHITESPACE " "
+        IDENT "p"
+        COLON ":"
+        TUPLE_TYPE
+          WHITESPACE " "
+          L_PAREN "("
+          IDENT "Int"
+          COMMA ","
+          WHITESPACE " "
+          IDENT "Int"
+          R_PAREN ")"
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    LET_EXPR
+      WHITESPACE " "
+      LET_KW "let"
+      CONSTRUCTOR_PAT
+        WHITESPACE " "
+        IDENT "Cfg"
+        L_PAREN "("
+        BIND_PAT
+          IDENT "n"
+        COMMA ","
+        WILDCARD_PAT
+          WHITESPACE " "
+          IDENT "_"
+        R_PAREN ")"
+      WHITESPACE " "
+      EQ "="
+      WHITESPACE " "
+      IDENT "c"
+      WHITESPACE " "
+      IN_KW "in"
+      LET_EXPR
+        WHITESPACE " "
+        LET_KW "let"
+        TUPLE_PAT
+          WHITESPACE " "
+          L_PAREN "("
+          BIND_PAT
+            IDENT "a"
+          COMMA ","
+          BIND_PAT
+            WHITESPACE " "
+            IDENT "b"
+          R_PAREN ")"
+        TYPE_ANN
+          COLON ":"
+          TUPLE_TYPE
+            WHITESPACE " "
+            L_PAREN "("
+            IDENT "Int"
+            COMMA ","
+            WHITESPACE " "
+            IDENT "Int"
+            R_PAREN ")"
+        WHITESPACE " "
+        EQ "="
+        WHITESPACE " "
+        IDENT "p"
+        WHITESPACE " "
+        IN_KW "in"
+        WHITESPACE " "
+        IDENT "a"

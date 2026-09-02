@@ -422,14 +422,28 @@ impl Lowerer<'_> {
     /// `let name = value in body`. The binding's recorded type is the bound
     /// value's type.
     fn lower_let(&self, le: &LetExpr) -> IrExpr {
+        let pattern = le.pattern().expect("let has a binder");
         let value = le.value().expect("let has a value");
         let body = le.body().expect("let has a body");
-        IrExpr::Let(IrLet {
-            name: String::from(le.name().unwrap_or("")),
-            ty: self.expr_type(&value),
-            value: Box::new(self.lower_expr(&value)),
-            body: Box::new(self.lower_expr(&body)),
-        })
+        match &pattern {
+            Pattern::Bind(bind) => IrExpr::Let(IrLet {
+                name: String::from(bind.name().unwrap_or("")),
+                ty: self.expr_type(&value),
+                value: Box::new(self.lower_expr(&value)),
+                body: Box::new(self.lower_expr(&body)),
+            }),
+            // A destructuring binder is a one-arm match: the IR has no
+            // pattern-let node, and the checker has proved the arm total.
+            _ => IrExpr::Match(IrMatch {
+                scrutinee_type: self.expr_type(&value),
+                scrutinee: Box::new(self.lower_expr(&value)),
+                arms: Vec::from([IrArm {
+                    pattern: self.lower_pattern(&pattern),
+                    body: self.lower_expr(&body),
+                }]),
+                result_type: self.expr_type(&body),
+            }),
+        }
     }
 
     /// `λparams → body`. Parameter types and the effect row come from the

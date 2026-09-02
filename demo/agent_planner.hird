@@ -50,7 +50,7 @@ fn actionable(backlog: Backlog) → Backlog =
 
 // Repository state to the tickets worth filing.
 fn analyze(repo: RepoState) → Backlog =
-  match repo { RepoState(_, backlog) → actionable(backlog) }
+  let RepoState(_, backlog) = repo in actionable(backlog)
 
 // Files one ticket per task, logging each, and counts what it filed.
 fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
@@ -132,11 +132,9 @@ fn run_demo() → () ! {Supervise, Send<PlannerMsg>, Await<PlannerStatus>} =
   let started = supervise(PlannerSup) in
   let planner = child(PlannerSup, planner) in
   let plan = send(planner, PlanRepo(Path("forest-rs/hird"))) in
-  match request(planner, GetStatus) {
-    PlannerStatus(repos, tickets) →
-      let stop = send(planner, Shutdown) in
-      if tickets > 0 then () else crash!("the planner filed no tickets"),
-  }
+  let PlannerStatus(_, tickets) = request(planner, GetStatus) in
+  let stop = send(planner, Shutdown) in
+  if tickets > 0 then () else crash!("the planner filed no tickets")
 
 // Handler maps never cross the supervision boundary: the install block
 // is what the supervised planner's tool calls resolve through.

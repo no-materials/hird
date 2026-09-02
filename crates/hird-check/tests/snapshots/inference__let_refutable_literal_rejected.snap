@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn one(n: Int) -> Int = let 1 = n in n\")"
+---
+one : Int → Int
+error[C0057] 27..29: refutable pattern in `let`: it does not cover every value of the bound type; use `match`

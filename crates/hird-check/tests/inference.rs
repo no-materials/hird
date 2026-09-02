@@ -150,6 +150,59 @@ fn let_annotation_polymorphic() {
     ));
 }
 
+// ── let patterns ────────────────────────────────────────────────
+
+/// A single-constructor value destructures in `let`; the bound variables take
+/// the field types.
+#[test]
+fn let_destructures_constructor() {
+    insta::assert_snapshot!(check_str(
+        "type Cfg = Cfg(Int, String)\n\
+         fn period(c: Cfg) -> Int = let Cfg(n, _) = c in n"
+    ));
+}
+
+/// Tuples destructure likewise, with an annotation on the pattern.
+#[test]
+fn let_destructures_tuple() {
+    insta::assert_snapshot!(check_str(
+        "fn swap(p: (Int, String)) -> (String, Int) = let (a, b): (Int, String) = p in (b, a)"
+    ));
+}
+
+/// A wildcard binder discards the value; the body still sees its effects.
+#[test]
+fn let_wildcard_discards() {
+    insta::assert_snapshot!(check_str(
+        "effect Log\n\
+         fn f(run: Int -> Int ! {Log}) -> Int ! {Log} = let _ = run(0) in 1"
+    ));
+}
+
+/// A pattern that does not cover every constructor is refutable: C0057 names
+/// the missing case.
+#[test]
+fn let_refutable_constructor_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Opt = Some(Int) | None\n\
+         fn get(o: Opt) -> Int = let Some(n) = o in n"
+    ));
+}
+
+/// A literal pattern is refutable over an open type.
+#[test]
+fn let_refutable_literal_rejected() {
+    insta::assert_snapshot!(check_str("fn one(n: Int) -> Int = let 1 = n in n"));
+}
+
+/// Destructuring binds monomorphically; only a plain name generalises.
+#[test]
+fn let_pattern_binding_is_monomorphic() {
+    insta::assert_snapshot!(check_str(
+        r#"fn main() = let (f, g) = (\x -> x, 0) in (f(1), f("hi"))"#
+    ));
+}
+
 #[test]
 fn higher_order_return_type() {
     insta::assert_snapshot!(check_str(

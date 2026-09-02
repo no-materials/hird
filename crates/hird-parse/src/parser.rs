@@ -1204,7 +1204,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn parse_let_expr(&mut self) {
         self.start_node(SyntaxKind::LET_EXPR);
         self.expect(SyntaxKind::LET_KW);
-        self.expect(SyntaxKind::IDENT);
+        self.parse_pattern();
         if self.at(SyntaxKind::COLON) {
             self.start_node(SyntaxKind::TYPE_ANN);
             self.bump();

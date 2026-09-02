@@ -10,6 +10,16 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+### Added
+
+- **Irrefutable patterns in `let`.** The binder is a pattern:
+  `let Config(clock, period) = config in …`, `let (a, b) = pair in …`, and
+  `let _ = e in …` all work, replacing the one-arm `match` idiom. A plain
+  name still generalises; a destructuring pattern binds monomorphically and
+  must cover every value of the bound type — a refutable one (`Some(x)`, a
+  literal) is a compile error (C0057). Lowers to a one-arm match, so the IR
+  and codegen are unchanged.
+
 ### Changed
 
 - **Actor handlers and `init` no longer carry return types.** A handler's

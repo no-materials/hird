@@ -511,6 +511,16 @@ fn let_polymorphic_lambda_and_application() {
 }
 
 #[test]
+fn let_pattern_round_trips() {
+    // A destructuring `let` prints as the one-arm match it lowers to and
+    // re-lowers to the same IR.
+    assert_roundtrips(
+        "type Cfg = Cfg(Int, String)\n\
+         fn period(c: Cfg) -> Int = let Cfg(n, _) = c in let (a, _) = (n, 0) in a",
+    );
+}
+
+#[test]
 fn multi_parameter_lambda() {
     assert_roundtrips(r"fn const_fst() -> Int = (\x y -> x)(1, 2)");
 }

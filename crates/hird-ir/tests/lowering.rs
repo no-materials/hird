@@ -106,6 +106,24 @@ fn logical_operator_normalises_to_unicode() {
 // ── let, lambda, application ─────────────────────────────────────
 
 #[test]
+fn let_pattern_lowers_to_one_arm_match() {
+    // A destructuring binder has no IR node of its own: it is the one-arm
+    // match the checker proved total.
+    let module = lower(
+        "type Cfg = Cfg(Int, String)\n\
+         fn main() = let Cfg(n, _) = Cfg(1, \"x\") in n",
+        "Main",
+    );
+    let main = fn_named(&module, "main");
+    let IrExpr::Match(m) = &main.body else {
+        panic!("body should be a match, got {:?}", main.body);
+    };
+    assert_eq!(m.arms.len(), 1);
+    assert!(matches!(&m.arms[0].pattern, IrPattern::Constructor(c) if c.name == "Cfg"));
+    assert!(matches!(&m.arms[0].body, IrExpr::Var(v) if v.name == "n"));
+}
+
+#[test]
 fn let_lambda_and_application() {
     let module = lower(r"fn main() = let id = \x -> x in id(1)", "Main");
     let main = only_fn(&module);

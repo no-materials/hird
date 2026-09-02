@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type Cfg = Cfg(Int, String)\\n\\\n         fn period(c: Cfg) -> Int = let Cfg(n, _) = c in n\")"
+---
+Cfg : Int → String → Cfg
+period : Cfg → Int

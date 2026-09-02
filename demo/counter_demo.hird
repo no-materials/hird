@@ -22,7 +22,7 @@ actor Counter {
     | GetCount(ReplyTo<Int>),
 
   init: fn(config: CounterConfig) ! {} =
-    match config { CounterConfig(start) → CounterState(start) },
+    let CounterConfig(start) = config in CounterState(start),
 
   handle Increment(by), CounterState(n) ! {} =
     Continue(CounterState(n + by)),
@@ -54,7 +54,5 @@ fn main() → () ! {Supervise, Send<CounterMsg>, Await<Int>} =
   let counter = child(CounterSup, counter) in
   let first = send(counter, Increment(2)) in
   let second = send(counter, Increment(3)) in
-  match request(counter, GetCount) {
-    total →
-      if total == 5 then () else crash!("the counter lost an increment"),
-  }
+  let total = request(counter, GetCount) in
+  if total == 5 then () else crash!("the counter lost an increment")
