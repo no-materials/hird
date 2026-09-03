@@ -66,12 +66,72 @@ impl ToolError {
 /// The default `get_context_for_symbol` token budget.
 const DEFAULT_BUDGET: usize = 400;
 
+/// Behaviour every tool shares, appended to each description so a client
+/// reading one tool in isolation still learns it.
+const COMMON_BEHAVIOUR: &str = "Read-only: compiles the file's directory in memory (cached \
+    until a sibling changes) and writes or executes nothing. Failures are `isError` results \
+    with a stable `error.code`: `file_not_found`, `read_error`, `invalid_params`, `parse_error`, \
+    or `check_error`, the last two carrying coded diagnostics in `error.data.diagnostics`.";
+
+/// The MCP annotations every tool shares: a titled, read-only, idempotent,
+/// closed-world query.
+fn annotations(title: &str) -> Value {
+    json!({
+        "title": title,
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+    })
+}
+
+/// One tool descriptor: `description` plus the shared behaviour, an input
+/// schema over `properties` (all required), and an output schema over
+/// `output` (all required unless nullable).
+fn descriptor(
+    name: &str,
+    title: &str,
+    description: &str,
+    properties: Value,
+    output: Value,
+    nullable: &[&str],
+) -> Value {
+    let keys = |schema: &Value| -> Vec<String> {
+        schema
+            .as_object()
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
+    };
+    let required: Vec<String> = keys(&output)
+        .into_iter()
+        .filter(|k| !nullable.contains(&k.as_str()))
+        .collect();
+    json!({
+        "name": name,
+        "title": title,
+        "description": format!("{description} {COMMON_BEHAVIOUR}"),
+        "annotations": annotations(title),
+        "inputSchema": {
+            "type": "object",
+            "properties": properties,
+            "required": keys(&properties),
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": output,
+            "required": required,
+        },
+    })
+}
+
 /// The tool descriptors served by `tools/list`.
 pub(crate) fn descriptors() -> Value {
     let file = json!({
         "type": "string",
-        "description": "Path to a .hird source file. Its directory's .hird files are compiled \
-                        together as one program, so imported names resolve.",
+        "description": "Path to a .hird source file, absolute or relative to the server's \
+                        working directory. Every .hird file in its directory is compiled \
+                        with it as one program, so imported names resolve; answers may name \
+                        a sibling file.",
     });
     let symbol = |what: &str| {
         json!({
@@ -82,115 +142,271 @@ pub(crate) fn descriptors() -> Value {
             ),
         })
     };
+    let actor_name = |what: &str| {
+        json!({
+            "type": "string",
+            "description": format!(
+                "{what}, as declared in this file. Actors are not resolved through imports; \
+                 an unknown name fails with `not_found` and `error.data.available_actors`."
+            ),
+        })
+    };
+    let string = json!({ "type": "string" });
+    let nullable_string = json!({ "type": ["string", "null"] });
+    let integer = json!({ "type": "integer" });
+    let effect_row = json!({
+        "type": "object",
+        "description": "An effect row: `effects` (each with `head`, `args`, `display`), \
+                        an optional `tail` row variable, and its `display` string.",
+    });
+    let display_type = json!({
+        "type": "object",
+        "description": "A type, with its `display` string as Hirð prints it.",
+    });
     json!([
-        {
-            "name": "infer_type",
-            "description": "Infer the type and effect row of the expression at a source \
-                            location (1-based line, 1-based character column) in a .hird file.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "line": { "type": "integer", "description": "1-based source line." },
-                    "column": { "type": "integer", "description": "1-based character column." },
+        descriptor(
+            "infer_type",
+            "Infer expression type",
+            "Infer the type and effect row of the expression at a source location \
+             (1-based line and character column) in a .hird file. Use it for 'what is the \
+             type here', including local bindings, sub-expressions, and names inside \
+             `use` lists; for a named top-level definition prefer `lookup_definition`, \
+             and for a function's effects with explanations prefer `explain_effect_row`. \
+             Returns `token` (the source token found at the location), `type` (the \
+             normalized type as Hirð prints it), and `effect_row` (the row of a \
+             function-typed expression, `{}` otherwise). A location outside the file is \
+             `invalid_params`; one with no typed expression is `not_found`.",
+            json!({
+                "file": file,
+                "line": {
+                    "type": "integer",
+                    "description": "1-based source line of the expression.",
                 },
-                "required": ["file", "line", "column"],
-            },
-        },
-        {
-            "name": "lookup_definition",
-            "description": "Look up a top-level definition by name: source location, type, \
-                            doc comment, and kind.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "name": symbol("The definition's name"),
+                "column": {
+                    "type": "integer",
+                    "description": "1-based character (not byte) column. Any position \
+                                    inside the expression's token works; when several \
+                                    tokens touch it an identifier is preferred.",
                 },
-                "required": ["file", "name"],
-            },
-        },
-        {
-            "name": "explain_effect_row",
-            "description": "Explain a function's effect row: the canonical row plus a \
-                            human-readable explanation of each effect.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "fn_name": symbol("The function's name"),
-                },
-                "required": ["file", "fn_name"],
-            },
-        },
-        {
-            "name": "render_ir_fragment",
-            "description": "Render the typed IR of one top-level definition as JSON.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "name": symbol("The definition's name"),
-                },
-                "required": ["file", "name"],
-            },
-        },
-        {
-            "name": "explain_actor_protocol",
-            "description": "Describe an actor's protocol: message constructors, state type, \
-                            init, handler signatures, and the declared effect summary.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "actor_name": { "type": "string", "description": "The actor's name." },
-                },
-                "required": ["file", "actor_name"],
-            },
-        },
-        {
-            "name": "emit_actor_effect_graph",
-            "description": "Emit the actor/effect graph rooted at an actor: reachable actors \
-                            (via Send/Await/Spawn/Schedule message types), supervisor \
-                            relationships, \
-                            and transitive tool effects.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "actor_name": { "type": "string", "description": "The root actor's name." },
-                },
-                "required": ["file", "actor_name"],
-            },
-        },
-        {
-            "name": "get_context_for_symbol",
-            "description": "A token-budget-aware summary of a symbol: kind, signature, effect \
-                            row, doc, callers, and callees, fitted to the budget.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "file": file,
-                    "name": symbol("The symbol's name"),
-                    "budget": {
-                        "type": "integer",
-                        "description": "Approximate token budget for the summary (default 400).",
+            }),
+            json!({
+                "file": string,
+                "line": integer,
+                "column": integer,
+                "token": string,
+                "type": string,
+                "effect_row": string,
+            }),
+            &[],
+        ),
+        descriptor(
+            "lookup_definition",
+            "Look up definition",
+            "Look up a top-level definition by name: defining file and line, kind, type, \
+             and doc comment. Use it first to locate or identify a symbol; use \
+             `get_context_for_symbol` when you also want effects, callers, and callees, \
+             `explain_effect_row` to interpret a function's effects, and \
+             `render_ir_fragment` for its body. Returns `kind` (`function`, `type`, \
+             `constructor`, `effect`, `tool`, `tool_function`, `actor`, `message_type`, \
+             `message_constructor`, `supervisor`, or `extern`), `line`, and nullable \
+             `type` and `doc`; `file` is the sibling module when the name is imported. An \
+             unknown name is `not_found`, with every name in the file's scope in \
+             `error.data.available`.",
+            json!({ "file": file, "name": symbol("The definition's name") }),
+            json!({
+                "file": string,
+                "name": string,
+                "kind": string,
+                "line": integer,
+                "type": nullable_string,
+                "doc": nullable_string,
+            }),
+            &["type", "doc"],
+        ),
+        descriptor(
+            "explain_effect_row",
+            "Explain effect row",
+            "Explain a function's effect row: the canonical row plus a one-sentence \
+             explanation of each effect. Use it for 'what may this function do' or to \
+             interpret an unfamiliar effect. It covers one named function; use \
+             `infer_type` for an arbitrary expression's row and `emit_actor_effect_graph` \
+             for what an actor transitively does. Returns `type`, `effect_row`, `open` \
+             (the row ends in a row variable, so it may carry more effects than listed), \
+             `pure` (closed and empty), and `effects`, each with `effect` and \
+             `explanation`. A name of non-function type is `not_a_function`; an unknown \
+             name is `not_found` with the available names in `error.data.available`.",
+            json!({ "file": file, "fn_name": symbol("The function's name") }),
+            json!({
+                "file": string,
+                "name": string,
+                "type": string,
+                "effect_row": string,
+                "open": { "type": "boolean" },
+                "pure": { "type": "boolean" },
+                "effects": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "effect": string,
+                            "explanation": string,
+                        },
+                        "required": ["effect", "explanation"],
                     },
                 },
-                "required": ["file", "name"],
-            },
-        },
-        {
-            "name": "get_context_budget",
-            "description": "Approximate token costs of including the file's types, effects, \
-                            actors, supervisors, tools, and function signatures in an LLM \
-                            context window.",
-            "inputSchema": {
-                "type": "object",
-                "properties": { "file": file },
-                "required": ["file"],
-            },
-        },
+            }),
+            &[],
+        ),
+        descriptor(
+            "render_ir_fragment",
+            "Render IR fragment",
+            "Render the typed intermediate representation (IR) of one top-level definition \
+             as JSON. Use it when the exact lowered structure matters: desugared bodies, \
+             the resolved type on every node, a tool's generated function. The IR is \
+             verbose and follows the compiler's declaration serialization, so for a \
+             human-oriented view prefer `get_context_for_symbol` or `lookup_definition`. \
+             Returns `module`, `name`, and `ir` (the serialized declaration). An unknown \
+             name is `not_found` with the available names in `error.data.available`.",
+            json!({ "file": file, "name": symbol("The definition's name") }),
+            json!({
+                "file": string,
+                "module": string,
+                "name": string,
+                "ir": {
+                    "type": "object",
+                    "description": "The declaration, as the compiler serializes its IR.",
+                },
+            }),
+            &[],
+        ),
+        descriptor(
+            "explain_actor_protocol",
+            "Explain actor protocol",
+            "Describe one actor's protocol: its message type and constructors, state type, \
+             init parameters and effects, per-handler effect rows, and the declared effect \
+             summary. Use it to learn how to talk to an actor or what each handler may \
+             do; use `emit_actor_effect_graph` for the actors, supervisors, and tools it \
+             reaches transitively, and `lookup_definition` if you only need its location. \
+             Returns `actor` with `name`, `line`, `state`, `message` (`name`, \
+             `constructors`), `init` (`params`, `effects`), `handlers` (`message`, \
+             `effects`), and `effects`; types and rows carry a `display` string.",
+            json!({ "file": file, "actor_name": actor_name("The actor's name") }),
+            json!({
+                "module": string,
+                "file": string,
+                "actor": {
+                    "type": "object",
+                    "properties": {
+                        "name": string,
+                        "line": integer,
+                        "state": display_type,
+                        "message": { "type": "object" },
+                        "init": { "type": "object" },
+                        "handlers": { "type": "array" },
+                        "effects": effect_row,
+                    },
+                    "required": [
+                        "name", "line", "state", "message", "init", "handlers", "effects",
+                    ],
+                },
+            }),
+            &[],
+        ),
+        descriptor(
+            "emit_actor_effect_graph",
+            "Emit actor effect graph",
+            "Emit the actor/effect graph rooted at one actor: every actor reachable through \
+             `Send`, `Await`, `Spawn`, and `Schedule` effects (matched by message type), \
+             every supervisor of an included actor together with its whole child set, and \
+             every tool an included actor's effect summary names. Use it for 'what does \
+             this actor transitively do or depend on'; effect rows are per-process, so no \
+             single signature shows this. Use `explain_actor_protocol` for one actor's own \
+             interface and `get_context_budget` to gauge the size before requesting it. \
+             Returns `schema_version` (1), `module`, `root`, and the included `actors`, \
+             `supervisors`, and `tools`, whose nodes share the shape of `hird \
+             emit-effect-graph --json`; declarations the root does not reach are omitted.",
+            json!({ "file": file, "actor_name": actor_name("The root actor's name") }),
+            json!({
+                "schema_version": integer,
+                "module": string,
+                "root": string,
+                "actors": { "type": "array", "items": { "type": "object" } },
+                "supervisors": { "type": "array", "items": { "type": "object" } },
+                "tools": { "type": "array", "items": { "type": "object" } },
+            }),
+            &[],
+        ),
+        descriptor(
+            "get_context_for_symbol",
+            "Summarize symbol for context",
+            "Summarize one symbol for an LLM prompt within an approximate token budget: \
+             signature, effect row, doc comment, callers, and callees, added in that order \
+             while they fit. Use it as the default way to bring a symbol into context; use \
+             `lookup_definition` for just the location, `explain_effect_row` for effect \
+             explanations, and `render_ir_fragment` for the full body. Returns `kind`, \
+             the `budget` applied, `summary` (prompt-ready text), `approx_tokens` (its \
+             estimated cost at ~4 characters per token), and `omitted` (the sections that \
+             did not fit). The signature is always present, truncated when the budget is \
+             smaller than it. An unknown name is `not_found` with the available names in \
+             `error.data.available`.",
+            json!({
+                "file": file,
+                "name": symbol("The symbol's name"),
+                "budget": {
+                    "type": "integer",
+                    "description": "Approximate token budget for the summary, at ~4 \
+                                    characters per token (default 400). A section that \
+                                    does not fit is dropped whole and named in `omitted`; \
+                                    only the signature is truncated.",
+                },
+            }),
+            json!({
+                "file": string,
+                "symbol": string,
+                "kind": string,
+                "budget": integer,
+                "approx_tokens": integer,
+                "summary": string,
+                "omitted": { "type": "array", "items": string },
+            }),
+            &[],
+        ),
+        descriptor(
+            "get_context_budget",
+            "Estimate context budget",
+            "Estimate the token cost of loading a file's declarations into an LLM context \
+             window, per category: types, effects, actors, supervisors, tools, and \
+             function signatures. Use it before pulling a module in wholesale, to choose \
+             between `get_context_for_symbol` calls and a full read, or to pick a \
+             `budget`; it names no individual symbols. Returns `approx_tokens` with \
+             `types`, `effects`, `actors`, `supervisors`, `tools`, `functions`, and \
+             `total`, estimated at ~4 characters per token from one-line signatures, and \
+             a `note` restating that. Fails only when the file is unreadable or has parse \
+             or type errors.",
+            json!({ "file": file }),
+            json!({
+                "file": string,
+                "module": string,
+                "approx_tokens": {
+                    "type": "object",
+                    "properties": {
+                        "types": integer,
+                        "effects": integer,
+                        "actors": integer,
+                        "supervisors": integer,
+                        "tools": integer,
+                        "functions": integer,
+                        "total": integer,
+                    },
+                    "required": [
+                        "types", "effects", "actors", "supervisors", "tools", "functions",
+                        "total",
+                    ],
+                },
+                "note": string,
+            }),
+            &[],
+        ),
     ])
 }
 

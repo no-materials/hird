@@ -10,6 +10,16 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+### Changed
+
+- **MCP tool descriptors disclose more.** Every `hird-mcp` tool now carries
+  MCP annotations (`readOnlyHint`, `idempotentHint`, no destructive or
+  open-world behaviour), a `title`, and an `outputSchema` matching its
+  `structuredContent`. Descriptions state the result fields, the error codes
+  a call can fail with, and which sibling tool to prefer for related
+  questions; parameter descriptions spell out path resolution, character
+  columns, actor-name scope, and how `budget` drops sections.
+
 ## [0.3.0] — 2026-09-03
 
 ### Added

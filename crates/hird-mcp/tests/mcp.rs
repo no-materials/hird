@@ -710,3 +710,109 @@ fn sibling_edits_invalidate_the_program() {
         lib.to_str().expect("a UTF-8 path")
     );
 }
+
+/// Whether `value` satisfies the JSON-schema subset the descriptors use:
+/// `type` (a name or a list of names), `required`, `properties`, `items`.
+fn conforms(value: &Value, schema: &Value) -> bool {
+    let type_ok = match &schema["type"] {
+        Value::String(t) => has_type(value, t),
+        Value::Array(ts) => ts.iter().any(|t| has_type(value, t.as_str().unwrap_or(""))),
+        _ => true,
+    };
+    let required_ok = schema["required"].as_array().is_none_or(|keys| {
+        keys.iter()
+            .all(|k| value.get(k.as_str().unwrap()).is_some())
+    });
+    let properties_ok = schema["properties"].as_object().is_none_or(|props| {
+        props
+            .iter()
+            .all(|(k, s)| value.get(k).is_none_or(|v| conforms(v, s)))
+    });
+    let items_ok = match (&schema["items"], value.as_array()) {
+        (Value::Object(_), Some(items)) => items.iter().all(|v| conforms(v, &schema["items"])),
+        _ => true,
+    };
+    type_ok && required_ok && properties_ok && items_ok
+}
+
+/// Whether `value` has JSON-schema type `name`.
+fn has_type(value: &Value, name: &str) -> bool {
+    match name {
+        "string" => value.is_string(),
+        "integer" => value.is_u64() || value.is_i64(),
+        "boolean" => value.is_boolean(),
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "null" => value.is_null(),
+        _ => false,
+    }
+}
+
+#[test]
+fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
+    let mut server = Server::new();
+    let file = demo_path();
+    let source = std::fs::read_to_string(&file).expect("the demo reads");
+    let (line, column) = position(&source, "read_repo({ path: path })", "read_repo");
+    let arguments = |tool: &str| match tool {
+        "infer_type" => json!({ "file": file, "line": line, "column": column }),
+        "lookup_definition" | "render_ir_fragment" => {
+            json!({ "file": file, "name": "file_tickets" })
+        }
+        "explain_effect_row" => json!({ "file": file, "fn_name": "file_tickets" }),
+        "explain_actor_protocol" | "emit_actor_effect_graph" => {
+            json!({ "file": file, "actor_name": "Planner" })
+        }
+        "get_context_for_symbol" => json!({ "file": file, "name": "file_tickets" }),
+        "get_context_budget" => json!({ "file": file }),
+        _ => panic!("no demo arguments for `{tool}`"),
+    };
+
+    let listed = request(&mut server, 1, "tools/list", json!({}));
+    for tool in listed["tools"].as_array().expect("a tool array") {
+        let name = tool["name"].as_str().expect("a name");
+        assert!(tool["title"].is_string(), "`{name}` has no title");
+        assert_eq!(tool["annotations"]["readOnlyHint"], true, "`{name}`");
+        assert_eq!(tool["annotations"]["destructiveHint"], false, "`{name}`");
+        assert_eq!(tool["annotations"]["idempotentHint"], true, "`{name}`");
+        assert_eq!(tool["annotations"]["openWorldHint"], false, "`{name}`");
+
+        // The description discloses behaviour, output, and failure modes.
+        let description = tool["description"].as_str().expect("a description");
+        for expected in ["Read-only", "Returns", "`error.code`"] {
+            assert!(
+                description.contains(expected),
+                "`{name}` description lacks `{expected}`: {description}"
+            );
+        }
+
+        // Every input property is required and described.
+        let input = &tool["inputSchema"];
+        let properties = input["properties"].as_object().expect("input properties");
+        for (key, schema) in properties {
+            assert!(
+                schema["description"].is_string(),
+                "`{name}.{key}` undescribed"
+            );
+        }
+        let required: Vec<&str> = input["required"]
+            .as_array()
+            .expect("required inputs")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        for key in properties.keys() {
+            assert!(
+                required.contains(&key.as_str()),
+                "`{name}.{key}` not required"
+            );
+        }
+
+        let result = call_tool(&mut server, name, arguments(name));
+        assert!(
+            conforms(&result, &tool["outputSchema"]),
+            "`{name}` result does not match its outputSchema:\n{result:#}\n{:#}",
+            tool["outputSchema"]
+        );
+    }
+}
