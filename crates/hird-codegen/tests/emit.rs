@@ -434,6 +434,22 @@ fn snapshot_tuples_lists_unit_and_literals() {
     insta::assert_snapshot!(emit(program("Values"), "Values"));
 }
 
+/// A tool typed over an alias of its argument record lowers and emits
+/// byte-for-byte the same Erlang as one written out: the audit record and
+/// dispatch are built from the expanded type.
+#[test]
+fn alias_typed_tool_emits_identical_erlang() {
+    let written = emit_joined(AUDITED, "Audited");
+    let aliased = emit_joined(
+        "effect Log type alias RepoArgs = { x: Int }\n\
+         tool Repo : RepoArgs -> Int\n\
+         fn audited(f: Int -> Int ! {Tool<Repo>}, logh: RepoArgs -> Int ! {Log}) -> Int ! {Log} =\n\
+           handle { Tool<Repo> -> logh } in f(0)",
+        "Audited",
+    );
+    assert_eq!(written, aliased);
+}
+
 #[test]
 fn snapshot_effectful_function_and_tool_dispatch() {
     insta::assert_snapshot!(emit(program("Repo"), "Repo"));

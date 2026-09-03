@@ -262,6 +262,29 @@ fn type_opaque_without_type_is_error() {
     insta::assert_snapshot!(render_cst("pub opaque fn foo() = 1"));
 }
 
+// ── type aliases ────────────────────────────────────────────────
+
+#[test]
+fn type_alias_record() {
+    insta::assert_snapshot!(render_cst(
+        "type alias LogArgs = { level: String, message: String }"
+    ));
+}
+
+#[test]
+fn type_alias_pub_parametric_fn() {
+    insta::assert_snapshot!(render_cst(
+        "pub type alias Handler<a> = a -> () ! {Tool<Log>}"
+    ));
+}
+
+#[test]
+fn type_alias_opaque_is_error() {
+    // An alias has no constructors to hide, so `opaque` is reported (P0007)
+    // and the declaration still parses as an alias.
+    insta::assert_snapshot!(render_cst("pub opaque type alias Pair = (Int, Int)"));
+}
+
 // ── actor declarations ──────────────────────────────────────────
 
 #[test]

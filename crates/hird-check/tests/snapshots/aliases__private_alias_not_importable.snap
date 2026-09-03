@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_modules(&[(\"Shapes\",\n\"module Shapes\\ntype alias Point = { x: Int, y: Int }\"),\n(\"App\",\n\"module App\\nuse Shapes.{Point}\\npub fn origin() -> Point = { x: 0, y: 0 }\",),])"
+---
+== App ==
+error[C0023] 23..28: module `Shapes` does not export `Point`
+error[C0004] 49..54: unknown type `Point`
+== Shapes ==

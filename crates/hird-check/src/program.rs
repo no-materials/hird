@@ -23,13 +23,13 @@ use hird_ast::{AstNode, Decl, SourceFile, UseDecl};
 use hird_lex::Span;
 use hird_types::{Name, Type};
 
-use crate::checker::{Checker, tarjan};
+use crate::checker::{AliasExpansion, Checker, tarjan};
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::{CheckedFile, ModuleName, node_span, token_span};
 
 /// The public surface one module presents to the modules that import it.
 ///
-/// Holds exported (`pub`) functions and types. Each exported type carries its
+/// Holds exported (`pub`) functions, types, and aliases. Each exported type carries its
 /// constructor schemes — usable for a transparent type, diagnostic-only for an
 /// opaque one (so an out-of-module destructure names the type rather than
 /// reporting an unknown constructor).
@@ -39,6 +39,8 @@ pub(crate) struct ModuleInterface {
     pub(crate) functions: BTreeMap<String, Type>,
     /// Exported type name → its export record.
     pub(crate) types: BTreeMap<Name, ExportedType>,
+    /// Exported alias name → its expansion; an importer sees the expansion.
+    pub(crate) aliases: BTreeMap<Name, AliasExpansion>,
 }
 
 /// An exported type's importable shape.
@@ -301,6 +303,10 @@ fn seed_use(
         let member_name = Name::new(member.as_str());
         if let Some(exported) = interface.types.get(&member_name) {
             checker.seed_import_type(&member_name, exported, u.target.clone(), *span);
+            found = true;
+        }
+        if let Some(expansion) = interface.aliases.get(&member_name) {
+            checker.seed_import_alias(&member_name, expansion.clone(), *span);
             found = true;
         }
         if let Some(scheme) = interface.functions.get(member) {

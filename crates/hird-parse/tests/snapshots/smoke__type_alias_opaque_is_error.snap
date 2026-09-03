@@ -1,0 +1,28 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"pub opaque type alias Pair = (Int, Int)\")"
+---
+SOURCE_FILE
+  TYPE_ALIAS_DECL
+    VISIBILITY
+      PUB_KW "pub"
+    WHITESPACE " "
+    OPAQUE_KW "opaque"
+    WHITESPACE " "
+    TYPE_KW "type"
+    WHITESPACE " "
+    ALIAS_KW "alias"
+    WHITESPACE " "
+    IDENT "Pair"
+    WHITESPACE " "
+    EQ "="
+    TUPLE_TYPE
+      WHITESPACE " "
+      L_PAREN "("
+      IDENT "Int"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "Int"
+      R_PAREN ")"
+---
+P0007 4..10: a type alias cannot be `opaque`

@@ -20,7 +20,9 @@ type HeartState = HeartState(Clock, Int, Int)
 
 // ── tools ────────────────────────────────────────────────────────
 
-tool Log : { message: String } → ()
+type alias LogArgs = { message: String }
+
+tool Log : LogArgs → ()
 
 // ── the heart actor ──────────────────────────────────────────────
 
@@ -58,7 +60,7 @@ supervisor HeartSup {
 
 // The audit stream is the visible heartbeat; the handler itself does
 // nothing.
-fn demo_log(args: { message: String }) → () = ()
+fn demo_log(args: LogArgs) → () = ()
 
 // ── entry point ──────────────────────────────────────────────────
 

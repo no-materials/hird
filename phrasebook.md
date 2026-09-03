@@ -88,6 +88,27 @@ shadows it.
 
 ---
 
+## Type Aliases
+
+```
+type alias LogArgs = { level: String, message: String }
+type alias Handler<a> = a → () ! {Tool<Log>}
+
+tool Log : LogArgs → ()
+fn demo_log(args: LogArgs) → () = ()
+```
+
+An alias is a name for a type, not a new type: every use expands to the
+right-hand side, so `LogArgs` and `{ level: String, message: String }` are
+the same type everywhere (unification, the wire check, the audit format,
+the IR). Any type expression may be aliased; a parametric alias is applied
+at its declared arity. An alias cannot refer to itself, directly or through
+other aliases (C0059) — recursion is for ADTs — and cannot be `opaque`
+(P0007): identity stays with `type`. `pub type alias` exports it; an
+importer sees the expansion.
+
+---
+
 ## Pattern Matching
 
 ```

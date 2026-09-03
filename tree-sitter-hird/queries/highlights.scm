@@ -151,6 +151,7 @@
 
 [
   "type"
+  "alias"
   "effect"
   "tool"
   "actor"

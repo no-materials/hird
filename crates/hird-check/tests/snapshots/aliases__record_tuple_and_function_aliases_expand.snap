@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias LogArgs = { level: String, message: String }\\n\\\n         type alias Pair = (Int, String)\\n\\\n         type alias Step = Int -> Int\\n\\\n         fn level(a: LogArgs) -> String = a.level\\n\\\n         fn swap(p: Pair) -> (String, Int) = let (n, s) = p in (s, n)\\n\\\n         fn twice(f: Step, x: Int) -> Int = f(f(x))\")"
+---
+level : { level: String, message: String } → String
+swap : (Int, String) → (String, Int)
+twice : (Int → Int) → Int → Int

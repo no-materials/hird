@@ -176,6 +176,9 @@ pub enum CheckCode {
     /// The left operand of `;` is not `()`: a value would be silently
     /// discarded.
     C0058,
+    /// A type alias refers to itself, directly or through other aliases;
+    /// recursion is for ADTs.
+    C0059,
 }
 
 /// A secondary source location attached to a diagnostic.

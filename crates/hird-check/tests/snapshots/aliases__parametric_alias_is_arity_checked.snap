@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias Box<a> = { value: a }\\n\\\n         fn unbox(b: Box<Int>) -> Int = b.value\\n\\\n         fn bare(b: Box) -> Int = 0\\n\\\n         fn over(b: Box<Int, Int>) -> Int = 0\")"
+---
+unbox : { value: Int } → Int
+error[C0005] 83..86: `Box` expects 1 type argument(s), but 0 were given
+error[C0005] 109..123: `Box` expects 1 type argument(s), but 2 were given

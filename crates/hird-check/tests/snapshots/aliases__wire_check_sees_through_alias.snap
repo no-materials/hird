@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias Thunk = () -> Int\\n\\\n         tool Run : { f: Thunk } -> Int\")"
+---
+error[C0032] 34..37: tool `Run` args are not wire-representable: function type `() → Int` cannot be serialised

@@ -41,6 +41,10 @@ pub enum DiagnosticCode {
     /// A return type written where the language fixes it: an actor handler
     /// (always `Next<State>`) or `init` (always the state type).
     P0006,
+    /// `opaque` on a type alias: an alias is a name for a shape, not a type
+    /// with constructors to hide, so `pub type alias` is the only exported
+    /// form.
+    P0007,
 }
 
 impl DiagnosticCode {
@@ -54,6 +58,7 @@ impl DiagnosticCode {
             Self::P0004 => "P0004",
             Self::P0005 => "P0005",
             Self::P0006 => "P0006",
+            Self::P0007 => "P0007",
         }
     }
 }

@@ -1,0 +1,41 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"pub type alias Handler<a> = a -> () ! {Tool<Log>}\")"
+---
+SOURCE_FILE
+  TYPE_ALIAS_DECL
+    VISIBILITY
+      PUB_KW "pub"
+    WHITESPACE " "
+    TYPE_KW "type"
+    WHITESPACE " "
+    ALIAS_KW "alias"
+    WHITESPACE " "
+    IDENT "Handler"
+    TYPE_PARAMS
+      LT "<"
+      IDENT "a"
+      GT ">"
+    WHITESPACE " "
+    EQ "="
+    FN_TYPE
+      WHITESPACE " "
+      IDENT "a"
+      WHITESPACE " "
+      ARROW "->"
+      TUPLE_TYPE
+        WHITESPACE " "
+        L_PAREN "("
+        R_PAREN ")"
+      EFFECT_ANN
+        WHITESPACE " "
+        BANG "!"
+        WHITESPACE " "
+        L_BRACE "{"
+        APP_TYPE
+          IDENT "Tool"
+          TYPE_ARGS
+            LT "<"
+            IDENT "Log"
+            GT ">"
+        R_BRACE "}"

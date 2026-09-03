@@ -158,6 +158,29 @@ fn type_decl_constructors() {
 }
 
 #[test]
+fn type_alias_decl() {
+    let file = file(
+        "pub type alias Handler<a, b> = (a, b) -> () ! {Log}\ntype alias Args = { level: String }",
+    );
+    let aliases: Vec<_> = file
+        .declarations()
+        .filter_map(|d| match d {
+            Decl::TypeAlias(a) => Some(a),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(aliases.len(), 2);
+    assert!(aliases[0].is_pub());
+    assert_eq!(aliases[0].name(), Some("Handler"));
+    assert_eq!(owned(aliases[0].type_params()), ["a", "b"]);
+    assert!(matches!(aliases[0].aliased(), Some(TypeExpr::Fn(_))));
+    assert!(!aliases[1].is_pub());
+    assert_eq!(aliases[1].name(), Some("Args"));
+    assert_eq!(owned(aliases[1].type_params()), Vec::<String>::new());
+    assert!(matches!(aliases[1].aliased(), Some(TypeExpr::Record(_))));
+}
+
+#[test]
 fn type_decl_opacity() {
     // The three visibility levels: private, transparent (`pub`), and opaque
     // (`pub opaque`). `file` asserts a clean parse, so each form is well-formed.

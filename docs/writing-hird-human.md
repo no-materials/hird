@@ -113,6 +113,21 @@ error, not a warning. Records are structural (`{ x: Int, y: Int }`)
 and accessed with `point.x`. Generics use lowercase type variables
 (`a`, `b`) with no declaration needed.
 
+A `type alias` names a shape without creating a new type:
+
+```
+type alias Point = { x: Int, y: Int }
+
+fn origin() → Point = { x: 0, y: 0 }
+```
+
+`Point` and `{ x: Int, y: Int }` are the same type everywhere; the
+alias is expanded as the compiler reads it. Use one to name a record,
+tuple, or function type you would otherwise spell out repeatedly — a
+tool's argument record, say. When a type needs an identity of its own
+(a capability, a message), declare an ADT with `type` instead; an alias
+cannot be recursive or `opaque`.
+
 `Option<a> = Some(a) | None` is predeclared, like `Bool`. `List` is a
 built-in type *name* with no constructors in v0.1; there are no list
 literals or patterns yet.

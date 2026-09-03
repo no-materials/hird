@@ -78,8 +78,9 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
             Decl::Supervisor(d) => {
                 declarations.extend(lowerer.lower_supervisor(&d).map(IrDecl::Supervisor));
             }
-            // Imports are resolved away, and effect declarations are
-            // synthesised on printing rather than lowered.
+            // Imports are resolved away, aliases are expanded into every type
+            // that names them, and effect declarations are synthesised on
+            // printing rather than lowered.
             _ => {}
         }
     }

@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"tool Log : { message: String } -> ()\\n\\\n         type alias Args = { message: String }\\n\\\n         type alias Handler = Args -> () ! {Tool<Log>}\\n\\\n         type Msg = Do(Args)\\n\\\n         fn run(h: Handler) -> () ! {Tool<Log>} = h({ message: \\\"x\\\" })\\n\\\n         fn payload(m: Msg) -> String = match m { Do(a) -> a.message, }\")"
+---
+Do : { message: String } → Msg
+log : { message: String } → () ! {Tool<Log>}
+payload : Msg → String
+run : ({ message: String } → () ! {Tool<Log>}) → () ! {Tool<Log>}
+record LogInvocation : { args: { message: String }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }

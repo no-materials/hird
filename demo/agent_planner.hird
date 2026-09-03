@@ -32,9 +32,13 @@ type PlannerStatus = PlannerStatus(Int, Int)
 
 // ── tools ────────────────────────────────────────────────────────
 
-tool ReadRepo : { path: Path } → RepoState
-tool CreateTicket : { title: String, body: String } → TicketId
-tool Log : { level: String, message: String } → ()
+type alias ReadRepoArgs = { path: Path }
+type alias CreateTicketArgs = { title: String, body: String }
+type alias LogArgs = { level: String, message: String }
+
+tool ReadRepo : ReadRepoArgs → RepoState
+tool CreateTicket : CreateTicketArgs → TicketId
+tool Log : LogArgs → ()
 
 // ── pure analysis ────────────────────────────────────────────────
 
@@ -108,7 +112,7 @@ supervisor PlannerSup {
 // ── demo handlers (registry defaults) ────────────────────────────
 
 // Canned repository state: two actionable tasks, one not worth filing.
-fn demo_read_repo(args: { path: Path }) → RepoState =
+fn demo_read_repo(args: ReadRepoArgs) → RepoState =
   RepoState(
     "main",
     Backlog(Task(2, "Fix the lexer TODO", "The lexer carries a stale TODO comment."),
@@ -118,10 +122,10 @@ fn demo_read_repo(args: { path: Path }) → RepoState =
 
 // "Creates" a ticket by echoing its title back as the id; the audit
 // stream is the durable record.
-fn demo_create_ticket(args: { title: String, body: String }) → TicketId =
+fn demo_create_ticket(args: CreateTicketArgs) → TicketId =
   TicketId(args.title)
 
-fn demo_log(args: { level: String, message: String }) → () = ()
+fn demo_log(args: LogArgs) → () = ()
 
 // ── entry point ──────────────────────────────────────────────────
 

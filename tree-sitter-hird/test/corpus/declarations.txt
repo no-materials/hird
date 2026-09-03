@@ -108,6 +108,33 @@ type PlannerMsg =
     (constructor name: (type_identifier))))
 
 ==================
+Type alias declarations
+==================
+
+type alias LogArgs = { level: String, message: String }
+
+pub type alias Handler<a> = a → () ! {Tool<Log>}
+
+---
+
+(source_file
+  (type_alias_declaration
+    name: (type_identifier)
+    type: (record_type
+      (record_type_field name: (identifier) type: (type_identifier))
+      (record_type_field name: (identifier) type: (type_identifier))))
+  (type_alias_declaration
+    name: (type_identifier)
+    type_parameters: (type_parameters (type_variable))
+    type: (function_type
+      (type_variable)
+      (unit_type)
+      effects: (effect_annotation
+        effect: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_identifier)))))))
+
+==================
 Effect and tool declarations
 ==================
 

@@ -12,7 +12,7 @@ use core::mem;
 
 use hird_ast::{
     AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, Param, SourceFile, SyntaxNode,
-    ToolDecl, TypeDecl,
+    ToolDecl, TypeAliasDecl, TypeDecl,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -48,6 +48,29 @@ pub(crate) struct EffectIntro {
     effect: Effect,
     /// Span of the introducing application.
     span: Span,
+}
+
+/// A type alias's registration state.
+enum AliasState {
+    /// Declared, not yet elaborated: expanded on first use or in the alias
+    /// pass, whichever comes first.
+    Pending(TypeAliasDecl),
+    /// Elaboration in progress: a use of the name now closes a cycle.
+    Expanding,
+    /// Elaborated body over its parameter variables.
+    Expanded(AliasExpansion),
+    /// Elaboration failed; the error is already reported.
+    Failed,
+}
+
+/// A type alias's elaborated body, over the variables standing for its
+/// parameters. A use substitutes the arguments for `params` in `body`.
+#[derive(Debug, Clone)]
+pub(crate) struct AliasExpansion {
+    /// The parameter variables, in declaration order.
+    pub(crate) params: Vec<u32>,
+    /// The aliased type, mentioning no variable outside `params`.
+    pub(crate) body: Type,
 }
 
 /// Mutable state of one checking run.
@@ -133,6 +156,13 @@ pub(crate) struct Checker {
     exported_fns: Vec<String>,
     /// This module's exported (`pub`) types paired with their opacity.
     exported_types: Vec<(Name, bool)>,
+    /// Declared and imported type aliases by name, expanded on demand.
+    aliases: BTreeMap<String, AliasState>,
+    /// Aliases whose expansion is in progress, outermost first, for cycle
+    /// reporting.
+    alias_stack: Vec<String>,
+    /// Names of this module's exported (`pub`) aliases.
+    exported_aliases: Vec<String>,
 }
 
 impl Checker {
@@ -187,6 +217,9 @@ impl Checker {
             import_origins: BTreeMap::new(),
             exported_fns: Vec::new(),
             exported_types: Vec::new(),
+            aliases: BTreeMap::new(),
+            alias_stack: Vec::new(),
+            exported_aliases: Vec::new(),
         }
     }
 
@@ -206,6 +239,7 @@ impl Checker {
         self.detect_duplicates(file);
 
         let mut type_decls = Vec::new();
+        let mut alias_decls = Vec::new();
         let mut fn_decls = Vec::new();
         let mut extern_decls = Vec::new();
         let mut effect_decls = Vec::new();
@@ -215,6 +249,7 @@ impl Checker {
         for decl in file.declarations() {
             match decl {
                 Decl::Type(d) => type_decls.push(d),
+                Decl::TypeAlias(d) => alias_decls.push(d),
                 Decl::Fn(d) => fn_decls.push(d),
                 Decl::Extern(d) => extern_decls.push(d),
                 Decl::Effect(d) => effect_decls.push(d),
@@ -246,6 +281,12 @@ impl Checker {
         for decl in &type_decls {
             self.register_adt_header(decl);
         }
+        // Aliases are named alongside the headers and expanded lazily, so a
+        // constructor field, a signature, or another alias may use one in any
+        // declaration order.
+        for decl in &alias_decls {
+            self.register_alias_header(decl);
+        }
         // Tool markers are nullary types, registered with the headers so any
         // signature can name them (`Tool<ReadRepo>` in a row, a constructor
         // field, another tool's input).
@@ -257,6 +298,14 @@ impl Checker {
         // (`Pid<OtherMsg>` in a payload).
         for decl in &actor_decls {
             self.register_actor_message_header(decl);
+        }
+        // Every alias expands once here so a cycle or a bad body is reported
+        // even when nothing uses the alias.
+        for decl in &alias_decls {
+            if let Some(name) = decl.name() {
+                let span = name_token_span(decl.syntax(), self.source_id);
+                let _ = self.alias_expansion(name, span);
+            }
         }
         for decl in &type_decls {
             // Per-declaration error isolation: a bad constructor field stops
@@ -464,6 +513,12 @@ impl Checker {
                         }
                     }
                 }
+                Decl::TypeAlias(d) => {
+                    if let Some(name) = d.name() {
+                        let span = name_token_span(d.syntax(), self.source_id);
+                        self.note_type_name(name, span);
+                    }
+                }
                 Decl::Tool(d) => {
                     // A tool occupies both namespaces: its marker type and its
                     // generated function.
@@ -542,7 +597,7 @@ impl Checker {
             .collect();
         // Arity counts distinct parameters so a (already reported) duplicate
         // stays consistent with the constructor result type built below.
-        let arity = distinct_params(decl).len();
+        let arity = distinct_params(decl.type_params()).len();
         self.registry.declare_adt(Name::new(name), arity, ctors);
     }
 
@@ -557,7 +612,7 @@ impl Checker {
         let mut scope = Scope::new();
         self.subst.enter_level();
         let mut param_args = Vec::new();
-        for param in distinct_params(decl) {
+        for param in distinct_params(decl.type_params()) {
             let ty = self.subst.fresh_type();
             scope.insert_type(param, ty.clone());
             param_args.push(ty);
@@ -608,6 +663,125 @@ impl Checker {
             self.bindings.push((ctor_name, scheme));
         }
         if failed { Err(Aborted) } else { Ok(()) }
+    }
+
+    // ── type aliases ────────────────────────────────────────────
+
+    /// Registers a type alias for on-demand expansion, reporting duplicate
+    /// parameters and noting it for export when `pub`.
+    fn register_alias_header(&mut self, decl: &TypeAliasDecl) {
+        let Some(name) = decl.name() else { return };
+        if decl.is_pub() {
+            self.exported_aliases.push(String::from(name));
+        }
+        let params: Vec<&str> = decl.type_params().collect();
+        for (i, param) in params.iter().enumerate() {
+            if params[..i].contains(param) {
+                let span = name_token_span(decl.syntax(), self.source_id);
+                self.diags.push(CheckDiagnostic::error(
+                    CheckCode::C0013,
+                    span,
+                    format!("type parameter `{param}` is declared twice"),
+                ));
+            }
+        }
+        self.aliases
+            .insert(String::from(name), AliasState::Pending(decl.clone()));
+    }
+
+    /// Whether `name` is a declared (or imported) type alias.
+    pub(crate) fn is_alias(&self, name: &str) -> bool {
+        self.aliases.contains_key(name)
+    }
+
+    /// Expands the alias application `Name<args>` mentioned at `span` into the
+    /// aliased type with the parameters substituted, checking arity.
+    pub(crate) fn expand_alias(
+        &mut self,
+        name: &str,
+        args: Vec<Type>,
+        span: Span,
+    ) -> Checked<Type> {
+        let expansion = self.alias_expansion(name, span)?;
+        if expansion.params.len() != args.len() {
+            return Err(self.error(
+                CheckCode::C0005,
+                span,
+                format!(
+                    "`{name}` expects {} type argument(s), but {} were given",
+                    expansion.params.len(),
+                    args.len()
+                ),
+            ));
+        }
+        let map: BTreeMap<u32, Type> = expansion.params.iter().copied().zip(args).collect();
+        Ok(expansion.body.substitute(&map, &BTreeMap::new()))
+    }
+
+    /// The expansion of alias `name`, elaborating its declaration on first
+    /// use. A use that arrives while the alias is being elaborated closes a
+    /// cycle and is reported at `span`; a failed alias stays failed, so later
+    /// uses abort silently.
+    fn alias_expansion(&mut self, name: &str, span: Span) -> Checked<AliasExpansion> {
+        let decl = match self.aliases.get_mut(name) {
+            Some(AliasState::Expanded(expansion)) => return Ok(expansion.clone()),
+            Some(AliasState::Failed) | None => return Err(Aborted),
+            Some(AliasState::Expanding) => {
+                let start = self.alias_stack.iter().position(|n| n == name).unwrap_or(0);
+                let mut chain = String::new();
+                for step in &self.alias_stack[start..] {
+                    chain.push_str(&format!("`{step}` \u{2192} "));
+                }
+                chain.push_str(&format!("`{name}`"));
+                return Err(self.error(
+                    CheckCode::C0059,
+                    span,
+                    format!(
+                        "type alias `{name}` refers to itself ({chain}); an alias cannot be \
+                         recursive, declare a `type` instead"
+                    ),
+                ));
+            }
+            Some(state @ AliasState::Pending(_)) => {
+                let AliasState::Pending(decl) = mem::replace(state, AliasState::Expanding) else {
+                    unreachable!("matched Pending above");
+                };
+                decl
+            }
+        };
+        self.alias_stack.push(String::from(name));
+        let result = self.elaborate_alias(&decl);
+        self.alias_stack.pop();
+        let state = match &result {
+            Ok(expansion) => AliasState::Expanded(expansion.clone()),
+            Err(Aborted) => AliasState::Failed,
+        };
+        self.aliases.insert(String::from(name), state);
+        result
+    }
+
+    /// Elaborates an alias body in a closed scope over its parameters, each
+    /// bound to a fresh variable that a use later substitutes.
+    fn elaborate_alias(&mut self, decl: &TypeAliasDecl) -> Checked<AliasExpansion> {
+        let Some(body) = decl.aliased() else {
+            return Err(Aborted);
+        };
+        let mut scope = Scope::new();
+        let mut params = Vec::new();
+        for param in distinct_params(decl.type_params()) {
+            let id = self.subst.fresh();
+            scope.insert_type(param, Type::TyVar(id));
+            params.push(id);
+        }
+        let body = self.elaborate_closed(&body, &mut scope)?;
+        Ok(AliasExpansion { params, body })
+    }
+
+    /// Brings an imported alias into scope as its expansion.
+    pub(crate) fn seed_import_alias(&mut self, name: &Name, expansion: AliasExpansion, span: Span) {
+        self.note_type_name(name.as_str(), span);
+        self.aliases
+            .insert(String::from(name.as_str()), AliasState::Expanded(expansion));
     }
 
     // ── tool declarations ───────────────────────────────────────
@@ -1195,9 +1369,20 @@ impl Checker {
                 },
             );
         }
+        let aliases = self
+            .exported_aliases
+            .iter()
+            .filter_map(|name| match self.aliases.get(name) {
+                Some(AliasState::Expanded(expansion)) => {
+                    Some((Name::new(name.as_str()), expansion.clone()))
+                }
+                _ => None,
+            })
+            .collect();
         let interface = ModuleInterface {
             functions,
             types: exported,
+            aliases,
         };
 
         self.diags
@@ -1395,9 +1580,9 @@ fn ctor_fields(scheme: &Type, args: &[Type]) -> Vec<Type> {
 
 /// The declaration's type parameters with duplicates removed, first
 /// occurrence winning.
-fn distinct_params(decl: &TypeDecl) -> Vec<String> {
+fn distinct_params<'a>(declared: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut params: Vec<String> = Vec::new();
-    for param in decl.type_params() {
+    for param in declared {
         if !params.iter().any(|p| p == param) {
             params.push(String::from(param));
         }

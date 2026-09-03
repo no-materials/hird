@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: aliased
+---
+log : { level: String, message: String } → () ! {Tool<Log>}
+quiet : { level: String, message: String } → ()
+record LogInvocation : { args: { level: String, message: String }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }

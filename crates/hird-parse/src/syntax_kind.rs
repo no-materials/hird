@@ -83,6 +83,8 @@ pub enum SyntaxKind {
     ELSE_KW,
     /// `in`
     IN_KW,
+    /// `alias` — contextual: an identifier remapped by the parser after `type`.
+    ALIAS_KW,
 
     // -- Identifiers and literals --
     /// Identifier token.
@@ -203,6 +205,8 @@ pub enum SyntaxKind {
     EFFECT_ANN,
     /// Type declaration (ADT).
     TYPE_DECL,
+    /// Type alias declaration (`type alias Name<params> = Type`).
+    TYPE_ALIAS_DECL,
     /// Type parameter list (`<A, B>`).
     TYPE_PARAMS,
     /// ADT constructor (`Foo(Bar, Baz)`).
@@ -441,6 +445,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::THEN_KW => Some("then"),
             Self::ELSE_KW => Some("else"),
             Self::IN_KW => Some("in"),
+            Self::ALIAS_KW => Some("alias"),
             Self::PLUS => Some("+"),
             Self::MINUS => Some("-"),
             Self::STAR => Some("*"),

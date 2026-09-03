@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_modules(&[(\"Shapes\",\n\"module Shapes\\n\\\n             pub type alias Point = { x: Int, y: Int }\\n\\\n             pub type alias Box<a> = { value: a }\",),\n(\"App\",\n\"module App\\n\\\n             use Shapes.{Point, Box}\\n\\\n             pub fn origin() -> Point = { x: 0, y: 0 }\\n\\\n             pub fn unbox(b: Box<Point>) -> Int = b.value.x\",),])"
+---
+== App ==
+origin : () → { x: Int, y: Int }
+unbox : { value: { x: Int, y: Int } } → Int
+== Shapes ==

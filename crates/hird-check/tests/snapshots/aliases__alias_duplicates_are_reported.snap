@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type Flag = On | Off\\n\\\n         type alias Flag = Int\\n\\\n         type alias Pair = (Int, Int)\\n\\\n         type alias Pair = (String, String)\")"
+---
+Off : Flag
+On : Flag
+error[C0018] 32..36: duplicate type `Flag`
+error[C0018] 83..87: duplicate type `Pair`

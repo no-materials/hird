@@ -90,6 +90,16 @@ fn is_opaque(node: &SyntaxNode) -> bool {
     token(node, SyntaxKind::OPAQUE_KW).is_some()
 }
 
+/// The identifiers of a declaration's `TYPE_PARAMS` child, in order.
+fn type_params(node: &SyntaxNode) -> impl Iterator<Item = &str> {
+    node.children()
+        .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
+        .flat_map(|list| list.children_with_tokens())
+        .filter_map(|e| e.into_token())
+        .filter(|t| t.kind() == SyntaxKind::IDENT)
+        .map(|t| t.text())
+}
+
 /// The kind of a node-or-token element.
 fn element_kind(element: ResolvedElementRef<'_, SyntaxKind>) -> SyntaxKind {
     match element {
@@ -327,18 +337,43 @@ impl TypeDecl {
 
     /// The type parameter names (`<A, B>`), in order.
     pub fn type_params(&self) -> impl Iterator<Item = &str> {
-        self.0
-            .children()
-            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
-            .flat_map(|list| list.children_with_tokens())
-            .filter_map(|e| e.into_token())
-            .filter(|t| t.kind() == SyntaxKind::IDENT)
-            .map(|t| t.text())
+        type_params(&self.0)
     }
 
     /// The constructors of the data type, in order.
     pub fn constructors(&self) -> impl Iterator<Item = Constructor> + '_ {
         children(&self.0)
+    }
+}
+
+ast_node! {
+    /// A type alias declaration: a name for a type expression, expanded at
+    /// elaboration with no identity of its own.
+    TypeAliasDecl => TYPE_ALIAS_DECL
+}
+
+impl TypeAliasDecl {
+    /// Whether the alias is exported (`pub`).
+    #[must_use]
+    pub fn is_pub(&self) -> bool {
+        is_pub(&self.0)
+    }
+
+    /// The alias name.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        name(&self.0)
+    }
+
+    /// The type parameter names (`<a, b>`), in order.
+    pub fn type_params(&self) -> impl Iterator<Item = &str> {
+        type_params(&self.0)
+    }
+
+    /// The aliased type, after `=`.
+    #[must_use]
+    pub fn aliased(&self) -> Option<TypeExpr> {
+        type_after(&self.0, SyntaxKind::EQ)
     }
 }
 
@@ -362,13 +397,7 @@ impl EffectDecl {
 
     /// The type parameter names (`<a, b>`), in order.
     pub fn type_params(&self) -> impl Iterator<Item = &str> {
-        self.0
-            .children()
-            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
-            .flat_map(|list| list.children_with_tokens())
-            .filter_map(|e| e.into_token())
-            .filter(|t| t.kind() == SyntaxKind::IDENT)
-            .map(|t| t.text())
+        type_params(&self.0)
     }
 }
 
@@ -392,13 +421,7 @@ impl ToolDecl {
 
     /// The type parameter names (`<t, u>`), in order.
     pub fn type_params(&self) -> impl Iterator<Item = &str> {
-        self.0
-            .children()
-            .filter(|c| c.kind() == SyntaxKind::TYPE_PARAMS)
-            .flat_map(|list| list.children_with_tokens())
-            .filter_map(|e| e.into_token())
-            .filter(|t| t.kind() == SyntaxKind::IDENT)
-            .map(|t| t.text())
+        type_params(&self.0)
     }
 
     /// The input (argument) type, between `:` and `→`.
@@ -634,6 +657,8 @@ pub enum Decl {
     Fn(FnDecl),
     /// `type Name = ..`
     Type(TypeDecl),
+    /// `type alias Name = ..`
+    TypeAlias(TypeAliasDecl),
     /// `effect Name`
     Effect(EffectDecl),
     /// `tool Name : ..`
@@ -654,6 +679,7 @@ impl AstNode for Decl {
                 | SyntaxKind::USE_DECL
                 | SyntaxKind::FN_DECL
                 | SyntaxKind::TYPE_DECL
+                | SyntaxKind::TYPE_ALIAS_DECL
                 | SyntaxKind::EFFECT_DECL
                 | SyntaxKind::TOOL_DECL
                 | SyntaxKind::EXTERN_DECL
@@ -668,6 +694,7 @@ impl AstNode for Decl {
             SyntaxKind::USE_DECL => Self::Use(UseDecl(syntax)),
             SyntaxKind::FN_DECL => Self::Fn(FnDecl(syntax)),
             SyntaxKind::TYPE_DECL => Self::Type(TypeDecl(syntax)),
+            SyntaxKind::TYPE_ALIAS_DECL => Self::TypeAlias(TypeAliasDecl(syntax)),
             SyntaxKind::EFFECT_DECL => Self::Effect(EffectDecl(syntax)),
             SyntaxKind::TOOL_DECL => Self::Tool(ToolDecl(syntax)),
             SyntaxKind::EXTERN_DECL => Self::Extern(ExternDecl(syntax)),
@@ -684,6 +711,7 @@ impl AstNode for Decl {
             Self::Use(n) => n.syntax(),
             Self::Fn(n) => n.syntax(),
             Self::Type(n) => n.syntax(),
+            Self::TypeAlias(n) => n.syntax(),
             Self::Effect(n) => n.syntax(),
             Self::Tool(n) => n.syntax(),
             Self::Extern(n) => n.syntax(),

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias A = { b: B }\\n\\\n         type alias B = { a: A }\\n\\\n         fn f(a: A) -> Int = 0\\n\\\n         fn g(x: Int) -> Int = x\")"
+---
+g : Int → Int
+error[C0059] 44..45: type alias `A` refers to itself (`A` → `B` → `A`); an alias cannot be recursive, declare a `type` instead

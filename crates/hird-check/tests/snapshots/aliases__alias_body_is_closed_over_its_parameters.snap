@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias Loose = { v: a }\\n\\\n         type alias Twice<a, a> = (a, a)\\n\\\n         fn f(t: Twice<Int, Int>) -> Int = 0\")"
+---
+error[C0012] 24..25: type parameter `a` is not declared here
+error[C0013] 39..44: type parameter `a` is declared twice
+error[C0005] 67..83: `Twice` expects 1 type argument(s), but 2 were given

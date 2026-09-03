@@ -61,6 +61,7 @@ module.exports = grammar({
         $.use_declaration,
         $.function_declaration,
         $.type_declaration,
+        $.type_alias_declaration,
         $.actor_declaration,
         $.supervisor_declaration,
         $.effect_declaration,
@@ -107,6 +108,17 @@ module.exports = grammar({
         optional(field('type_parameters', $.type_parameters)),
         '=',
         $._constructors,
+      ),
+
+    type_alias_declaration: ($) =>
+      seq(
+        optional('pub'),
+        'type',
+        'alias',
+        field('name', $.type_identifier),
+        optional(field('type_parameters', $.type_parameters)),
+        '=',
+        field('type', $._type),
       ),
 
     _constructors: ($) => seq(optional('|'), $.constructor, repeat(seq('|', $.constructor))),

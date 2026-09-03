@@ -1,0 +1,5 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias Chain = List<Chain>\\n\\\n         fn f(c: Chain) -> Int = 0\")"
+---
+error[C0059] 24..29: type alias `Chain` refers to itself (`Chain` → `Chain`); an alias cannot be recursive, declare a `type` instead

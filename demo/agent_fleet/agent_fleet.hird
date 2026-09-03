@@ -35,9 +35,13 @@ type AuditorState = AuditorState(Int)
 
 // ── tools ────────────────────────────────────────────────────────
 
-tool RunErrand : { round: Int, errand: String } → String
-tool Chronicle : { round: Int, note: String } → ()
-tool Log : { level: String, message: String } → ()
+type alias ErrandArgs = { round: Int, errand: String }
+type alias ChronicleArgs = { round: Int, note: String }
+type alias LogArgs = { level: String, message: String }
+
+tool RunErrand : ErrandArgs → String
+tool Chronicle : ChronicleArgs → ()
+tool Log : LogArgs → ()
 
 // ── the planner: orders each round ───────────────────────────────
 
@@ -126,11 +130,11 @@ supervisor FleetSup {
 // ── demo handlers (registry defaults) ────────────────────────────
 
 // Every errand succeeds; the audit stream is the visible work.
-fn demo_run_errand(args: { round: Int, errand: String }) → String = "done"
+fn demo_run_errand(args: ErrandArgs) → String = "done"
 
-fn demo_chronicle(args: { round: Int, note: String }) → () = ()
+fn demo_chronicle(args: ChronicleArgs) → () = ()
 
-fn demo_log(args: { level: String, message: String }) → () = ()
+fn demo_log(args: LogArgs) → () = ()
 
 // ── entry point ──────────────────────────────────────────────────
 

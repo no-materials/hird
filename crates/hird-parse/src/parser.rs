@@ -161,12 +161,21 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     /// Whether the current token is an identifier spelled `text` (a contextual
     /// keyword such as `as`).
     fn at_contextual(&self, text: &str) -> bool {
+        self.nth_is_contextual(0, text)
+    }
+
+    /// Whether the `n`th token past trivia is an identifier spelled `text`.
+    fn nth_is_contextual(&self, n: usize, text: &str) -> bool {
         let mut pos = self.pos;
+        let mut seen = 0;
         while pos < self.tokens.len() {
             let kind = SyntaxKind::from(self.tokens[pos].kind);
             if !Self::is_trivia(kind) {
-                return kind == SyntaxKind::IDENT
-                    && self.tokens[pos].span.text(self.source) == text;
+                if seen == n {
+                    return kind == SyntaxKind::IDENT
+                        && self.tokens[pos].span.text(self.source) == text;
+                }
+                seen += 1;
             }
             pos += 1;
         }
@@ -222,6 +231,21 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     fn bump(&mut self) {
         self.eat_trivia();
         self.bump_raw();
+    }
+
+    /// Emits leading trivia then the next significant token under `kind`
+    /// instead of its lexed kind: a contextual keyword (`alias`) lexed as an
+    /// identifier lands in the tree as the keyword it is in this position.
+    fn bump_as(&mut self, kind: SyntaxKind) {
+        self.eat_trivia();
+        if self.pos >= self.tokens.len() {
+            return;
+        }
+        let tok = self.tokens[self.pos];
+        self.emit_whitespace_before(tok.span.start);
+        self.builder.token(kind, tok.span.text(self.source));
+        self.prev_end = tok.span.end;
+        self.pos += 1;
     }
 
     /// Consumes the current token if it is `kind`; returns whether it matched.
@@ -652,16 +676,50 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `[pub [opaque]] type Name<params> = Ctor | ...`.
+    /// `[pub [opaque]] type Name<params> = Ctor | ...`, or
+    /// `[pub] type alias Name<params> = Type`.
+    ///
+    /// `alias` is a contextual keyword: an identifier in the slot after `type`
+    /// selects the alias form (a type name is `PascalCase`, so the two cannot
+    /// collide) and is remapped to [`SyntaxKind::ALIAS_KW`]. The right-hand
+    /// side of an alias is one type expression rather than a constructor
+    /// list, and `opaque` on an alias is reported: there are no constructors
+    /// to hide.
     ///
     /// `opaque` is consumed here but only reaches this point in the
     /// `pub opaque type` form: `parse_top_item` routes that form here and
     /// rejects `opaque` without a preceding `pub` or a following `type`.
     fn parse_type_decl(&mut self) {
-        self.start_node(SyntaxKind::TYPE_DECL);
+        let checkpoint = self.checkpoint();
         self.parse_visibility();
+        if self.at(SyntaxKind::OPAQUE_KW)
+            && self.nth(1) == SyntaxKind::TYPE_KW
+            && self.nth_is_contextual(2, "alias")
+        {
+            self.emit(
+                DiagnosticCode::P0007,
+                "a type alias cannot be `opaque`",
+                Some(
+                    "an alias names a shape and has no constructors to hide; write \
+                     `pub type alias`, or declare an ADT with `pub opaque type`",
+                ),
+            );
+        }
         self.eat(SyntaxKind::OPAQUE_KW);
         self.expect(SyntaxKind::TYPE_KW);
+        if self.at_contextual("alias") {
+            self.start_node_at(checkpoint, SyntaxKind::TYPE_ALIAS_DECL);
+            self.bump_as(SyntaxKind::ALIAS_KW);
+            self.expect(SyntaxKind::IDENT);
+            if self.at(SyntaxKind::LT) {
+                self.parse_type_params();
+            }
+            self.expect(SyntaxKind::EQ);
+            self.parse_type_expr();
+            self.finish_node();
+            return;
+        }
+        self.start_node_at(checkpoint, SyntaxKind::TYPE_DECL);
         self.expect(SyntaxKind::IDENT);
         if self.at(SyntaxKind::LT) {
             self.parse_type_params();

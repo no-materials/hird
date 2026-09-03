@@ -12,6 +12,14 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **Type aliases.** `type alias Name<params> = T` names a type expression
+  — a record, a tuple, a function type — and every use expands to it, so
+  an alias has no identity: it is transparent to unification, the wire
+  check, the audit format, the IR, and codegen. A tool's argument record
+  and the handlers that implement it now name the shape once (the demos
+  do: `LogArgs` and friends). A recursive alias is C0059 and `opaque` on
+  an alias is P0007; `pub type alias` exports it and an importer sees the
+  expansion.
 - **Sequencing with `;`.** `a; b` runs `a` for its effects and evaluates
   to `b`; it is sugar for `let _ = a in b`, except that `a` must be `()`
   (C0058 otherwise), so a result is never dropped by accident. Right-

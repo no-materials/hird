@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/aliases.rs
+expression: "check_str(\"type alias A = { x: Int }\\n\\\n         type alias B = { x: Int }\\n\\\n         fn a_to_b(a: A) -> B = a\\n\\\n         fn b_to_plain(b: B) -> { x: Int } = b\\n\\\n         fn plain_to_a() -> A = { x: 1 }\")"
+---
+a_to_b : { x: Int } → { x: Int }
+b_to_plain : { x: Int } → { x: Int }
+plain_to_a : () → { x: Int }

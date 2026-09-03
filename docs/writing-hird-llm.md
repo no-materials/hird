@@ -58,6 +58,16 @@ may perform. Opaque types cannot be
 constructed or destructured outside their declaring module — do not
 try to work around a capability by pattern-matching it open.
 
+**Aliases name shapes; ADTs carry identity.** `type alias Name<params> =
+T` makes `Name` stand for the type expression `T` — a record, a tuple, a
+function type — and every use expands to `T`. An alias has no identity:
+it unifies with the shape written out and with any other alias of it, and
+tools, the audit format, and codegen see only the expansion. Name a
+tool's argument record once (`type alias LogArgs = { … }`, then
+`tool Log : LogArgs → ()` and `fn demo_log(args: LogArgs)`). An alias
+cannot refer to itself (C0059) and cannot be `opaque` (P0007); when a
+type must be distinct or hidden, declare an ADT with `type`.
+
 **Tools are the only I/O boundary.** `tool Name : {args} → result`
 creates the `Tool<Name>` effect and a callable `name` function. Tool
 signatures must be wire-representable (no function types, no opaque
@@ -137,6 +147,8 @@ not something visible in any one signature.
 | `self()` outside an actor's `init` or handler | C0055 — only an actor has an own pid |
 | Effectful `start_args` other than `clock()` | C0049 — start arguments run in the supervisor; acquiring the clock is the one exception |
 | Function or capability types in a tool signature | C0032 — not wire-representable |
+| Recursive `type alias` (`type alias L = List<L>`) | C0059 — recursion is for ADTs; declare a `type` |
+| `pub opaque type alias` | P0007 — an alias has no constructors to hide; use `pub type alias` |
 | `f { a: 1 }` instead of `f({ a: 1 })` | parse error — `{` never starts an application argument |
 | Chained comparisons `a == b == c` | P0005 — relational operators do not associate |
 | Missing comma between `match`/`handle` arms | P0001 |

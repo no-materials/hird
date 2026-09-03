@@ -31,6 +31,7 @@ module_decl  ::= 'module' IDENT
 top_item     ::= use_decl
                | fn_decl
                | type_decl
+               | type_alias
                | actor_decl
                | supervisor_decl
                | effect_decl
@@ -90,6 +91,18 @@ field_list   ::= type_expr ( ',' type_expr )* ','?
 
 `opaque` is legal only in the `pub opaque type` form: the type's name is
 exported while its constructors stay module-private.
+
+## Type Aliases
+
+```
+type_alias   ::= 'pub'? 'type' 'alias' IDENT type_params? '=' type_expr
+```
+
+`alias` is contextual: an identifier in the slot after `type` selects the
+alias form (a type name is `PascalCase`, so the two cannot collide). An
+alias names a type expression and has no identity of its own; every use
+expands to the right-hand side. `opaque` on an alias is a parse error
+(P0007): there are no constructors to hide.
 
 ## Actor Declarations
 
@@ -356,8 +369,8 @@ See `hird-lex` crate for the authoritative implementation. Summary:
 - **Keywords**: `let`, `fn`, `match`, `type`, `actor`, `supervisor`, `effect`,
   `tool`, `handle`, `install`, `spawn`, `supervise`, `stand`, `self`,
   `child`, `send`, `request`, `schedule`, `reply`, `crash`, `panic`, `use`,
-  `module`, `pub`, `opaque`, `extern`, `if`, `then`, `else`, `in`. (`as`
-  and `clock` are contextual, not reserved.)
+  `module`, `pub`, `opaque`, `extern`, `if`, `then`, `else`, `in`. (`as`,
+  `alias`, and `clock` are contextual, not reserved.)
 - **Identifiers**: ASCII alphanumeric + underscore, canonical naming enforced
   (snake_case for values, PascalCase for types)
 - **Literals**: integers, floats, double-quoted strings with escape sequences

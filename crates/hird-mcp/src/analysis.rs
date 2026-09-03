@@ -585,6 +585,11 @@ fn index_definitions(file: &SourceFile, source: &str) -> Vec<Definition> {
                     }
                 }
             }
+            Decl::TypeAlias(d) => {
+                if let Some(name) = d.name() {
+                    add(name, "type alias", name_token_start(d.syntax()), d.syntax());
+                }
+            }
             Decl::Effect(d) => {
                 if let Some(name) = d.name() {
                     add(name, "effect", name_token_start(d.syntax()), d.syntax());

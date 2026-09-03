@@ -406,6 +406,11 @@ fn index_definitions(file: &SourceFile) -> BTreeMap<String, Vec<(u32, u32)>> {
                     }
                 }
             }
+            Decl::TypeAlias(d) => {
+                if let Some(name) = d.name() {
+                    add(name, name_token_range(d.syntax()));
+                }
+            }
             Decl::Effect(d) => {
                 if let Some(name) = d.name() {
                     add(name, name_token_range(d.syntax()));

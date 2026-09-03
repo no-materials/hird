@@ -244,9 +244,12 @@ impl Checker {
         }
     }
 
-    /// Resolves a constructor application against the registry, checking
-    /// arity.
+    /// Resolves a named type: an alias expands to its body, anything else is a
+    /// constructor application checked against the registry for arity.
     fn named_type(&mut self, name: &str, args: Vec<Type>, span: hird_lex::Span) -> Checked<Type> {
+        if self.is_alias(name) {
+            return self.expand_alias(name, args, span);
+        }
         match self.registry.type_arity(name) {
             None => Err(self.error(CheckCode::C0004, span, format!("unknown type `{name}`"))),
             Some(arity) if arity != args.len() => Err(self.error(
