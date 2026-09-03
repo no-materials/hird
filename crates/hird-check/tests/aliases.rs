@@ -4,7 +4,6 @@
 //! Type aliases: expansion at elaboration, arity, cycles, transparency to
 //! tools and the wire format, and export through the module interface.
 
-
 use std::fmt::Write;
 
 use hird_ast::{AstNode, SourceFile};
