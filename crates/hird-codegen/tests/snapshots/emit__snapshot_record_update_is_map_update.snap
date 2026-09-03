@@ -1,0 +1,19 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Update\"), \"Update\")"
+---
+%% Generated from src/update.hird by the Hirð compiler. Do not edit.
+-module(hird_update).
+-export([move_x/2, origin/0, up/0]).
+
+%% src/update.hird:2
+move_x(P, Dx) ->
+    (P)#{x => maps:get(x, P) + Dx}.
+
+%% src/update.hird:3
+origin() ->
+    #{x => 0, y => 0}.
+
+%% src/update.hird:4
+up() ->
+    (origin())#{y => 1}.

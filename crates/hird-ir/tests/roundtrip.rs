@@ -377,6 +377,7 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
                     value: canon_expr(&f.value, map),
                 })
                 .collect(),
+            base: record.base.as_ref().map(|b| Box::new(canon_expr(b, map))),
             ty: canon_type(&record.ty, map),
         }),
         IrExpr::Field(field) => IrExpr::Field(IrField {
@@ -568,6 +569,11 @@ fn record_literal_and_field_access() {
         "fn make() = { name: \"x\", age: 1 }\n\
          fn age() -> Int = let r = { name: \"x\", age: 1 } in r.age",
     );
+}
+
+#[test]
+fn record_update_round_trips() {
+    assert_roundtrips("fn bump(p: { x: Int, y: Int }) -> { x: Int, y: Int } = { x: p.x + 1, ..p }");
 }
 
 #[test]

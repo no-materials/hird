@@ -1,0 +1,35 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = { ..a, x: 1, ..b }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    RECORD_LIT
+      WHITESPACE " "
+      L_BRACE "{"
+      WHITESPACE " "
+      DOT_DOT ".."
+      IDENT "a"
+      COMMA ","
+      RECORD_FIELD
+        WHITESPACE " "
+        IDENT "x"
+        COLON ":"
+        WHITESPACE " "
+        INT "1"
+      COMMA ","
+      WHITESPACE " "
+      DOT_DOT ".."
+      IDENT "b"
+      WHITESPACE " "
+      R_BRACE "}"
+---
+P0008 16..17: `..base` must be the last entry of a record literal
+P0008 22..24: `..base` must be the last entry of a record literal

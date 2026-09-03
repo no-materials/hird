@@ -179,6 +179,8 @@ pub enum CheckCode {
     /// A type alias refers to itself, directly or through other aliases;
     /// recursion is for ADTs.
     C0059,
+    /// A record update with no fields (`{ ..base }`): not a copy, an error.
+    C0060,
 }
 
 /// A secondary source location attached to a diagnostic.

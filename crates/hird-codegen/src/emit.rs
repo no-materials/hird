@@ -952,7 +952,16 @@ impl<'a> Emitter<'a> {
                         format!("{} => {value}", atom(&f.label))
                     })
                     .collect();
-                format!("#{{{}}}", fields.join(", "))
+                match &record.base {
+                    // A map update: the base in parentheses, since Erlang's
+                    // `Expr#{…}` takes only a variable or a parenthesised
+                    // expression on the left.
+                    Some(base) => {
+                        let base = self.expr(base, env, cx, indent, Ctx::Expr);
+                        format!("({base})#{{{}}}", fields.join(", "))
+                    }
+                    None => format!("#{{{}}}", fields.join(", ")),
+                }
             }
             IrExpr::Field(field) => {
                 let receiver = self.expr(&field.receiver, env, cx, indent, Ctx::Expr);

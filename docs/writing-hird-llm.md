@@ -68,6 +68,14 @@ tool's argument record once (`type alias LogArgs = { … }`, then
 cannot refer to itself (C0059) and cannot be `opaque` (P0007); when a
 type must be distinct or hidden, declare an ADT with `type`.
 
+**Records are closed; update with `..base`.** `{ f: v, ..base }` is
+`base` with `f` replaced: the result has `base`'s record type, every
+listed field must exist in it (C0010), the base must be a known record
+(C0009, annotate if inferred), and `{ ..base }` with no fields is an
+error (C0060), not a copy. One base, last (P0008). Prefer record-shaped
+actor state read as `st.field` and rebuilt as
+`Continue({ field: …, ..st })` over positional constructors.
+
 **Tools are the only I/O boundary.** `tool Name : {args} → result`
 creates the `Tool<Name>` effect and a callable `name` function. Tool
 signatures must be wire-representable (no function types, no opaque
@@ -149,6 +157,8 @@ not something visible in any one signature.
 | Function or capability types in a tool signature | C0032 — not wire-representable |
 | Recursive `type alias` (`type alias L = List<L>`) | C0059 — recursion is for ADTs; declare a `type` |
 | `pub opaque type alias` | P0007 — an alias has no constructors to hide; use `pub type alias` |
+| `{ ..st }` as a copy | C0060 — use `st` itself; an update lists at least one field |
+| `{ z: 1, ..p }` where `p` has no `z` | C0010 — records are closed; an update cannot add fields |
 | `f { a: 1 }` instead of `f({ a: 1 })` | parse error — `{` never starts an application argument |
 | Chained comparisons `a == b == c` | P0005 — relational operators do not associate |
 | Missing comma between `match`/`handle` arms | P0001 |

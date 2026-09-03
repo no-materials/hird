@@ -294,15 +294,22 @@ tuple_lit    ::= '(' expr ',' expr ( ',' expr )* ','? ')'
 
 list_lit     ::= '[' ( expr ( ',' expr )* ','? )? ']'
 
-record_lit   ::= '{' ( record_field ( ',' record_field )* ','? )? '}'
+record_lit   ::= '{' ( record_field ( ',' record_field )* )? ( ',' record_base )? ','? '}'
 
 record_field ::= field_name ':' expr
+
+record_base  ::= '..' expr
 
 field_name   ::= IDENT | keyword
 ```
 
 A `field_name` may be a keyword spelling (e.g. `actor: Planner` in a supervisor
 child spec); the `name :` shape leaves no ambiguity.
+
+A `..base` tail makes the literal an update: the listed fields come from
+the literal and every other field from `base`, whose record type the result
+keeps. The base is written once, last (P0008 otherwise); a literal with a
+base and no fields is rejected by the checker (C0060).
 
 A `{` never begins an application argument: record-literal arguments
 must be parenthesised (`f({ x: 1 })`, not `f { x: 1 }`). Qualified
@@ -375,7 +382,7 @@ See `hird-lex` crate for the authoritative implementation. Summary:
   (snake_case for values, PascalCase for types)
 - **Literals**: integers, floats, double-quoted strings with escape sequences
 - **Operators**: `+` `-` `*` `/` `<` `>` `<=` `>=` `==` `!=` `=` `→` `⇒`
-  `λ` `|` `!` `.` `:` `::`
+  `λ` `|` `!` `.` `..` `:` `::`
 - **Delimiters**: `(` `)` `{` `}` `[` `]` `,` `;`
 - **Comments**: `// line` and `/* block */` (nestable)
 - **Unicode normalisation**: `->` to `→`, `=>` to `⇒`, `\` to `λ`

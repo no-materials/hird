@@ -45,6 +45,9 @@ pub enum DiagnosticCode {
     /// with constructors to hide, so `pub type alias` is the only exported
     /// form.
     P0007,
+    /// A `..base` entry that is not the single, last entry of a record
+    /// literal.
+    P0008,
 }
 
 impl DiagnosticCode {
@@ -59,6 +62,7 @@ impl DiagnosticCode {
             Self::P0005 => "P0005",
             Self::P0006 => "P0006",
             Self::P0007 => "P0007",
+            Self::P0008 => "P0008",
         }
     }
 }

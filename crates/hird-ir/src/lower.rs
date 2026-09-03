@@ -784,6 +784,7 @@ impl Lowerer<'_> {
             .collect();
         IrExpr::Record(IrRecord {
             fields,
+            base: record.base().map(|b| Box::new(self.lower_expr(&b))),
             ty: self.node_type(record.syntax()),
         })
     }

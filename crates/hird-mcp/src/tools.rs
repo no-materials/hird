@@ -1004,6 +1004,9 @@ fn expr_refs(expr: &IrExpr, out: &mut BTreeSet<String>) {
             for field in &e.fields {
                 expr_refs(&field.value, out);
             }
+            if let Some(base) = &e.base {
+                expr_refs(base, out);
+            }
         }
         IrExpr::Field(e) => expr_refs(&e.receiver, out),
     }

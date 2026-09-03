@@ -427,6 +427,20 @@ fn field_expr_parts() {
 
 #[test]
 fn record_lit_fields_and_keyword_key() {
+    let Expr::Record(upd) = body("{ beats: 1, ..st }") else {
+        panic!("expected a record literal");
+    };
+    assert_eq!(
+        upd.fields()
+            .filter_map(|f| f.name().map(str::to_owned))
+            .collect::<Vec<_>>(),
+        ["beats"]
+    );
+    assert!(matches!(upd.base(), Some(Expr::Name(_))));
+    let Expr::Record(plain) = body("{ x: 1 }") else {
+        panic!("expected a record literal");
+    };
+    assert!(plain.base().is_none());
     let Expr::Record(rec) = body("{ actor: Planner, count: 5 }") else {
         panic!("expected record");
     };

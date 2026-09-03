@@ -42,7 +42,15 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Idle", IDLE),
     ("Wire", WIRE),
     ("Timed", TIMED),
+    ("Update", UPDATE),
 ];
+
+/// Record update: a map update over a variable base and over a computed
+/// base, which needs parentheses in Erlang.
+const UPDATE: &str = "type alias Point = { x: Int, y: Int }\n\
+     fn move_x(p: Point, dx: Int) -> Point = { x: p.x + dx, ..p }\n\
+     fn origin() -> Point = { x: 0, y: 0 }\n\
+     fn up() -> Point = { y: 1, ..origin() }";
 
 /// A self-driving actor: handed a clock at init, it schedules its own next
 /// beat from `init` and from a handler; `main` acquires the clock in the
@@ -427,6 +435,11 @@ fn snapshot_lambdas_and_function_values() {
 #[test]
 fn snapshot_records_and_field_access() {
     insta::assert_snapshot!(emit(program("Person"), "Person"));
+}
+
+#[test]
+fn snapshot_record_update_is_map_update() {
+    insta::assert_snapshot!(emit(program("Update"), "Update"));
 }
 
 #[test]

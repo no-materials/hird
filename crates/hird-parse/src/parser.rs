@@ -1542,21 +1542,42 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     }
 
     /// `{` always begins a record literal here; there is no block-expression
-    /// form to disambiguate against. Fields use `name: expr`.
+    /// form to disambiguate against. Fields use `name: expr`; a `..base` tail
+    /// makes the literal an update of `base`.
     fn parse_record_lit(&mut self) {
         self.start_node(SyntaxKind::RECORD_LIT);
         self.expect(SyntaxKind::L_BRACE);
+        let mut base_seen = false;
         if !self.at(SyntaxKind::R_BRACE) {
-            self.parse_record_field();
+            self.parse_record_entry(&mut base_seen);
             while self.eat(SyntaxKind::COMMA) {
                 if self.at(SyntaxKind::R_BRACE) {
                     break;
                 }
-                self.parse_record_field();
+                self.parse_record_entry(&mut base_seen);
             }
         }
         self.expect(SyntaxKind::R_BRACE);
         self.finish_node();
+    }
+
+    /// One record-literal entry: a `name: expr` field or the `..base` tail.
+    /// Anything after a base is reported and still parsed, so the literal
+    /// recovers as one node.
+    fn parse_record_entry(&mut self, base_seen: &mut bool) {
+        if *base_seen {
+            self.emit(
+                DiagnosticCode::P0008,
+                "`..base` must be the last entry of a record literal",
+                Some("a record literal takes at most one base, written after every field"),
+            );
+        }
+        if self.eat(SyntaxKind::DOT_DOT) {
+            self.parse_expr();
+            *base_seen = true;
+        } else {
+            self.parse_record_field();
+        }
     }
 
     /// `name: expr`.

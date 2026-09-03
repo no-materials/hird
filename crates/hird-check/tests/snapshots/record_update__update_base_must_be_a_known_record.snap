@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/record_update.rs
+expression: "check_str(\"fn loose(p: a) = { x: 1, ..p }\\n\\\n         fn tuple() -> Int = { x: 1, ..(1, 2) }.x\")"
+---
+loose : ∀a. a
+tuple : () → Int
+error[C0009] 27..28: cannot determine the record type of the update base; add a type annotation
+error[C0009] 61..67: cannot update fields of non-record type `(Int, Int)`

@@ -124,6 +124,23 @@ fn let_pattern_lowers_to_one_arm_match() {
 }
 
 #[test]
+fn record_update_lowers_with_its_base() {
+    // The update keeps the base as an operand; its type is the base's.
+    let module = lower(
+        "fn bump(p: { x: Int, y: Int }) -> { x: Int, y: Int } = { x: p.x + 1, ..p }",
+        "Main",
+    );
+    let bump = fn_named(&module, "bump");
+    let IrExpr::Record(record) = &bump.body else {
+        panic!("body should be a record, got {:?}", bump.body);
+    };
+    assert_eq!(record.fields.len(), 1);
+    assert_eq!(record.fields[0].label, "x");
+    assert!(matches!(record.base.as_deref(), Some(IrExpr::Var(v)) if v.name == "p"));
+    assert_eq!(ty_str(&record.ty), "{ x: Int, y: Int }");
+}
+
+#[test]
 fn sequence_lowers_to_discard_let() {
     // `a; b` is the discard let it abbreviates.
     let module = lower(

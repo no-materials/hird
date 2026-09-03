@@ -285,6 +285,24 @@ fn type_alias_opaque_is_error() {
     insta::assert_snapshot!(render_cst("pub opaque type alias Pair = (Int, Int)"));
 }
 
+// ── record update ───────────────────────────────────────────────
+
+#[test]
+fn record_update() {
+    insta::assert_snapshot!(render_cst("fn f() = { beats: st.beats + 1, ..st }"));
+}
+
+#[test]
+fn record_update_base_only() {
+    // Parses; the checker rejects a base with no fields.
+    insta::assert_snapshot!(render_cst("fn f() = { ..st.inner }"));
+}
+
+#[test]
+fn record_update_base_not_last_is_error() {
+    insta::assert_snapshot!(render_cst("fn f() = { ..a, x: 1, ..b }"));
+}
+
 // ── actor declarations ──────────────────────────────────────────
 
 #[test]

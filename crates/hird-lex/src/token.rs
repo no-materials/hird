@@ -171,6 +171,8 @@ pub enum TokenKind {
     Bang,
     /// `.`
     Dot,
+    /// `..`
+    DotDot,
     /// `:`
     Colon,
     /// `::`

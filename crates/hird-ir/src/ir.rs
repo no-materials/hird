@@ -712,11 +712,15 @@ pub struct IrList {
     pub ty: Type,
 }
 
-/// A record literal.
+/// A record literal, or an update of `base` when one is present: the listed
+/// fields from the literal, every other field from the base.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrRecord {
     /// The fields, in source order.
     pub fields: Vec<IrRecordField>,
+    /// The record being updated; `None` for a plain literal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base: Option<Box<IrExpr>>,
     /// The record's type.
     #[serde(rename = "type", serialize_with = "serialize_type")]
     pub ty: Type,

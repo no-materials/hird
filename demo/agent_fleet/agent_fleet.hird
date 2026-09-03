@@ -25,13 +25,13 @@ use Errands.{Order, Outcome}
 type FleetConfig = FleetConfig(Clock, Int)
 
 // The planner's clock and period, plus the next round to order.
-type PlannerState = PlannerState(Clock, Int, Int)
+type alias PlannerState = { clock: Clock, period: Int, round: Int }
 
 // Errands carried out since the executor last took its post.
-type ExecutorState = ExecutorState(Int)
+type alias ExecutorState = { done: Int }
 
 // Outcomes chronicled since the auditor last took its post.
-type AuditorState = AuditorState(Int)
+type alias AuditorState = { recorded: Int }
 
 // ── tools ────────────────────────────────────────────────────────
 
@@ -58,13 +58,13 @@ actor Planner {
     let FleetConfig(clock, period) = config in
     log({ level: "info", message: "planner takes its post" });
     schedule(clock, self(), Tick, period);
-    PlannerState(clock, period, 1),
+    { clock: clock, period: period, round: 1 },
 
-  handle Tick, PlannerState(clock, period, round)
+  handle Tick, st
     ! {Send<ExecutorMsg>, Schedule<PlannerMsg>} =
-    send(child(FleetSup, executor), Carry(Errands.forge(round)));
-    schedule(clock, self(), Tick, period);
-    Continue(PlannerState(clock, period, round + 1)),
+    send(child(FleetSup, executor), Carry(Errands.forge(st.round)));
+    schedule(st.clock, self(), Tick, st.period);
+    Continue({ round: st.round + 1, ..st }),
 } ! {Tool<Log>, Send<ExecutorMsg>, Schedule<PlannerMsg>}
 
 // ── the executor: carries orders out ─────────────────────────────
@@ -76,12 +76,12 @@ actor Executor {
 
   init: fn(done: Int) ! {Tool<Log>} =
     log({ level: "info", message: "executor takes its post" });
-    ExecutorState(done),
+    { done: done },
 
   // Round 3 is dropped on purpose: the crash consumes the order, the
   // supervisor restarts the executor, and the next round proceeds — the
   // gap stays visible in the audit stream.
-  handle Carry(order), ExecutorState(done)
+  handle Carry(order), st
     ! {Tool<RunErrand>, Send<AuditorMsg>} =
     let Order(round, errand) = order in
     if round == 3
@@ -89,7 +89,7 @@ actor Executor {
       else
         let note = run_errand({ round: round, errand: errand }) in
         send(child(FleetSup, auditor), Record(Errands.conclude(order, note)));
-        Continue(ExecutorState(done + 1)),
+        Continue({ done: st.done + 1, ..st }),
 } ! {Tool<Log>, Tool<RunErrand>, Send<AuditorMsg>}
 
 // ── the auditor: chronicles outcomes ─────────────────────────────
@@ -101,13 +101,13 @@ actor Auditor {
 
   init: fn(recorded: Int) ! {Tool<Log>} =
     log({ level: "info", message: "auditor takes its post" });
-    AuditorState(recorded),
+    { recorded: recorded },
 
-  handle Record(outcome), AuditorState(recorded)
+  handle Record(outcome), st
     ! {Tool<Chronicle>} =
     let Outcome(round, note) = outcome in
     chronicle({ round: round, note: note });
-    Continue(AuditorState(recorded + 1)),
+    Continue({ recorded: st.recorded + 1, ..st }),
 } ! {Tool<Log>, Tool<Chronicle>}
 
 // ── supervision ──────────────────────────────────────────────────

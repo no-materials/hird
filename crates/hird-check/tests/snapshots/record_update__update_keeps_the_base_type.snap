@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/record_update.rs
+expression: "check_str(\"type alias Point = { x: Int, y: Int, label: String }\\n\\\n         fn move_x(p: Point, dx: Int) -> Point = { x: p.x + dx, ..p }\\n\\\n         fn relabel(p: Point) -> Point = { label: \\\"moved\\\", x: 0, ..p }\\n\\\n         fn nested(p: Point) -> Point = { y: { x: 1, ..p }.x, ..p }\")"
+---
+move_x : { label: String, x: Int, y: Int } → Int → { label: String, x: Int, y: Int }
+nested : { label: String, x: Int, y: Int } → { label: String, x: Int, y: Int }
+relabel : { label: String, x: Int, y: Int } → { label: String, x: Int, y: Int }

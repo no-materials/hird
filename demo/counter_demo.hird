@@ -10,7 +10,7 @@ module CounterDemo
 // ── domain types ─────────────────────────────────────────────────
 
 type CounterConfig = CounterConfig(Int)
-type CounterState = CounterState(Int)
+type alias CounterState = { count: Int }
 
 // ── the counter actor ────────────────────────────────────────────
 
@@ -22,14 +22,14 @@ actor Counter {
     | GetCount(ReplyTo<Int>),
 
   init: fn(config: CounterConfig) ! {} =
-    let CounterConfig(start) = config in CounterState(start),
+    let CounterConfig(start) = config in { count: start },
 
-  handle Increment(by), CounterState(n) ! {} =
-    Continue(CounterState(n + by)),
+  handle Increment(by), st ! {} =
+    Continue({ count: st.count + by, ..st }),
 
-  handle GetCount(reply_to), CounterState(n) ! {Send<Int>} =
-    reply(reply_to, n);
-    Continue(CounterState(n)),
+  handle GetCount(reply_to), st ! {Send<Int>} =
+    reply(reply_to, st.count);
+    Continue(st),
 } ! {Send<Int>}
 
 // Counters start at zero.

@@ -176,6 +176,28 @@ fn f() → () = [(), (1, 2), [1], { path: p }, 1.5, "s"]
       (string))))
 
 ==================
+Record update
+==================
+
+fn bump(st: State) → State = { beats: st.beats + 1, ..st }
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (record
+      (record_field
+        name: (identifier)
+        value: (binary_expression
+          left: (field_expression value: (identifier) field: (identifier))
+          right: (integer)))
+      (record_base base: (identifier)))))
+
+==================
 Application binds tighter than infix, field access tighter still
 ==================
 

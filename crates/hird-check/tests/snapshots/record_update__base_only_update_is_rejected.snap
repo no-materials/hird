@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/record_update.rs
+expression: "check_str(\"fn copy(p: { x: Int }) -> { x: Int } = { ..p }\")"
+---
+copy : { x: Int } → { x: Int }
+error[C0060] 38..46: a record update lists at least one field; `{ ..base }` is not a copy, use `base` itself

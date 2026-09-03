@@ -447,6 +447,9 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             for field in &record.fields {
                 collect_expr_effects(&field.value, out);
             }
+            if let Some(base) = &record.base {
+                collect_expr_effects(base, out);
+            }
         }
         IrExpr::Field(field) => collect_expr_effects(&field.receiver, out),
         IrExpr::Spawn(spawn) => {
@@ -812,7 +815,7 @@ impl Printer {
                 self.push("]");
             }
             IrExpr::Record(record) => {
-                if record.fields.is_empty() {
+                if record.fields.is_empty() && record.base.is_none() {
                     self.push("{}");
                 } else {
                     self.push("{ ");
@@ -823,6 +826,13 @@ impl Printer {
                         self.push(&field.label);
                         self.push(": ");
                         self.expr(&field.value, PREC_LOW);
+                    }
+                    if let Some(base) = &record.base {
+                        if !record.fields.is_empty() {
+                            self.push(", ");
+                        }
+                        self.push("..");
+                        self.expr(base, PREC_LOW);
                     }
                     self.push(" }");
                 }

@@ -134,7 +134,9 @@ Every expression node carries its resolved type.
   (`Mod.member`) reference. Its type is the instantiation at this use site.
 - `IrTuple { elems, type }` — a tuple; an empty tuple is unit (`()`).
 - `IrList { elems, type }`.
-- `IrRecord { fields, type }`, where each `IrRecordField { label, value }`.
+- `IrRecord { fields, base?, type }`, where each `IrRecordField { label,
+  value }`; `base` is present for an update (`{ f: v, ..base }`), whose type
+  is the base's.
 - `IrField { receiver, field, type }` — a record field access.
 
 ### Patterns

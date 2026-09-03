@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/record_update.rs
+expression: "check_str(\"type alias LogArgs = { message: String }\\n\\\n         tool Log : LogArgs -> ()\\n\\\n         type alias HeartState = { clock: Clock, period: Int, beats: Int }\\n\\\n         actor Heart {\\n\\\n           state: HeartState,\\n\\\n           message: HeartMsg = | Beat,\\n\\\n           init: fn(clock: Clock) ! {Schedule<HeartMsg>} =\\n\\\n             schedule(clock, self(), Beat, 1000);\\n\\\n             { clock: clock, period: 1000, beats: 0 },\\n\\\n           handle Beat, st ! {Tool<Log>, Schedule<HeartMsg>} =\\n\\\n             log({ message: \\\"beat\\\" });\\n\\\n             schedule(st.clock, self(), Beat, st.period);\\n\\\n             Continue({ beats: st.beats + 1, ..st }),\\n\\\n         } ! {Tool<Log>, Schedule<HeartMsg>}\")"
+---
+Beat : HeartMsg
+log : { message: String } → () ! {Tool<Log>}
+record LogInvocation : { args: { message: String }, caller: CallerId, result: (), timestamp: Timestamp, tool: String }

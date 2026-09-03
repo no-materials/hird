@@ -12,6 +12,13 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **Record update.** A record literal may end in `..base`:
+  `{ beats: st.beats + 1, ..st }` takes the listed fields from the literal
+  and every other field from `st`, and has `st`'s type, so an update can
+  neither add (C0010) nor remove fields. `{ ..base }` alone is an error
+  (C0060), not a copy; the base is written once, last (P0008). Lowers to
+  an Erlang map update. The demos' actor states are now record aliases
+  read by field and rebuilt with `..st`.
 - **Type aliases.** `type alias Name<params> = T` names a type expression
   — a record, a tuple, a function type — and every use expands to it, so
   an alias has no identity: it is transparent to unification, the wire

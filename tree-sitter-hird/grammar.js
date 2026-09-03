@@ -446,7 +446,11 @@ module.exports = grammar({
 
     list: ($) => seq('[', optional(commaList($._expression)), ']'),
 
-    record: ($) => seq('{', optional(commaList($.record_field)), '}'),
+    // A `..base` entry makes the literal an update; the compiler, not the
+    // grammar, requires it to be single and last.
+    record: ($) => seq('{', optional(commaList(choice($.record_field, $.record_base))), '}'),
+
+    record_base: ($) => seq('..', field('base', $._expression)),
 
     // A keyword spelling is a legal field name (`actor: Planner` in a child
     // spec); the `name :` shape leaves no ambiguity, and no keyword is valid

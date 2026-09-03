@@ -71,7 +71,15 @@ impl<'src> Lexer<'src> {
             b';' => self.single(TokenKind::Semicolon, start),
             b'+' => self.single(TokenKind::Plus, start),
             b'*' => self.single(TokenKind::Star, start),
-            b'.' => self.single(TokenKind::Dot, start),
+            b'.' => {
+                self.pos += 1;
+                if bytes.get(self.pos) == Some(&b'.') {
+                    self.pos += 1;
+                    self.tok(TokenKind::DotDot, start)
+                } else {
+                    self.tok(TokenKind::Dot, start)
+                }
+            }
 
             b'|' => {
                 self.pos += 1;
@@ -588,6 +596,8 @@ mod tests {
     fn dot_without_trailing_digit_is_not_float() {
         assert_eq!(kinds("42."), vec![Int, Dot]);
         assert_eq!(kinds("42.x"), vec![Int, Dot, Ident]);
+        assert_eq!(kinds("1..2"), vec![Int, DotDot, Int]);
+        assert_eq!(kinds("..st.inner"), vec![DotDot, Ident, Dot, Ident]);
     }
 
     // -- string literals ---------------------------------------------------
@@ -654,6 +664,7 @@ mod tests {
         assert_eq!(kinds("=="), vec![EqEq]);
         assert_eq!(kinds("!="), vec![BangEq]);
         assert_eq!(kinds("::"), vec![ColonColon]);
+        assert_eq!(kinds(".."), vec![DotDot]);
         assert_eq!(kinds("&&"), vec![AmpAmp]);
         assert_eq!(kinds("||"), vec![PipePipe]);
     }

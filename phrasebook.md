@@ -109,6 +109,24 @@ importer sees the expansion.
 
 ---
 
+## Records
+
+```
+type alias HeartState = { clock: Clock, period: Int, beats: Int }
+
+fn beat(st: HeartState) → HeartState = { beats: st.beats + 1, ..st }
+```
+
+Records are structural and closed: `{ x: 1, y: 2 }` has type `{ x: Int,
+y: Int }` and nothing else. Fields are read with `st.beats`. A literal
+ending in `..base` is an update: the listed fields come from the literal,
+every other field from `base`, and the result has the type of `base` — so a
+field the base lacks is an error (C0010), the base must be a known record
+(C0009), and `{ ..base }` alone is rejected rather than treated as a copy
+(C0060). One base, written last (P0008). It lowers to an Erlang map update.
+
+---
+
 ## Pattern Matching
 
 ```

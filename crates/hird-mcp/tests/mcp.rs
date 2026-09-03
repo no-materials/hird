@@ -247,7 +247,8 @@ fn explain_actor_protocol_covers_the_planner() {
     );
     let actor = &result["actor"];
     assert_eq!(actor["name"], "Planner");
-    assert_eq!(actor["state"]["display"], "PlannerState");
+    // The state is a type alias, which displays as its expansion.
+    assert_eq!(actor["state"]["display"], "{ repos: Int, tickets: Int }");
     assert_eq!(actor["message"]["name"], "PlannerMsg");
     let constructors: Vec<&str> = actor["message"]["constructors"]
         .as_array()

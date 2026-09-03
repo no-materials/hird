@@ -16,7 +16,7 @@ module Heartbeat
 type HeartConfig = HeartConfig(Clock, Int)
 
 // The config plus the number of beats so far.
-type HeartState = HeartState(Clock, Int, Int)
+type alias HeartState = { clock: Clock, period: Int, beats: Int }
 
 // ── tools ────────────────────────────────────────────────────────
 
@@ -36,13 +36,12 @@ actor Heart {
   init: fn(config: HeartConfig) ! {Schedule<HeartMsg>} =
     let HeartConfig(clock, period) = config in
     schedule(clock, self(), Beat, period);
-    HeartState(clock, period, 0),
+    { clock: clock, period: period, beats: 0 },
 
-  handle Beat, HeartState(clock, period, beats)
-    ! {Tool<Log>, Schedule<HeartMsg>} =
+  handle Beat, st ! {Tool<Log>, Schedule<HeartMsg>} =
     log({ message: "beat" });
-    schedule(clock, self(), Beat, period);
-    Continue(HeartState(clock, period, beats + 1)),
+    schedule(st.clock, self(), Beat, st.period);
+    Continue({ beats: st.beats + 1, ..st }),
 } ! {Tool<Log>, Schedule<HeartMsg>}
 
 // ── supervision ──────────────────────────────────────────────────

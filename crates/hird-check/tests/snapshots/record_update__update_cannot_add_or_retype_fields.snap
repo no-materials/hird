@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/record_update.rs
+expression: "check_str(\"fn add(p: { x: Int }) -> { x: Int } = { z: 1, ..p }\\n\\\n         fn retype(p: { x: Int }) -> { x: Int } = { x: \\\"one\\\", ..p }\")"
+---
+add : { x: Int } → { x: Int }
+retype : { x: Int } → { x: Int }
+error[C0010] 39..44: record `{ x: Int }` has no field `z`
+error[C0001] 94..103: type mismatch: expected `Int`, got `String`

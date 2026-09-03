@@ -27,7 +27,8 @@ type Backlog = Backlog(Task, Backlog) | EmptyBacklog
 type RepoState = RepoState(String, Backlog)
 
 type PlannerConfig = PlannerConfig(String)
-type PlannerState = PlannerState(Int, Int)
+// Repositories planned and tickets filed since the planner took its post.
+type alias PlannerState = { repos: Int, tickets: Int }
 type PlannerStatus = PlannerStatus(Int, Int)
 
 // ── tools ────────────────────────────────────────────────────────
@@ -76,20 +77,20 @@ actor Planner {
     | GetStatus(ReplyTo<PlannerStatus>)
     | Shutdown,
 
-  init: fn(config: PlannerConfig) ! {} = PlannerState(0, 0),
+  init: fn(config: PlannerConfig) ! {} = { repos: 0, tickets: 0 },
 
-  handle PlanRepo(path), PlannerState(repos, tickets)
+  handle PlanRepo(path), st
     ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>} =
     log({ level: "info", message: "planning repository" });
     let repo = read_repo({ path: path }) in
     let filed = file_tickets(analyze(repo)) in
     log({ level: "info", message: "planning complete" });
-    Continue(PlannerState(repos + 1, tickets + filed)),
+    Continue({ repos: st.repos + 1, tickets: st.tickets + filed, ..st }),
 
-  handle GetStatus(reply_to), PlannerState(repos, tickets)
+  handle GetStatus(reply_to), st
     ! {Send<PlannerStatus>} =
-    reply(reply_to, PlannerStatus(repos, tickets));
-    Continue(PlannerState(repos, tickets)),
+    reply(reply_to, PlannerStatus(st.repos, st.tickets));
+    Continue(st),
 
   // A deliberate stop, not a crash: the planner is a transient child, so
   // the supervisor leaves it stopped.

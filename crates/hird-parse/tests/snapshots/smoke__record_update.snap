@@ -1,0 +1,36 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = { beats: st.beats + 1, ..st }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    RECORD_LIT
+      WHITESPACE " "
+      L_BRACE "{"
+      RECORD_FIELD
+        WHITESPACE " "
+        IDENT "beats"
+        COLON ":"
+        BIN_EXPR
+          FIELD_EXPR
+            WHITESPACE " "
+            IDENT "st"
+            DOT "."
+            IDENT "beats"
+          WHITESPACE " "
+          PLUS "+"
+          WHITESPACE " "
+          INT "1"
+      COMMA ","
+      WHITESPACE " "
+      DOT_DOT ".."
+      IDENT "st"
+      WHITESPACE " "
+      R_BRACE "}"

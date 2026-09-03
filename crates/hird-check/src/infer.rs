@@ -1180,7 +1180,11 @@ impl Checker {
         Some(self.error(CheckCode::C0022, span, message))
     }
 
-    /// `{ field: value, … }` — later duplicates override earlier ones.
+    /// `{ field: value, … }` — later duplicates override earlier ones — or the
+    /// update `{ field: value, …, ..base }`: the result has the type of
+    /// `base`, which must resolve to a record carrying every listed field, and
+    /// each listed value unifies with the base field's type. Records are
+    /// closed, so an update neither adds nor removes fields.
     fn infer_record(&mut self, record: &RecordLit) -> Checked<Type> {
         let mut fields = Vec::new();
         for field in record.fields() {
@@ -1191,9 +1195,53 @@ impl Checker {
                 return Err(Aborted);
             };
             let ty = self.infer_expr(&value)?;
-            fields.push((Label::new(name), ty));
+            let span = node_span(field.syntax(), self.source_id);
+            fields.push((Label::new(name), ty, span));
         }
-        Ok(Type::record(fields))
+        let Some(base) = record.base() else {
+            return Ok(Type::record(fields.into_iter().map(|(l, t, _)| (l, t))));
+        };
+        if fields.is_empty() {
+            return Err(self.error(
+                CheckCode::C0060,
+                node_span(record.syntax(), self.source_id),
+                String::from(
+                    "a record update lists at least one field; `{ ..base }` is not a copy, use `base` itself",
+                ),
+            ));
+        }
+        let base_span = expr_span(&base, self.source_id);
+        let base_ty = self.infer_expr(&base)?;
+        match self.subst.resolve(&base_ty) {
+            Type::TyRecord(base_fields) => {
+                for (label, ty, span) in fields {
+                    match base_fields.get(&label) {
+                        Some(expected) => self.unify_at(expected, &ty, span)?,
+                        None => {
+                            let record = Type::TyRecord(base_fields.clone());
+                            return Err(self.error(
+                                CheckCode::C0010,
+                                span,
+                                format!("record `{record}` has no field `{label}`"),
+                            ));
+                        }
+                    }
+                }
+                Ok(Type::TyRecord(base_fields))
+            }
+            Type::TyVar(_) => Err(self.error(
+                CheckCode::C0009,
+                base_span,
+                String::from(
+                    "cannot determine the record type of the update base; add a type annotation",
+                ),
+            )),
+            other => Err(self.error(
+                CheckCode::C0009,
+                base_span,
+                format!("cannot update fields of non-record type `{other}`"),
+            )),
+        }
     }
 }
 

@@ -1,0 +1,24 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = { ..st.inner }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    RECORD_LIT
+      WHITESPACE " "
+      L_BRACE "{"
+      WHITESPACE " "
+      DOT_DOT ".."
+      FIELD_EXPR
+        IDENT "st"
+        DOT "."
+        IDENT "inner"
+      WHITESPACE " "
+      R_BRACE "}"

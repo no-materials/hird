@@ -135,6 +135,8 @@ pub enum SyntaxKind {
     BANG,
     /// `.`
     DOT,
+    /// `..`
+    DOT_DOT,
     /// `:`
     COLON,
     /// `::`
@@ -373,6 +375,7 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::PipePipe => Self::OROR,
             TokenKind::Bang => Self::BANG,
             TokenKind::Dot => Self::DOT,
+            TokenKind::DotDot => Self::DOT_DOT,
             TokenKind::Colon => Self::COLON,
             TokenKind::ColonColon => Self::COLON_COLON,
             TokenKind::LParen => Self::L_PAREN,
@@ -460,6 +463,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::PIPE => Some("|"),
             Self::BANG => Some("!"),
             Self::DOT => Some("."),
+            Self::DOT_DOT => Some(".."),
             Self::COLON => Some(":"),
             Self::COLON_COLON => Some("::"),
             Self::L_PAREN => Some("("),

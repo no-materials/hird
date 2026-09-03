@@ -1175,7 +1175,9 @@ impl FieldExpr {
 }
 
 ast_node! {
-    /// A record literal (`{ x: 1, y: 2 }`).
+    /// A record literal (`{ x: 1, y: 2 }`), or an update of a base record
+    /// (`{ x: 1, ..base }`): the listed fields from the literal, every other
+    /// field from `base`.
     RecordLit => RECORD_LIT
 }
 
@@ -1183,6 +1185,12 @@ impl RecordLit {
     /// The record fields, in order.
     pub fn fields(&self) -> impl Iterator<Item = RecordField> + '_ {
         children(&self.0)
+    }
+
+    /// The update base (after `..`), if any.
+    #[must_use]
+    pub fn base(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::DOT_DOT)
     }
 }
 

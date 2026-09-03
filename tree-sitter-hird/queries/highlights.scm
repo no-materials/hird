@@ -223,6 +223,7 @@
   ","
   ":"
   "."
+  ".."
   "|"
 ] @punctuation.delimiter
 

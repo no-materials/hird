@@ -128,6 +128,18 @@ tool's argument record, say. When a type needs an identity of its own
 (a capability, a message), declare an ADT with `type` instead; an alias
 cannot be recursive or `opaque`.
 
+A record literal may end in `..base` to rebuild an existing record with
+some fields changed:
+
+```
+fn move_x(p: Point, dx: Int) → Point = { x: p.x + dx, ..p }
+```
+
+The listed fields come from the literal and every other field from `p`;
+the result has `p`'s type, so an update can neither add nor remove
+fields. This is how an actor handler rebuilds record-shaped state:
+`Continue({ beats: st.beats + 1, ..st })`.
+
 `Option<a> = Some(a) | None` is predeclared, like `Bool`. `List` is a
 built-in type *name* with no constructors in v0.1; there are no list
 literals or patterns yet.
