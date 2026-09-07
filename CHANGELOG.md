@@ -22,6 +22,12 @@ schedule and is not covered by these entries.
 
 ### Fixed
 
+- **`explain_effect_row` rejected names it listed as available.** A tool
+  name (`ReadRepo`) was `not_found` although `lookup_definition` accepted
+  it; it now explains the tool's generated function, `Tool<ReadRepo>`
+  included, and reports that function as `name`. A defined name that is not
+  a function (a type, an alias, an actor) is `not_a_function` rather than
+  `not_found`.
 - **`get_context_for_symbol` declared `budget` required.** The tool's
   input schema listed every property as required, so a strict MCP client
   could not omit `budget` although the server defaults it to 400. The

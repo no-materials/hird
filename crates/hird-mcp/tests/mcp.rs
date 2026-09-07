@@ -213,6 +213,30 @@ fn explain_effect_row_explains_each_effect() {
     );
     assert_eq!(result["pure"], true);
     assert_eq!(result["effects"], json!([]));
+
+    // A tool name explains its generated function, implicit effect included.
+    let result = call_tool(
+        &mut server,
+        "explain_effect_row",
+        json!({ "file": demo_path(), "fn_name": "ReadRepo" }),
+    );
+    assert_eq!(result["name"], "read_repo");
+    assert_eq!(result["effect_row"], "{Tool<ReadRepo>}");
+
+    // A defined name that is not a function is `not_a_function`, never
+    // `not_found`.
+    let error = call_tool_err(
+        &mut server,
+        "explain_effect_row",
+        json!({ "file": demo_path(), "fn_name": "Planner" }),
+    );
+    assert_eq!(error["code"], "not_a_function");
+    let error = call_tool_err(
+        &mut server,
+        "explain_effect_row",
+        json!({ "file": demo_path(), "fn_name": "PlannerState" }),
+    );
+    assert_eq!(error["code"], "not_a_function");
 }
 
 #[test]

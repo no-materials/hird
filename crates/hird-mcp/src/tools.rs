@@ -293,13 +293,15 @@ pub(crate) fn descriptors() -> Value {
             "Explain effect row",
             "Explain a function's effect row: the canonical row plus a one-sentence \
              explanation of each effect. Use it for 'what may this function do' or to \
-             interpret an unfamiliar effect. It covers one named function; use \
+             interpret an unfamiliar effect. It covers one named function (a tool name \
+             explains the tool's generated function, `Tool<Name>` included); use \
              `infer_type` for an arbitrary expression's row and `emit_actor_effect_graph` \
-             for what an actor transitively does. Returns `type`, `effect_row`, `open` \
-             (the row ends in a row variable, so it may carry more effects than listed), \
-             `pure` (closed and empty), and `effects`, each with `effect` and \
-             `explanation`. A name of non-function type is `not_a_function`; an unknown \
-             name is `not_found` with the available names in `error.data.available`.",
+             for what an actor transitively does. Returns `name` (the function explained), \
+             `type`, `effect_row`, `open` (the row ends in a row variable, so it may carry \
+             more effects than listed), `pure` (closed and empty), and `effects`, each \
+             with `effect` and `explanation`. A name that is not a function (a type, an \
+             actor, …) is `not_a_function`; an unknown name is `not_found` with the \
+             available names in `error.data.available`.",
             json!({ "file": file, "fn_name": symbol("The function's name") }),
             json!({
                 "file": string,
@@ -619,11 +621,26 @@ fn explain_effect_row(query: Query<'_>, args: &Value) -> Result<Value, ToolError
     let (module, name) = query
         .resolve(requested)
         .ok_or_else(|| not_found(query, requested))?;
+    let definition = module
+        .definitions
+        .iter()
+        .find(|d| d.name == name)
+        .ok_or_else(|| not_found(query, requested))?;
+    // A tool declaration is explained through the function it generates.
+    let name = match definition.kind {
+        "tool" => tool_fn_name(name),
+        _ => String::from(name),
+    };
     let ty = module
         .checked
         .bindings
-        .get(name)
-        .ok_or_else(|| not_found(query, requested))?
+        .get(&name)
+        .ok_or_else(|| {
+            ToolError::new(
+                "not_a_function",
+                format!("`{requested}` is a {}, not a function", definition.kind),
+            )
+        })?
         .normalized();
     let row = fn_row(&ty).ok_or_else(|| {
         ToolError::new(
