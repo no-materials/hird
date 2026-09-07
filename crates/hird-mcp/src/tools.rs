@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 
 use hird_check::NodeKey;
 use hird_ir::{ActorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectRowRef, IrDecl, IrExpr};
-use hird_types::{EffectRow, Type};
+use hird_types::{EffectRow, Name, Type};
 use serde_json::{Value, json};
 
 use crate::analysis::{Cache, Module, Program, Query, offset_of, tool_fn_name};
@@ -261,9 +261,10 @@ pub(crate) fn descriptors() -> Value {
              `get_context_for_symbol` when you also want effects, callers, and callees, \
              `explain_effect_row` to interpret a function's effects, and \
              `render_ir_fragment` for its body. Returns `kind` (`function`, `type`, \
-             `constructor`, `effect`, `tool`, `tool_function`, `actor`, `message_type`, \
-             `message_constructor`, `supervisor`, or `extern`), `line`, and nullable \
-             `type` and `doc`; `file` is the sibling module when the name is imported. An \
+             `type alias`, `constructor`, `effect`, `tool`, `tool_function`, `actor`, \
+             `message_type`, `message_constructor`, `supervisor`, or `extern`), `line`, \
+             and nullable `type` (for a `type alias`, the type it expands to) and `doc`; \
+             `file` is the sibling module when the name is imported. An \
              unknown name is `not_found`, with every name in the file's scope in \
              `error.data.available`.",
             json!({ "file": file, "name": symbol("The definition's name") }),
@@ -320,7 +321,9 @@ pub(crate) fn descriptors() -> Value {
              verbose and follows the compiler's declaration serialization, so for a \
              human-oriented view prefer `get_context_for_symbol` or `lookup_definition`. \
              Returns `module`, `name`, and `ir` (the serialized declaration). An unknown \
-             name is `not_found` with the available names in `error.data.available`.",
+             name is `not_found` with the available names in `error.data.available`; a \
+             type alias is `no_ir` (aliases are expanded before lowering) with its \
+             expansion in `error.data.expansion`.",
             json!({ "file": file, "name": symbol("The definition's name") }),
             json!({
                 "file": string,
@@ -580,10 +583,10 @@ fn lookup_definition(query: Query<'_>, args: &Value) -> Result<Value, ToolError>
         .checked
         .bindings
         .get(name)
-        .or_else(|| {
-            (definition.kind == "tool")
-                .then(|| module.checked.bindings.get(&tool_fn_name(name)))
-                .flatten()
+        .or_else(|| match definition.kind {
+            "tool" => module.checked.bindings.get(&tool_fn_name(name)),
+            "type alias" => module.checked.aliases.get(&Name::new(name)),
+            _ => None,
         })
         .map(|ty| format!("{}", ty.normalized()));
     Ok(json!({
@@ -641,7 +644,17 @@ fn explain_effect_row(query: Query<'_>, args: &Value) -> Result<Value, ToolError
 
 /// `render_ir_fragment(file, name)` — the typed IR of one definition.
 fn render_ir_fragment(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
-    let (module, decl) = find_decl(query, str_arg(args, "name")?)?;
+    let name = str_arg(args, "name")?;
+    if let Some((module, alias)) = find_alias(query, name) {
+        return Err(ToolError::with_data(
+            "no_ir",
+            format!(
+                "`{name}` is a type alias; aliases are expanded before lowering and have no IR"
+            ),
+            json!({ "file": module.file, "expansion": format!("{alias}") }),
+        ));
+    }
+    let (module, decl) = find_decl(query, name)?;
     let ir = serde_json::to_value(decl)
         .map_err(|e| ToolError::new("internal", format!("cannot serialize IR: {e}")))?;
     Ok(json!({
@@ -761,29 +774,43 @@ fn get_context_for_symbol(query: Query<'_>, args: &Value) -> Result<Value, ToolE
         Some(_) => usize_arg(args, "budget")?,
         None => DEFAULT_BUDGET,
     };
-    let (module, decl) = find_decl(query, str_arg(args, "name")?)?;
-    let decl_name = decl_name(decl);
-    let kind = decl_kind(decl);
-
-    let mut sections: Vec<(&str, String)> = vec![("signature", header_line(module, decl))];
-    if let Some(row) = effects_line(module, decl) {
-        sections.push(("effects", row));
-    }
-    if let Some(doc) = module
-        .definitions
-        .iter()
-        .find(|d| d.name == decl_name && d.doc.is_some())
-        .and_then(|d| d.doc.clone())
-    {
-        sections.push(("doc", format!("doc: {doc}")));
-    }
-    let (callers, callees) = call_graph(query, module, decl);
-    if !callers.is_empty() {
-        sections.push(("callers", format!("callers: {}", callers.join(", "))));
-    }
-    if !callees.is_empty() {
-        sections.push(("callees", format!("callees: {}", callees.join(", "))));
-    }
+    let name = str_arg(args, "name")?;
+    let doc = |module: &Module, name: &str| {
+        module
+            .definitions
+            .iter()
+            .find(|d| d.name == name && d.doc.is_some())
+            .and_then(|d| d.doc.clone())
+            .map(|doc| ("doc", format!("doc: {doc}")))
+    };
+    // An alias has a signature and a doc, nothing else: no row, no body to
+    // call from, and its uses are expanded away before lowering.
+    let (module, decl_name, kind, sections): (&Module, &str, &str, Vec<(&str, String)>) =
+        match find_alias(query, name) {
+            Some((module, alias)) => {
+                let name = alias_name(query, name);
+                let mut sections = vec![("signature", format!("type alias {name} = {alias}"))];
+                sections.extend(doc(module, name));
+                (module, name, "type alias", sections)
+            }
+            None => {
+                let (module, decl) = find_decl(query, name)?;
+                let decl_name = decl_name(decl);
+                let mut sections = vec![("signature", header_line(module, decl))];
+                if let Some(row) = effects_line(module, decl) {
+                    sections.push(("effects", row));
+                }
+                sections.extend(doc(module, decl_name));
+                let (callers, callees) = call_graph(query, module, decl);
+                if !callers.is_empty() {
+                    sections.push(("callers", format!("callers: {}", callers.join(", "))));
+                }
+                if !callees.is_empty() {
+                    sections.push(("callees", format!("callees: {}", callees.join(", "))));
+                }
+                (module, decl_name, decl_kind(decl), sections)
+            }
+        };
 
     let mut summary = String::new();
     let mut omitted: Vec<&str> = Vec::new();
@@ -840,6 +867,10 @@ fn get_context_budget(query: Query<'_>) -> Result<Value, ToolError> {
                 effects.extend(row.effects().map(|e| format!("{e}")));
             }
         }
+    }
+    // Aliases are erased before IR; they cost what their declarations say.
+    for (name, alias) in &module.checked.aliases {
+        types += estimate_tokens(&format!("type alias {name} = {}", alias.normalized()));
     }
     let actors: usize = graph
         .actors
@@ -945,6 +976,22 @@ fn fn_row(ty: &Type) -> Option<&EffectRow> {
         Type::TyForall(_, _, body) => fn_row(body),
         _ => None,
     }
+}
+
+/// The type alias `name` resolves to, with its defining module, as the
+/// normalized type it expands to; `None` when `name` is not an alias.
+fn find_alias<'a>(query: Query<'a>, name: &str) -> Option<(&'a Module, Type)> {
+    let (module, member) = query.resolve(name)?;
+    module
+        .checked
+        .aliases
+        .get(&Name::new(member))
+        .map(|ty| (module, ty.normalized()))
+}
+
+/// The bare name of the alias `name` resolves to (`Util.Path` ⇒ `Path`).
+fn alias_name<'a>(query: Query<'a>, name: &'a str) -> &'a str {
+    query.resolve(name).map_or(name, |(_, member)| member)
 }
 
 /// The top-level IR declaration `name` resolves to, with its defining

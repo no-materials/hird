@@ -228,6 +228,13 @@ pub struct CheckedFile {
     /// the name expression's node and valued with the defining module.
     /// Lowering reads these to qualify each use to the module that defines it.
     pub import_origins: BTreeMap<NodeKey, ModuleName>,
+    /// Each of this module's type aliases as the type it expands to, keyed
+    /// by alias name; a parametric alias is quantified over its parameters
+    /// and renders with [`Type::normalized`]. Aliases have no identity in
+    /// any other table — every use is already expanded — so this is where
+    /// tooling reads what a name stands for. Absent for an alias whose
+    /// elaboration failed.
+    pub aliases: BTreeMap<Name, Type>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
 }

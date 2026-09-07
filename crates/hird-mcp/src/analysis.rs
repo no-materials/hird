@@ -84,8 +84,8 @@ struct Import {
 pub(crate) struct Definition {
     /// The bound name.
     pub(crate) name: String,
-    /// The definition kind (`function`, `type`, `constructor`, `effect`,
-    /// `tool`, `tool_function`, `actor`, `message_type`,
+    /// The definition kind (`function`, `type`, `type alias`, `constructor`,
+    /// `effect`, `tool`, `tool_function`, `actor`, `message_type`,
     /// `message_constructor`, `supervisor`, `extern`).
     pub(crate) kind: &'static str,
     /// 1-based source line of the binding's name token.

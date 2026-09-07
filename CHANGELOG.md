@@ -20,6 +20,21 @@ schedule and is not covered by these entries.
   tool by tool to find the first error. Each diagnostic names its `file`,
   so a sibling that fails to parse is reported under its own path.
 
+### Fixed
+
+- **Type aliases were half-visible to the MCP tools.** `lookup_definition`
+  on an alias answered kind `type alias` with no type, while
+  `get_context_for_symbol` and `render_ir_fragment` on the same name said
+  `not_found` and listed it under the available names. The checker now
+  records each module's aliases as the types they expand to
+  (`CheckedFile::aliases`, a parametric alias quantified), so
+  `lookup_definition` reports the expansion, `get_context_for_symbol`
+  summarizes the alias as its signature and doc, `get_context_budget`
+  counts aliases under `types`, and `render_ir_fragment` fails with `no_ir`
+  and the expansion in `error.data.expansion` — aliases are erased before
+  lowering, so there is no IR to render. The descriptor's kind list names
+  `type alias`.
+
 ### Changed
 
 - **MCP diagnostics carry codes, hints, and positions.** Parse diagnostics

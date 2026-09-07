@@ -42,9 +42,8 @@ fn check_str(source: &str) -> String {
     out
 }
 
-/// Parses each `(module name, source)` pair, checks the program, and renders
-/// every module's bindings followed by its diagnostics.
-fn check_modules(modules: &[(&str, &str)]) -> String {
+/// Parses each `(module name, source)` pair and checks the program.
+fn check_modules_raw(modules: &[(&str, &str)]) -> CheckedProgram {
     let files: Vec<(ModuleName, SourceFile)> = modules
         .iter()
         .map(|(name, src)| {
@@ -60,7 +59,13 @@ fn check_modules(modules: &[(&str, &str)]) -> String {
             )
         })
         .collect();
-    let program: CheckedProgram = check_program(&files);
+    check_program(&files)
+}
+
+/// Parses each `(module name, source)` pair, checks the program, and renders
+/// every module's bindings followed by its diagnostics.
+fn check_modules(modules: &[(&str, &str)]) -> String {
+    let program = check_modules_raw(modules);
     let mut out = String::new();
     for (name, checked) in &program.modules {
         writeln!(out, "== {name} ==").unwrap();
@@ -266,4 +271,38 @@ fn private_alias_not_importable() {
             "module App\nuse Shapes.{Point}\npub fn origin() -> Point = { x: 0, y: 0 }",
         ),
     ]));
+}
+
+/// The result table names each local alias as the type it expands to, a
+/// parametric one quantified; an imported alias is not listed.
+#[test]
+fn aliases_table_holds_expansions() {
+    let program = check_modules_raw(&[
+        (
+            "Shapes",
+            "module Shapes\n\
+             pub type alias Point = { x: Int, y: Int }\n\
+             type alias Pair<a> = (a, a)\n\
+             type alias Corners = Pair<Point>",
+        ),
+        (
+            "App",
+            "module App\nuse Shapes.{Point}\npub fn origin() -> Point = { x: 0, y: 0 }",
+        ),
+    ]);
+    let shapes = &program.modules[&ModuleName::new("Shapes")];
+    let rendered: Vec<String> = shapes
+        .aliases
+        .iter()
+        .map(|(name, ty)| format!("{name} = {}", ty.normalized()))
+        .collect();
+    assert_eq!(
+        rendered,
+        [
+            "Corners = ({ x: Int, y: Int }, { x: Int, y: Int })",
+            "Pair = \u{2200}a. (a, a)",
+            "Point = { x: Int, y: Int }",
+        ]
+    );
+    assert!(program.modules[&ModuleName::new("App")].aliases.is_empty());
 }

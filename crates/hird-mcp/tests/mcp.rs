@@ -896,3 +896,55 @@ fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
         );
     }
 }
+
+#[test]
+fn type_aliases_answer_every_symbol_tool() {
+    let mut server = Server::new();
+    let file = demo_path();
+
+    // The alias is a definition with the type it expands to.
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": file, "name": "PlannerState" }),
+    );
+    assert_eq!(result["kind"], "type alias");
+    assert_eq!(result["type"], "{ repos: Int, tickets: Int }");
+
+    // Its context is the signature (and doc): no row, no callers.
+    let result = call_tool(
+        &mut server,
+        "get_context_for_symbol",
+        json!({ "file": file, "name": "PlannerState" }),
+    );
+    assert_eq!(result["kind"], "type alias");
+    assert_eq!(
+        result["summary"],
+        "type alias PlannerState = { repos: Int, tickets: Int }\n\
+         doc: Repositories planned and tickets filed since the planner took its post."
+    );
+    assert_eq!(result["omitted"], json!([]));
+
+    // It has no IR, and the error says so rather than `not_found`.
+    let error = call_tool_err(
+        &mut server,
+        "render_ir_fragment",
+        json!({ "file": file, "name": "PlannerState" }),
+    );
+    assert_eq!(error["code"], "no_ir");
+    assert_eq!(error["data"]["expansion"], "{ repos: Int, tickets: Int }");
+
+    // A parametric alias is quantified, and aliases count towards the
+    // types budget.
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("aliases.hird");
+    std::fs::write(&path, "type alias Pair<a> = (a, a)\n").expect("the fixture writes");
+    let file = path.to_str().expect("a UTF-8 path");
+    let result = call_tool(
+        &mut server,
+        "lookup_definition",
+        json!({ "file": file, "name": "Pair" }),
+    );
+    assert_eq!(result["type"], "\u{2200}a. (a, a)");
+    let result = call_tool(&mut server, "get_context_budget", json!({ "file": file }));
+    assert!(result["approx_tokens"]["types"].as_u64().expect("a count") > 0);
+}

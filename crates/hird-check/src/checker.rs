@@ -4,6 +4,7 @@
 //! The checking pass over one source file: declaration registration,
 //! dependency-ordered function checking, and result assembly.
 
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
@@ -163,6 +164,9 @@ pub(crate) struct Checker {
     alias_stack: Vec<String>,
     /// Names of this module's exported (`pub`) aliases.
     exported_aliases: Vec<String>,
+    /// Every alias this module declares, in declaration order, for the
+    /// result table of expansions.
+    declared_aliases: Vec<String>,
 }
 
 impl Checker {
@@ -220,6 +224,7 @@ impl Checker {
             aliases: BTreeMap::new(),
             alias_stack: Vec::new(),
             exported_aliases: Vec::new(),
+            declared_aliases: Vec::new(),
         }
     }
 
@@ -674,6 +679,7 @@ impl Checker {
         if decl.is_pub() {
             self.exported_aliases.push(String::from(name));
         }
+        self.declared_aliases.push(String::from(name));
         let params: Vec<&str> = decl.type_params().collect();
         for (i, param) in params.iter().enumerate() {
             if params[..i].contains(param) {
@@ -1385,6 +1391,26 @@ impl Checker {
             aliases,
         };
 
+        let aliases = self
+            .declared_aliases
+            .iter()
+            .filter_map(|name| {
+                let AliasState::Expanded(expansion) = self.aliases.get(name)? else {
+                    return None;
+                };
+                let ty = if expansion.params.is_empty() {
+                    expansion.body.clone()
+                } else {
+                    Type::TyForall(
+                        expansion.params.clone(),
+                        Vec::new(),
+                        Box::new(expansion.body.clone()),
+                    )
+                };
+                Some((Name::new(name.as_str()), ty))
+            })
+            .collect();
+
         self.diags
             .sort_by_key(|d| (d.span.start, d.span.end, d.severity, d.code));
         let checked = CheckedFile {
@@ -1396,6 +1422,7 @@ impl Checker {
             tools,
             invocation_records,
             import_origins: self.import_origins,
+            aliases,
             diagnostics: self.diags,
         };
         (checked, interface)
