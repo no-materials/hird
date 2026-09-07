@@ -144,6 +144,34 @@ reading actor source: effect rows are per-process and local by
 design, so "what does this actor transitively do" is a tooling query,
 not something visible in any one signature.
 
+### The verification loop over MCP
+
+The loop an authoring agent runs, correcting from tool output alone:
+
+1. Write the module, then call `check_file`. Diagnostics come back for
+   every declaration at once, so one round shows the whole shape of what
+   is wrong rather than the first error.
+2. Fix by code and position, not by re-reading the source. A `P…` parse
+   diagnostic points at the offending token and its `help` says what to
+   change (`P0006`: "remove `→ …`"). A `C0030` message names the row the
+   body actually performs; write that row. A `C0001` "expected
+   `Next<…>`" at a handler means the outcome was not wrapped in
+   `Continue(…)`; the diagnostic's `end_line` is the expression to wrap.
+   A warning such as `C0056` says what to remove.
+3. Expect a cascade to collapse. `C0038` (the actor summary disagrees
+   with its handlers) usually follows a handler-row `C0030` and needs no
+   edit of its own; re-check before touching the summary.
+4. Repeat until `check_file` reports `ok: true` with no diagnostics,
+   warnings included. Every call re-reads the directory, so an edit on
+   disk is seen by the next call without restarting the server.
+5. Clean is not the same as right. Confirm the intent with the
+   introspection tools: `explain_actor_protocol` for the handlers and
+   the actor's row, `emit_actor_effect_graph` for the supervisor and
+   tools the actor reaches, `explain_effect_row` for `main`.
+
+`crates/hird-mcp/tests/verification_loop.rs` scripts exactly this loop
+against a draft with five typical mistakes and pins it as a test.
+
 ## Common generated-code mistakes and how the compiler catches them
 
 | Mistake | Caught by |
