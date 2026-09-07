@@ -93,7 +93,7 @@ fn initialize_negotiates_and_identifies() {
 }
 
 #[test]
-fn tools_list_serves_all_eight_tools() {
+fn tools_list_serves_all_nine_tools() {
     let mut server = Server::new();
     let result = request(&mut server, 1, "tools/list", json!({}));
     let tools = result["tools"].as_array().expect("a tool array");
@@ -104,6 +104,7 @@ fn tools_list_serves_all_eight_tools() {
     assert_eq!(
         names,
         [
+            "check_file",
             "infer_type",
             "lookup_definition",
             "explain_effect_row",
@@ -423,12 +424,12 @@ fn errors_are_structured_not_crashes() {
         json!({ "file": broken.to_str().expect("a UTF-8 path") }),
     );
     assert_eq!(error["code"], "parse_error");
-    assert!(
-        !error["data"]["diagnostics"]
-            .as_array()
-            .expect("diagnostics")
-            .is_empty()
-    );
+    let diagnostic = &error["data"]["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "P0001");
+    assert_eq!(diagnostic["severity"], "Error");
+    assert_eq!(diagnostic["line"], 1);
+    assert_eq!(diagnostic["column"], 12);
+    assert!(diagnostic["help"].is_string() || diagnostic["help"].is_null());
 
     // A type error comes back with coded diagnostics.
     let ill_typed = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ill_typed.hird");
@@ -440,7 +441,12 @@ fn errors_are_structured_not_crashes() {
         json!({ "file": ill_typed.to_str().expect("a UTF-8 path") }),
     );
     assert_eq!(error["code"], "check_error");
-    assert_eq!(error["data"]["diagnostics"][0]["code"], "C0001");
+    let diagnostic = &error["data"]["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "C0001");
+    assert_eq!(diagnostic["line"], 1);
+    assert_eq!(diagnostic["column"], 21);
+    assert_eq!(diagnostic["end_column"], 27);
+    assert_eq!(diagnostic["related"], json!([]));
 
     // Missing arguments and unknown tools are protocol-level failures.
     let message = json!({
@@ -452,6 +458,80 @@ fn errors_are_structured_not_crashes() {
         .expect("a response");
     let response: Value = serde_json::from_str(&response).expect("JSON");
     assert_eq!(response["error"]["code"], -32602);
+}
+
+#[test]
+fn check_file_reports_every_diagnostic_of_the_program() {
+    let mut server = Server::new();
+
+    // The demo is clean: no diagnostics at all.
+    let result = call_tool(&mut server, "check_file", json!({ "file": demo_path() }));
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["diagnostics"], json!([]));
+
+    // A directory of its own: a module with a warning and a sibling that
+    // does not parse.
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("check_file");
+    std::fs::create_dir_all(&dir).expect("the fixture dir");
+    let warned = dir.join("warned.hird");
+    let broken = dir.join("broken.hird");
+    std::fs::write(&warned, "effect Tool<t>\n\nfn answer() \u{2192} Int = 42\n")
+        .expect("the fixture writes");
+    std::fs::write(&broken, "fn broken( = 1\n").expect("the fixture writes");
+    let warned = warned.to_str().expect("a UTF-8 path");
+    let broken = broken.to_str().expect("a UTF-8 path");
+
+    // Asked about either file, the answer covers both, in file-name order.
+    let result = call_tool(&mut server, "check_file", json!({ "file": warned }));
+    assert_eq!(result["file"], warned);
+    assert_eq!(result["ok"], false);
+    let diagnostics = result["diagnostics"].as_array().expect("diagnostics");
+    let (parse, warning) = diagnostics.split_at(diagnostics.len() - 1);
+
+    // The parser recovers and reports a cascade; every entry is an error
+    // under the broken file, the first at the offending `=`.
+    assert!(!parse.is_empty(), "{diagnostics:#?}");
+    for diagnostic in parse {
+        assert_eq!(diagnostic["file"], broken);
+        assert_eq!(diagnostic["severity"], "Error");
+        assert!(
+            diagnostic["code"]
+                .as_str()
+                .is_some_and(|code| code.starts_with('P')),
+            "{diagnostic}"
+        );
+    }
+    assert_eq!(parse[0]["code"], "P0001");
+    assert_eq!(parse[0]["line"], 1);
+    assert_eq!(parse[0]["column"], 12);
+    assert_eq!(parse[0]["end_line"], 1);
+    assert_eq!(parse[0]["end_column"], 13);
+    assert!(parse.iter().any(|d| d["help"].is_string()));
+
+    let warning = &warning[0];
+    assert_eq!(warning["file"], warned);
+    assert_eq!(warning["code"], "C0056");
+    assert_eq!(warning["severity"], "Warning");
+    assert_eq!(warning["line"], 1);
+    assert_eq!(warning["column"], 8);
+    assert_eq!(warning["end_column"], 12);
+    assert_eq!(warning["help"], Value::Null);
+    assert_eq!(warning["related"], json!([]));
+
+    // Fixing the sibling leaves the warning, and the program is ok.
+    std::fs::write(broken, "fn fixed() \u{2192} Int = 1\n").expect("the fixture writes");
+    let result = call_tool(&mut server, "check_file", json!({ "file": broken }));
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["diagnostics"].as_array().map(Vec::len), Some(1));
+    assert_eq!(result["diagnostics"][0]["code"], "C0056");
+
+    // A missing file is still a failure; diagnostics never are.
+    let error = call_tool_err(
+        &mut server,
+        "check_file",
+        json!({ "file": dir.join("missing.hird").to_str().expect("a UTF-8 path") }),
+    );
+    assert_eq!(error["code"], "file_not_found");
 }
 
 #[test]
@@ -764,7 +844,7 @@ fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
             json!({ "file": file, "actor_name": "Planner" })
         }
         "get_context_for_symbol" => json!({ "file": file, "name": "file_tickets" }),
-        "get_context_budget" => json!({ "file": file }),
+        "check_file" | "get_context_budget" => json!({ "file": file }),
         _ => panic!("no demo arguments for `{tool}`"),
     };
 

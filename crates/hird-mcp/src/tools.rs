@@ -20,7 +20,7 @@ use hird_ir::{ActorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectRowRef, IrDecl, IrEx
 use hird_types::{EffectRow, Type};
 use serde_json::{Value, json};
 
-use crate::analysis::{Cache, Module, Query, offset_of, tool_fn_name};
+use crate::analysis::{Cache, Module, Program, Query, offset_of, tool_fn_name};
 
 /// A failed tool call: a stable code, a message, and optional details.
 #[derive(Debug)]
@@ -70,8 +70,9 @@ const DEFAULT_BUDGET: usize = 400;
 /// reading one tool in isolation still learns it.
 const COMMON_BEHAVIOUR: &str = "Read-only: compiles the file's directory in memory (cached \
     until a sibling changes) and writes or executes nothing. Failures are `isError` results \
-    with a stable `error.code`: `file_not_found`, `read_error`, `invalid_params`, `parse_error`, \
-    or `check_error`, the last two carrying coded diagnostics in `error.data.diagnostics`.";
+    with a stable `error.code`: `file_not_found`, `read_error`, `invalid_params`, and, for \
+    every tool but `check_file`, `parse_error` or `check_error` carrying coded diagnostics in \
+    `error.data.diagnostics` (the shape `check_file` returns).";
 
 /// The MCP annotations every tool shares: a titled, read-only, idempotent,
 /// closed-world query.
@@ -163,7 +164,60 @@ pub(crate) fn descriptors() -> Value {
         "type": "object",
         "description": "A type, with its `display` string as Hirð prints it.",
     });
+    let diagnostic = json!({
+        "type": "object",
+        "properties": {
+            "file": string,
+            "code": string,
+            "severity": { "type": "string", "enum": ["Error", "Warning"] },
+            "message": string,
+            "help": nullable_string,
+            "line": integer,
+            "column": integer,
+            "end_line": integer,
+            "end_column": integer,
+            "related": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "message": string,
+                        "line": integer,
+                        "column": integer,
+                        "end_line": integer,
+                        "end_column": integer,
+                    },
+                    "required": ["message", "line", "column", "end_line", "end_column"],
+                },
+            },
+        },
+        "required": [
+            "file", "code", "severity", "message", "help", "line", "column", "end_line",
+            "end_column", "related",
+        ],
+    });
     json!([
+        descriptor(
+            "check_file",
+            "Check program",
+            "Check a .hird file's whole program and return every diagnostic, warnings \
+             included. Use it as the first and last step of an edit: nothing else reports \
+             a warning, and the other tools fail on the first error instead of listing \
+             them all. Returns `ok` (no diagnostic of severity `Error` anywhere in the \
+             program) and `diagnostics` across every file of the directory, each with \
+             `file`, a stable `code` (`P…` parse, `C…` check, both documented in \
+             docs/writing-hird-llm.md), `severity`, `message`, nullable `help`, a 1-based \
+             character position (`line`/`column` to an exclusive `end_line`/`end_column`), \
+             and `related` locations in the same file. Parse and type errors are results \
+             here, never `isError`.",
+            json!({ "file": file }),
+            json!({
+                "file": string,
+                "ok": { "type": "boolean" },
+                "diagnostics": { "type": "array", "items": diagnostic },
+            }),
+            &[],
+        ),
         descriptor(
             "infer_type",
             "Infer expression type",
@@ -414,7 +468,8 @@ pub(crate) fn descriptors() -> Value {
 pub(crate) fn is_known(tool: &str) -> bool {
     matches!(
         tool,
-        "infer_type"
+        "check_file"
+            | "infer_type"
             | "lookup_definition"
             | "explain_effect_row"
             | "render_ir_fragment"
@@ -427,7 +482,11 @@ pub(crate) fn is_known(tool: &str) -> bool {
 
 /// Dispatches one tool call.
 pub(crate) fn call(cache: &mut Cache, tool: &str, args: &Value) -> Result<Value, ToolError> {
-    let query = cache.query(str_arg(args, "file")?)?;
+    let file = str_arg(args, "file")?;
+    if tool == "check_file" {
+        return check_file(cache.program(file)?, file);
+    }
+    let query = cache.query(file)?;
     match tool {
         "infer_type" => infer_type(query, args),
         "lookup_definition" => lookup_definition(query, args),
@@ -445,6 +504,16 @@ pub(crate) fn call(cache: &mut Cache, tool: &str, args: &Value) -> Result<Value,
 }
 
 // ── the tools ────────────────────────────────────────────────────
+
+/// `check_file(file)` — every diagnostic of the file's program, and whether
+/// it is free of errors.
+fn check_file(program: &Program, file: &str) -> Result<Value, ToolError> {
+    Ok(json!({
+        "file": file,
+        "ok": !program.has_errors(),
+        "diagnostics": program.diagnostics(),
+    }))
+}
 
 /// `infer_type(file, line, column)` — the inferred type (and effect row, for
 /// function-typed expressions) at a source location.

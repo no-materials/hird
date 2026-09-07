@@ -120,9 +120,17 @@ for agent frameworks. The `hird-mcp` binary speaks MCP over stdio
 arguments. Errors (missing file, undefined name, parse or type errors)
 come back as structured `isError` results carrying diagnostics.
 
+Start and end every edit with `check_file`: it is the only tool that
+reports warnings, and it lists every diagnostic of the program at once
+where the other tools stop at the queried file's first error. Each
+diagnostic carries the `file`, the stable `code` from the tables below,
+`severity`, `message`, an optional `help` hint, and a 1-based character
+position (`line`/`column` to an exclusive `end_line`/`end_column`).
+
 | Tool | Returns |
 |---|---|
-| `infer_type(file, expr_location)` | Inferred type and effect row of an expression. |
+| `check_file(file)` | `ok` and every diagnostic of the file's program, warnings included. |
+| `infer_type(file, line, column)` | Inferred type and effect row of an expression. |
 | `lookup_definition(file, name)` | Source location, type, doc, kind of a definition. |
 | `explain_effect_row(file, fn_name)` | A function's row with each effect explained. |
 | `render_ir_fragment(file, name)` | IR JSON for one definition. |

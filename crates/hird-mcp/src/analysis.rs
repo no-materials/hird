@@ -24,7 +24,9 @@ use cstree::text::TextSize;
 use hird_ast::{AstNode, Decl, SourceFile, SyntaxNode, SyntaxToken, TypeExpr};
 use hird_check::{CheckedFile, ModuleName};
 use hird_ir::{EffectGraph, IrModule};
+use hird_lex::Span;
 use hird_parse::SyntaxKind;
+use hird_parse::diagnostic::ParseDiagnostic;
 use serde_json::{Value, json};
 
 use crate::tools::ToolError;
@@ -103,12 +105,7 @@ impl Program {
             let diagnostics: Vec<Value> = tree
                 .diagnostics()
                 .iter()
-                .map(|d| {
-                    json!({
-                        "message": d.message,
-                        "line": line_of(source, d.span.start),
-                    })
-                })
+                .map(|d| parse_diagnostic_json(file, source, d))
                 .collect();
             let root = SourceFile::cast(tree.syntax().clone());
             match root {
@@ -118,7 +115,10 @@ impl Program {
                 Some(_) => skipped.push((file.clone(), json!({ "diagnostics": diagnostics }))),
                 None => skipped.push((
                     file.clone(),
-                    json!({ "diagnostics": [{ "message": "no source file produced", "line": 1 }] }),
+                    json!({ "diagnostics": [diagnostic_json(
+                        file, source, "internal", "Error", "no source file produced", None,
+                        &Span { start: 0, end: 0, source_id: 0 },
+                    )] }),
                 )),
             }
         }
@@ -166,6 +166,37 @@ impl Program {
             skipped,
             sources,
         })
+    }
+
+    /// Every diagnostic of the program — parse diagnostics of the skipped
+    /// members, then checker diagnostics of each module — in file-name
+    /// order, each naming its `file`.
+    pub(crate) fn diagnostics(&self) -> Vec<Value> {
+        let mut by_file: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
+        for (file, data) in &self.skipped {
+            let diagnostics = data["diagnostics"].as_array().cloned().unwrap_or_default();
+            by_file.insert(file, diagnostics);
+        }
+        for module in &self.modules {
+            by_file.insert(&module.file, diagnostics_json(module));
+        }
+        by_file.into_values().flatten().collect()
+    }
+
+    /// Whether any member failed to parse or has a checker error.
+    pub(crate) fn has_errors(&self) -> bool {
+        !self.skipped.is_empty() || self.modules.iter().any(|m| m.checked.has_errors())
+    }
+
+    /// Whether `file` (matched by file name) is a member of the program, be
+    /// it parsed or skipped.
+    pub(crate) fn contains(&self, file: &str) -> bool {
+        let wanted = Path::new(file).file_name();
+        self.skipped
+            .iter()
+            .map(|(f, _)| f)
+            .chain(self.modules.iter().map(|m| &m.file))
+            .any(|f| Path::new(f).file_name() == wanted)
     }
 
     /// The queried module `file` (matched by file name), or its own parse or
@@ -366,6 +397,14 @@ impl Cache {
     /// query, or when any member's source text changed) and the module
     /// `file` names.
     pub(crate) fn query(&mut self, file: &str) -> Result<Query<'_>, ToolError> {
+        self.program(file)?.query(file)
+    }
+
+    /// The program of `file`'s directory, compiled on first query or when
+    /// any member's source text changed. Unlike [`Cache::query`], `file`'s
+    /// own parse or type errors are not failures here; only an unreadable
+    /// path or a non-`.hird` file is.
+    pub(crate) fn program(&mut self, file: &str) -> Result<&Program, ToolError> {
         let path = Path::new(file);
         // Read the queried file first so a missing or unreadable path is
         // reported as such, before its directory is scanned.
@@ -390,10 +429,17 @@ impl Cache {
             let program = Program::compile(sources)?;
             self.entries.insert(dir.clone(), program);
         }
-        self.entries
+        let program = self
+            .entries
             .get(&dir)
-            .expect("the entry was just validated or inserted")
-            .query(file)
+            .expect("the entry was just validated or inserted");
+        if !program.contains(file) {
+            return Err(ToolError::new(
+                "invalid_params",
+                format!("`{file}` is not a .hird file"),
+            ));
+        }
+        Ok(program)
     }
 }
 
@@ -432,14 +478,80 @@ fn diagnostics_json(module: &Module) -> Vec<Value> {
         .diagnostics
         .iter()
         .map(|d| {
-            json!({
-                "code": format!("{:?}", d.code),
-                "severity": format!("{:?}", d.severity),
-                "message": d.message,
-                "line": line_of(&module.source, d.span.start),
-            })
+            let mut value = diagnostic_json(
+                &module.file,
+                &module.source,
+                &format!("{:?}", d.code),
+                &format!("{:?}", d.severity),
+                &d.message,
+                None,
+                &d.span,
+            );
+            // Related locations in other files cannot be positioned against
+            // this source; they are dropped rather than mislabelled.
+            value["related"] = d
+                .related
+                .iter()
+                .filter(|r| r.span.source_id == d.span.source_id)
+                .map(|r| {
+                    let mut related = span_json(&module.source, &r.span);
+                    related["message"] = json!(r.message);
+                    related
+                })
+                .collect();
+            value
         })
         .collect()
+}
+
+/// A parser diagnostic as JSON: always an error, with the parser's hint as
+/// `help`.
+fn parse_diagnostic_json(file: &str, source: &str, d: &ParseDiagnostic) -> Value {
+    let mut value = diagnostic_json(
+        file,
+        source,
+        d.code.as_str(),
+        "Error",
+        d.message,
+        d.help,
+        &d.span,
+    );
+    value["related"] = json!([]);
+    value
+}
+
+/// The JSON every diagnostic shares: `file`, `code`, `severity`, `message`,
+/// nullable `help`, and the span's 1-based position (`line`/`column` to
+/// `end_line`/`end_column`, the end exclusive, columns in characters).
+fn diagnostic_json(
+    file: &str,
+    source: &str,
+    code: &str,
+    severity: &str,
+    message: &str,
+    help: Option<&str>,
+    span: &Span,
+) -> Value {
+    let mut value = span_json(source, span);
+    value["file"] = json!(file);
+    value["code"] = json!(code);
+    value["severity"] = json!(severity);
+    value["message"] = json!(message);
+    value["help"] = json!(help);
+    value
+}
+
+/// A span's 1-based `line`/`column` and exclusive `end_line`/`end_column`
+/// in `source`.
+fn span_json(source: &str, span: &Span) -> Value {
+    let (line, column) = position_of(source, span.start);
+    let (end_line, end_column) = position_of(source, span.end);
+    json!({
+        "line": line,
+        "column": column,
+        "end_line": end_line,
+        "end_column": end_column,
+    })
 }
 
 /// The module name `file`'s stem derives: each `_`/`-`-separated segment
@@ -463,10 +575,25 @@ fn module_name(file: &str) -> Result<String, ToolError> {
 
 /// The 1-based line of byte `offset` in `source`.
 pub(crate) fn line_of(source: &str, offset: u32) -> usize {
+    position_of(source, offset).0
+}
+
+/// The 1-based line and character column of byte `offset` in `source`; an
+/// offset past the end positions at the end.
+fn position_of(source: &str, offset: u32) -> (usize, usize) {
     let end = usize::try_from(offset)
         .unwrap_or(usize::MAX)
         .min(source.len());
-    source[..end].matches('\n').count() + 1
+    let end = (0..=end)
+        .rev()
+        .find(|&i| source.is_char_boundary(i))
+        .unwrap_or(0);
+    let before = &source[..end];
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    (
+        before.matches('\n').count() + 1,
+        before[line_start..].chars().count() + 1,
+    )
 }
 
 /// The byte offset of 1-based `line` and 1-based character `column` in

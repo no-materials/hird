@@ -201,7 +201,8 @@ and replay specification.
 
 `hird-mcp` is a Model Context Protocol server over the same compiler
 pipeline, speaking stdio. It gives LLM agents structured compiler
-queries instead of source-reading guesswork: `infer_type`,
+queries instead of source-reading guesswork: `check_file` (every
+diagnostic of a program, warnings included), `infer_type`,
 `lookup_definition`, `explain_effect_row`, `render_ir_fragment`,
 `explain_actor_protocol`, `emit_actor_effect_graph`,
 `get_context_for_symbol` (token-budget-aware symbol summaries), and

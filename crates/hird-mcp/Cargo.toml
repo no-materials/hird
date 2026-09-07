@@ -17,6 +17,7 @@ cstree.workspace = true
 hird-ast.workspace = true
 hird-check.workspace = true
 hird-ir.workspace = true
+hird-lex.workspace = true
 hird-parse.workspace = true
 hird-types.workspace = true
 

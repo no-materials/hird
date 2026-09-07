@@ -10,8 +10,24 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+### Added
+
+- **`check_file` MCP tool.** `hird-mcp` gains a ninth tool that checks a
+  file's whole program and returns every diagnostic as a result, warnings
+  included, with `ok` saying whether any is an error. Until now diagnostics
+  only surfaced when another tool failed on the queried file, so a warning
+  such as C0056 on a clean module was invisible and an agent had to probe
+  tool by tool to find the first error. Each diagnostic names its `file`,
+  so a sibling that fails to parse is reported under its own path.
+
 ### Changed
 
+- **MCP diagnostics carry codes, hints, and positions.** Parse diagnostics
+  in `error.data.diagnostics` now include their `P…` code and `help` hint
+  (they carried message and line only); parse and check diagnostics alike
+  gain a 1-based character `column` and an exclusive `end_line`/
+  `end_column`, and check diagnostics list their same-file `related`
+  locations. `check_file` returns the same shape.
 - **MCP tool descriptors disclose more.** Every `hird-mcp` tool now carries
   MCP annotations (`readOnlyHint`, `idempotentHint`, no destructive or
   open-world behaviour), a `title`, and an `outputSchema` matching its
