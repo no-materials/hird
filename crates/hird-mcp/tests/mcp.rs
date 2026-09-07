@@ -866,7 +866,8 @@ fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
             );
         }
 
-        // Every input property is required and described.
+        // Every input property is described, and required exactly when it
+        // has no default.
         let input = &tool["inputSchema"];
         let properties = input["properties"].as_object().expect("input properties");
         for (key, schema) in properties {
@@ -881,11 +882,16 @@ fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        for key in properties.keys() {
-            assert!(
+        for (key, schema) in properties {
+            assert_eq!(
                 required.contains(&key.as_str()),
-                "`{name}.{key}` not required"
+                schema.get("default").is_none(),
+                "`{name}.{key}` required-ness disagrees with its default"
             );
+        }
+        if name == "get_context_for_symbol" {
+            assert!(!required.contains(&"budget"), "budget must be optional");
+            assert_eq!(properties["budget"]["default"], 400);
         }
 
         let result = call_tool(&mut server, name, arguments(name));

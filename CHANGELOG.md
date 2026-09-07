@@ -22,6 +22,11 @@ schedule and is not covered by these entries.
 
 ### Fixed
 
+- **`get_context_for_symbol` declared `budget` required.** The tool's
+  input schema listed every property as required, so a strict MCP client
+  could not omit `budget` although the server defaults it to 400. The
+  property now carries `"default": 400` and is optional; an input property
+  is required exactly when it declares no default.
 - **Type aliases were half-visible to the MCP tools.** `lookup_definition`
   on an alias answered kind `type alias` with no type, while
   `get_context_for_symbol` and `render_ir_fragment` on the same name said

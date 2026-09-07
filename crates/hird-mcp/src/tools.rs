@@ -87,8 +87,9 @@ fn annotations(title: &str) -> Value {
 }
 
 /// One tool descriptor: `description` plus the shared behaviour, an input
-/// schema over `properties` (all required), and an output schema over
-/// `output` (all required unless nullable).
+/// schema over `properties` (required unless the property declares a
+/// `default`), and an output schema over `output` (all required unless
+/// nullable).
 fn descriptor(
     name: &str,
     title: &str,
@@ -103,6 +104,15 @@ fn descriptor(
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default()
     };
+    let required_inputs: Vec<&String> = properties
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter(|(_, schema)| schema.get("default").is_none())
+                .map(|(k, _)| k)
+                .collect()
+        })
+        .unwrap_or_default();
     let required: Vec<String> = keys(&output)
         .into_iter()
         .filter(|k| !nullable.contains(&k.as_str()))
@@ -115,7 +125,7 @@ fn descriptor(
         "inputSchema": {
             "type": "object",
             "properties": properties,
-            "required": keys(&properties),
+            "required": required_inputs,
         },
         "outputSchema": {
             "type": "object",
@@ -411,10 +421,13 @@ pub(crate) fn descriptors() -> Value {
                 "name": symbol("The symbol's name"),
                 "budget": {
                     "type": "integer",
-                    "description": "Approximate token budget for the summary, at ~4 \
-                                    characters per token (default 400). A section that \
-                                    does not fit is dropped whole and named in `omitted`; \
-                                    only the signature is truncated.",
+                    "default": DEFAULT_BUDGET,
+                    "description": format!(
+                        "Approximate token budget for the summary, at ~4 characters per \
+                         token; optional, {DEFAULT_BUDGET} when omitted. A section that \
+                         does not fit is dropped whole and named in `omitted`; only the \
+                         signature is truncated."
+                    ),
                 },
             }),
             json!({
