@@ -93,7 +93,7 @@ fn initialize_negotiates_and_identifies() {
 }
 
 #[test]
-fn tools_list_serves_all_nine_tools() {
+fn tools_list_serves_all_ten_tools() {
     let mut server = Server::new();
     let result = request(&mut server, 1, "tools/list", json!({}));
     let tools = result["tools"].as_array().expect("a tool array");
@@ -105,6 +105,7 @@ fn tools_list_serves_all_nine_tools() {
         names,
         [
             "check_file",
+            "list_definitions",
             "infer_type",
             "lookup_definition",
             "explain_effect_row",
@@ -118,6 +119,145 @@ fn tools_list_serves_all_nine_tools() {
     for tool in tools {
         assert!(tool["inputSchema"]["properties"]["file"].is_object());
     }
+}
+
+#[test]
+fn list_definitions_outlines_the_module_in_source_order() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "list_definitions",
+        json!({ "file": demo_path() }),
+    );
+    assert_eq!(result["module"], "AgentPlanner");
+    assert_eq!(result["imports"], json!([]));
+
+    let definitions = result["definitions"].as_array().expect("definitions");
+    let entry = |name: &str, kind: &str| {
+        definitions
+            .iter()
+            .find(|d| d["name"] == name && d["kind"] == kind)
+            .unwrap_or_else(|| panic!("no `{name}` of kind `{kind}`: {result:#}"))
+    };
+
+    // Every kind the module declares, with the names each declaration
+    // binds alongside itself.
+    let task = entry("Task", "type");
+    assert_eq!(task["signature"], "type Task = Task(Int, String, String)");
+    assert_eq!(
+        task["doc"],
+        "A pending work item discovered in the repository: priority, title, body."
+    );
+    assert_eq!(
+        entry("Task", "constructor")["signature"],
+        "Task : Int \u{2192} String \u{2192} String \u{2192} Task"
+    );
+    assert_eq!(
+        entry("EmptyBacklog", "constructor")["signature"],
+        "EmptyBacklog : Backlog"
+    );
+    assert_eq!(
+        entry("PlannerState", "type alias")["signature"],
+        "type alias PlannerState = { repos: Int, tickets: Int }"
+    );
+    assert_eq!(
+        entry("ReadRepo", "tool")["signature"],
+        "tool ReadRepo : { path: Path } \u{2192} RepoState"
+    );
+    assert_eq!(
+        entry("read_repo", "tool_function")["signature"],
+        "fn read_repo : { path: Path } \u{2192} RepoState ! {Tool<ReadRepo>}"
+    );
+    assert_eq!(
+        entry("file_tickets", "function")["signature"],
+        "fn file_tickets : Backlog \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
+    );
+    assert!(
+        entry("Planner", "actor")["signature"]
+            .as_str()
+            .expect("a signature")
+            .starts_with(
+                "actor Planner \u{2014} state { repos: Int, tickets: Int }, message PlannerMsg = "
+            )
+    );
+    assert_eq!(
+        entry("PlannerMsg", "message_type")["signature"],
+        "type PlannerMsg = PlanRepo(Path) | GetStatus(ReplyTo<PlannerStatus>) | Shutdown"
+    );
+    assert_eq!(
+        entry("GetStatus", "message_constructor")["signature"],
+        "GetStatus : ReplyTo<PlannerStatus> \u{2192} PlannerMsg"
+    );
+    assert_eq!(
+        entry("PlannerSup", "supervisor")["signature"],
+        "supervisor PlannerSup \u{2014} one_for_one, intensity 5/60s, children: planner: Planner (transient)"
+    );
+    assert_eq!(entry("demo_log", "function")["doc"], Value::Null);
+
+    // Source order, with lines ascending; a declaration's bound names share
+    // its line.
+    let lines: Vec<u64> = definitions
+        .iter()
+        .map(|d| d["line"].as_u64().expect("a line"))
+        .collect();
+    assert!(lines.windows(2).all(|w| w[0] <= w[1]), "{lines:?}");
+    assert_eq!(
+        entry("Task", "type")["line"],
+        entry("Task", "constructor")["line"]
+    );
+    assert_eq!(
+        definitions.first().map(|d| &d["name"]),
+        Some(&json!("Path"))
+    );
+    assert_eq!(definitions.last().map(|d| &d["name"]), Some(&json!("main")));
+
+    // The token cost is the signature's, so it sizes a
+    // `get_context_for_symbol` budget that keeps the signature whole.
+    for definition in definitions {
+        let signature = definition["signature"].as_str().expect("a signature");
+        let approx = definition["approx_tokens"].as_u64().expect("a count");
+        assert_eq!(approx, signature.chars().count().div_ceil(4) as u64);
+    }
+    let approx = entry("file_tickets", "function")["approx_tokens"]
+        .as_u64()
+        .expect("a count");
+    let context = call_tool(
+        &mut server,
+        "get_context_for_symbol",
+        json!({ "file": demo_path(), "name": "file_tickets", "budget": approx }),
+    );
+    assert!(
+        context["summary"].as_str().expect("a summary").starts_with(
+            entry("file_tickets", "function")["signature"]
+                .as_str()
+                .unwrap()
+        ),
+        "{context:#}"
+    );
+}
+
+#[test]
+fn list_definitions_reports_imports() {
+    let mut server = Server::new();
+    let app = two_modules_path("app.hird");
+    let util = two_modules_path("util.hird");
+
+    let result = call_tool(&mut server, "list_definitions", json!({ "file": app }));
+    assert_eq!(result["module"], "App");
+    assert_eq!(
+        result["imports"],
+        json!([
+            { "module": "Util", "file": util, "qualifier": null, "members": ["Path", "double"] },
+            { "module": "Util", "file": util, "qualifier": "Util", "members": [] },
+        ])
+    );
+    let names: Vec<&str> = result["definitions"]
+        .as_array()
+        .expect("definitions")
+        .iter()
+        .map(|d| d["name"].as_str().expect("a name"))
+        .collect();
+    assert_eq!(names, ["run", "describe", "local"]);
 }
 
 #[test]
@@ -868,7 +1008,7 @@ fn descriptors_declare_read_only_annotations_and_matching_output_schemas() {
             json!({ "file": file, "actor_name": "Planner" })
         }
         "get_context_for_symbol" => json!({ "file": file, "name": "file_tickets" }),
-        "check_file" | "get_context_budget" => json!({ "file": file }),
+        "check_file" | "list_definitions" | "get_context_budget" => json!({ "file": file }),
         _ => panic!("no demo arguments for `{tool}`"),
     };
 

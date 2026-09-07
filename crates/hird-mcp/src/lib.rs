@@ -11,6 +11,8 @@
 //! Tools:
 //!
 //! - `check_file` — every diagnostic of a file's program, warnings included.
+//! - `list_definitions` — a module outline: every bound name with kind,
+//!   line, signature, doc, and token cost, plus the imports.
 //! - `infer_type` — inferred type and effect row at a source location.
 //! - `lookup_definition` — location, type, doc, and kind of a definition.
 //! - `explain_effect_row` — a function's effect row, each effect explained.

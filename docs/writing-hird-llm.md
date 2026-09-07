@@ -130,6 +130,7 @@ position (`line`/`column` to an exclusive `end_line`/`end_column`).
 | Tool | Returns |
 |---|---|
 | `check_file(file)` | `ok` and every diagnostic of the file's program, warnings included. |
+| `list_definitions(file)` | Module outline: every bound name with kind, line, signature, doc, token cost; the imports. |
 | `infer_type(file, line, column)` | Inferred type and effect row of an expression. |
 | `lookup_definition(file, name)` | Source location, type, doc, kind of a definition. |
 | `explain_effect_row(file, fn_name)` | A function's row with each effect explained. |

@@ -15,12 +15,13 @@
 
 use std::collections::BTreeSet;
 
+use hird_ast::Decl;
 use hird_check::NodeKey;
-use hird_ir::{ActorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectRowRef, IrDecl, IrExpr};
+use hird_ir::{ActorNode, EFFECT_GRAPH_SCHEMA_VERSION, EffectRowRef, IrDecl, IrExpr, MessageNode};
 use hird_types::{EffectRow, Name, Type};
 use serde_json::{Value, json};
 
-use crate::analysis::{Cache, Module, Program, Query, offset_of, tool_fn_name};
+use crate::analysis::{Cache, Definition, Module, Program, Query, offset_of, tool_fn_name};
 
 /// A failed tool call: a stable code, a message, and optional details.
 #[derive(Debug)]
@@ -225,6 +226,59 @@ pub(crate) fn descriptors() -> Value {
                 "file": string,
                 "ok": { "type": "boolean" },
                 "diagnostics": { "type": "array", "items": diagnostic },
+            }),
+            &[],
+        ),
+        descriptor(
+            "list_definitions",
+            "Outline module",
+            "Outline a .hird module: every name its top-level declarations bind, in source \
+             order, plus its imports. Use it to orient in a module before choosing which \
+             symbols to pull in with `get_context_for_symbol`; it is cheap (no bodies, no \
+             effect graph) and the only tool that names a module's symbols without a failed \
+             lookup. Returns `module`, `imports` (each with the imported `module` as \
+             written, its defining `file`, the `qualifier` a whole-module import binds or \
+             null, and the `members` a selective import binds unqualified), and \
+             `definitions`, each with `name`, `kind` (the \
+             kinds `lookup_definition` reports: a `type` also lists each `constructor`, a \
+             `tool` its generated `tool_function`, an `actor` its `message_type` and each \
+             `message_constructor`), `line`, a one-line `signature`, nullable `doc`, and \
+             `approx_tokens` (the signature's estimated cost at ~4 characters per token, so \
+             a `get_context_for_symbol` budget of at least that keeps the signature whole).",
+            json!({ "file": file }),
+            json!({
+                "file": string,
+                "module": string,
+                "imports": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "module": string,
+                            "file": nullable_string,
+                            "qualifier": nullable_string,
+                            "members": { "type": "array", "items": string },
+                        },
+                        "required": ["module", "file", "qualifier", "members"],
+                    },
+                },
+                "definitions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": string,
+                            "kind": string,
+                            "line": integer,
+                            "signature": string,
+                            "doc": nullable_string,
+                            "approx_tokens": integer,
+                        },
+                        "required": [
+                            "name", "kind", "line", "signature", "doc", "approx_tokens",
+                        ],
+                    },
+                },
             }),
             &[],
         ),
@@ -487,6 +541,7 @@ pub(crate) fn is_known(tool: &str) -> bool {
     matches!(
         tool,
         "check_file"
+            | "list_definitions"
             | "infer_type"
             | "lookup_definition"
             | "explain_effect_row"
@@ -506,6 +561,7 @@ pub(crate) fn call(cache: &mut Cache, tool: &str, args: &Value) -> Result<Value,
     }
     let query = cache.query(file)?;
     match tool {
+        "list_definitions" => list_definitions(query),
         "infer_type" => infer_type(query, args),
         "lookup_definition" => lookup_definition(query, args),
         "explain_effect_row" => explain_effect_row(query, args),
@@ -530,6 +586,50 @@ fn check_file(program: &Program, file: &str) -> Result<Value, ToolError> {
         "file": file,
         "ok": !program.has_errors(),
         "diagnostics": program.diagnostics(),
+    }))
+}
+
+/// `list_definitions(file)` — the module outline: every bound name in
+/// source order with kind, line, one-line signature, doc, and the
+/// signature's token cost, plus the module's imports.
+fn list_definitions(query: Query<'_>) -> Result<Value, ToolError> {
+    let module = query.module;
+    let imports: Vec<Value> = module
+        .imports
+        .iter()
+        .map(|import| {
+            let file = import
+                .target
+                .and_then(|i| query.program.modules.get(i))
+                .map(|m| m.file.as_str());
+            json!({
+                "module": import.module,
+                "file": file,
+                "qualifier": import.qualifier,
+                "members": import.selected,
+            })
+        })
+        .collect();
+    let definitions: Vec<Value> = module
+        .definitions
+        .iter()
+        .map(|definition| {
+            let signature = definition_signature(module, definition);
+            json!({
+                "name": definition.name,
+                "kind": definition.kind,
+                "line": definition.line,
+                "signature": signature,
+                "doc": definition.doc,
+                "approx_tokens": estimate_tokens(&signature),
+            })
+        })
+        .collect();
+    Ok(json!({
+        "file": module.file,
+        "module": module.name,
+        "imports": imports,
+        "definitions": definitions,
     }))
 }
 
@@ -1140,10 +1240,79 @@ fn header_line(module: &Module, decl: &IrDecl) -> String {
     }
 }
 
+/// The one-line signature of an outline entry, by kind: the declaration's
+/// header for the kinds with an IR declaration, and for the names a
+/// declaration binds alongside itself (constructors, a tool's function, an
+/// actor's message type) their bound type or constructor list.
+fn definition_signature(module: &Module, definition: &Definition) -> String {
+    let name = definition.name.as_str();
+    match definition.kind {
+        "type alias" => {
+            let expansion = module
+                .checked
+                .aliases
+                .get(&Name::new(name))
+                .map_or_else(|| String::from("?"), |ty| format!("{}", ty.normalized()));
+            format!("type alias {name} = {expansion}")
+        }
+        "tool_function" => format!("fn {name} : {}", binding_type(module, name)),
+        "constructor" | "message_constructor" => {
+            format!("{name} : {}", binding_type(module, name))
+        }
+        "message_type" => module
+            .graph()
+            .ok()
+            .and_then(|g| g.actors.iter().find(|a| a.message.name == name))
+            .map_or_else(
+                || format!("type {name}"),
+                |a| format!("type {name} = {}", message_constructors(&a.message)),
+            ),
+        "effect" => {
+            let params: Vec<String> = module
+                .parsed
+                .declarations()
+                .find_map(|decl| match decl {
+                    Decl::Effect(d) if d.name() == Some(name) => {
+                        Some(d.type_params().map(String::from).collect())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_default();
+            if params.is_empty() {
+                format!("effect {name}")
+            } else {
+                format!("effect {name}<{}>", params.join(", "))
+            }
+        }
+        kind => module
+            .ir()
+            .ok()
+            .and_then(|ir| {
+                ir.declarations
+                    .iter()
+                    .find(|d| decl_name(d) == name && decl_kind(d) == kind)
+            })
+            .map_or_else(
+                || format!("{kind} {name}"),
+                |decl| header_line(module, decl),
+            ),
+    }
+}
+
 /// The one-line header of an actor node: state, mailbox, constructors.
 fn actor_header(actor: &ActorNode) -> String {
-    let constructors = actor
-        .message
+    format!(
+        "actor {} — state {}, message {} = {}",
+        actor.name,
+        actor.state.display,
+        actor.message.name,
+        message_constructors(&actor.message)
+    )
+}
+
+/// A mailbox's constructors as `A(T, U) | B | …`.
+fn message_constructors(message: &MessageNode) -> String {
+    message
         .constructors
         .iter()
         .map(|c| {
@@ -1162,11 +1331,7 @@ fn actor_header(actor: &ActorNode) -> String {
             }
         })
         .collect::<Vec<_>>()
-        .join(" | ");
-    format!(
-        "actor {} — state {}, message {} = {constructors}",
-        actor.name, actor.state.display, actor.message.name
-    )
+        .join(" | ")
 }
 
 /// The `effects: {…}` summary line of a declaration, when it has a row.

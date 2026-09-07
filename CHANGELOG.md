@@ -12,6 +12,16 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **`list_definitions` MCP tool.** `hird-mcp` gains a module outline:
+  every name a file's top-level declarations bind, in source order, with
+  kind, line, a one-line signature, doc, and the signature's approximate
+  token cost, plus the file's imports (module, defining file, qualifier or
+  selected members). A type lists its constructors, a tool its generated
+  function, an actor its message type and constructors. Until now a
+  module's names were discoverable only by failing a lookup and reading
+  `error.data.available`, and `get_context_budget` names no symbols; the
+  per-entry cost sizes a `get_context_for_symbol` budget that keeps the
+  signature whole.
 - **`check_file` MCP tool.** `hird-mcp` gains a ninth tool that checks a
   file's whole program and returns every diagnostic as a result, warnings
   included, with `ok` saying whether any is an error. Until now diagnostics

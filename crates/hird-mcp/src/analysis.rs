@@ -63,20 +63,22 @@ pub(crate) struct Module {
     /// Every top-level definition, in source order.
     pub(crate) definitions: Vec<Definition>,
     /// The module's `use` imports, in source order.
-    imports: Vec<Import>,
+    pub(crate) imports: Vec<Import>,
 }
 
 /// One `use` declaration, resolved against the program.
 #[derive(Debug)]
-struct Import {
+pub(crate) struct Import {
+    /// The imported module's path as written (`Util`).
+    pub(crate) module: String,
     /// Index of the imported module in [`Program::modules`]; `None` when no
     /// member has that name.
-    target: Option<usize>,
+    pub(crate) target: Option<usize>,
     /// The qualifier a whole-module or aliased import binds (`use Util` ⇒
     /// `Util`, `use Util as U` ⇒ `U`); `None` for a selective import.
-    qualifier: Option<String>,
+    pub(crate) qualifier: Option<String>,
     /// The members a selective import binds unqualified.
-    selected: Vec<String>,
+    pub(crate) selected: Vec<String>,
 }
 
 /// One name a top-level declaration binds.
@@ -664,6 +666,7 @@ fn index_imports(file: &SourceFile, index: &BTreeMap<String, usize>) -> Vec<Impo
             });
             Some(Import {
                 target: index.get(target_name.as_str()).copied(),
+                module: target_name,
                 qualifier,
                 selected,
             })
