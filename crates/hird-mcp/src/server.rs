@@ -9,12 +9,12 @@
 //! async runtime. Requests get responses; notifications get none. Tool
 //! failures come back as `isError` tool results per the MCP spec — JSON-RPC
 //! errors are reserved for protocol misuse (unknown method, malformed
-//! message, unknown tool).
+//! message, unknown tool, resource, or prompt).
 
 use serde_json::{Value, json};
 
 use crate::analysis::Cache;
-use crate::tools;
+use crate::{prompts, resources, tools};
 
 /// The protocol revisions this server accepts; the last is its default.
 const PROTOCOL_VERSIONS: [&str; 3] = ["2024-11-05", "2025-03-26", "2025-06-18"];
@@ -49,6 +49,10 @@ impl Server {
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tools::descriptors() })),
             "tools/call" => self.call_tool(&params),
+            "resources/list" => Ok(resources::list()),
+            "resources/read" => read_resource(&params),
+            "prompts/list" => Ok(prompts::list()),
+            "prompts/get" => get_prompt(&params),
             _ => Err((-32601, format!("method `{method}` not found"))),
         };
         Some(match response {
@@ -84,6 +88,24 @@ impl Server {
     }
 }
 
+/// Handles `resources/read`: the named resource's contents, or the MCP
+/// resource-not-found error.
+fn read_resource(params: &Value) -> Result<Value, (i64, String)> {
+    let Some(uri) = params.get("uri").and_then(Value::as_str) else {
+        return Err((-32602, String::from("missing resource `uri`")));
+    };
+    resources::read(uri).ok_or_else(|| (-32002, format!("resource `{uri}` not found")))
+}
+
+/// Handles `prompts/get`: the named prompt's messages for its arguments.
+fn get_prompt(params: &Value) -> Result<Value, (i64, String)> {
+    let Some(name) = params.get("name").and_then(Value::as_str) else {
+        return Err((-32602, String::from("missing prompt `name`")));
+    };
+    let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+    prompts::get(name, &arguments)
+}
+
 /// The `initialize` result: negotiated protocol version, capabilities, and
 /// server identity.
 fn initialize_result(params: &Value) -> Value {
@@ -93,7 +115,7 @@ fn initialize_result(params: &Value) -> Value {
         .unwrap_or(PROTOCOL_VERSIONS[PROTOCOL_VERSIONS.len() - 1]);
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": {} },
+        "capabilities": { "tools": {}, "resources": {}, "prompts": {} },
         "serverInfo": {
             "name": "hird-mcp",
             "title": "Hirð compiler introspection",

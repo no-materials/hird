@@ -145,6 +145,14 @@ reading actor source: effect rows are per-process and local by
 design, so "what does this actor transitively do" is a tooling query,
 not something visible in any one signature.
 
+The server also serves this guide, the parser code index, and the
+phrasebook as MCP resources (`hird://docs/writing-hird-llm`,
+`hird://docs/parser-diagnostics`, `hird://phrasebook`), embedded in the
+binary, so a client needs nothing handed over out of band. One prompt,
+`author_supervised_module(file, purpose)`, scripts the loop below:
+write a supervised actor module, then verify it through the tools
+until the compiler confirms it.
+
 ### The verification loop over MCP
 
 The loop an authoring agent runs, correcting from tool output alone:

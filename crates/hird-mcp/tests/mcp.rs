@@ -86,6 +86,8 @@ fn initialize_negotiates_and_identifies() {
     assert_eq!(result["protocolVersion"], "2025-06-18");
     assert_eq!(result["serverInfo"]["name"], "hird-mcp");
     assert!(result["capabilities"]["tools"].is_object());
+    assert!(result["capabilities"]["resources"].is_object());
+    assert!(result["capabilities"]["prompts"].is_object());
 
     // A notification gets no response.
     let notification = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
@@ -119,6 +121,142 @@ fn tools_list_serves_all_ten_tools() {
     for tool in tools {
         assert!(tool["inputSchema"]["properties"]["file"].is_object());
     }
+}
+
+/// Sends one request and returns its JSON-RPC `error`, panicking on success.
+fn request_err(server: &mut Server, method: &str, params: Value) -> Value {
+    let message = json!({ "jsonrpc": "2.0", "id": 7, "method": method, "params": params });
+    let response = server
+        .handle_message(&message.to_string())
+        .expect("a request gets a response");
+    let response: Value = serde_json::from_str(&response).expect("a JSON response");
+    assert!(
+        response.get("result").is_none(),
+        "expected a JSON-RPC error: {response}"
+    );
+    response["error"].clone()
+}
+
+#[test]
+fn resources_serve_the_repository_docs() {
+    let mut server = Server::new();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let documents = [
+        ("hird://docs/writing-hird-llm", "docs/writing-hird-llm.md"),
+        (
+            "hird://docs/parser-diagnostics",
+            "docs/parser-diagnostics.md",
+        ),
+        ("hird://phrasebook", "phrasebook.md"),
+    ];
+
+    let listed = request(&mut server, 1, "resources/list", json!({}));
+    let resources = listed["resources"].as_array().expect("a resource array");
+    let uris: Vec<&str> = resources
+        .iter()
+        .map(|r| r["uri"].as_str().expect("a uri"))
+        .collect();
+    assert_eq!(uris, documents.map(|(uri, _)| uri));
+    for resource in resources {
+        for key in ["name", "title", "description"] {
+            assert!(resource[key].is_string(), "{resource}");
+        }
+        assert_eq!(resource["mimeType"], "text/markdown");
+    }
+
+    // Each resource is the repository's document, verbatim.
+    for (uri, path) in documents {
+        let result = request(&mut server, 2, "resources/read", json!({ "uri": uri }));
+        let contents = result["contents"].as_array().expect("contents");
+        assert_eq!(contents.len(), 1);
+        assert_eq!(contents[0]["uri"], uri);
+        assert_eq!(contents[0]["mimeType"], "text/markdown");
+        let expected = std::fs::read_to_string(root.join(path)).expect("the document reads");
+        assert_eq!(contents[0]["text"], expected, "`{uri}` differs from {path}");
+    }
+
+    // An unknown URI is the MCP resource-not-found error; a missing one is
+    // invalid params.
+    let error = request_err(
+        &mut server,
+        "resources/read",
+        json!({ "uri": "hird://nope" }),
+    );
+    assert_eq!(error["code"], -32002);
+    let error = request_err(&mut server, "resources/read", json!({}));
+    assert_eq!(error["code"], -32602);
+}
+
+#[test]
+fn the_authoring_prompt_scripts_the_verification_loop() {
+    let mut server = Server::new();
+
+    let listed = request(&mut server, 1, "prompts/list", json!({}));
+    let prompts = listed["prompts"].as_array().expect("a prompt array");
+    assert_eq!(prompts.len(), 1);
+    let prompt = &prompts[0];
+    assert_eq!(prompt["name"], "author_supervised_module");
+    assert!(prompt["title"].is_string() && prompt["description"].is_string());
+    let arguments: Vec<(&str, bool)> = prompt["arguments"]
+        .as_array()
+        .expect("arguments")
+        .iter()
+        .map(|a| {
+            assert!(a["description"].is_string(), "{a}");
+            (a["name"].as_str().expect("a name"), a["required"] == true)
+        })
+        .collect();
+    assert_eq!(arguments, [("file", true), ("purpose", true)]);
+
+    // The rendered prompt names the file, the purpose, the resources to
+    // read first, and the tools of the loop.
+    let result = request(
+        &mut server,
+        2,
+        "prompts/get",
+        json!({
+            "name": "author_supervised_module",
+            "arguments": { "file": "demo/tally.hird", "purpose": "counts increments" },
+        }),
+    );
+    assert!(result["description"].is_string());
+    let messages = result["messages"].as_array().expect("messages");
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(messages[0]["content"]["type"], "text");
+    let text = messages[0]["content"]["text"].as_str().expect("text");
+    for expected in [
+        "`demo/tally.hird`",
+        "counts increments",
+        "hird://docs/writing-hird-llm",
+        "hird://phrasebook",
+        "`check_file`",
+        "`explain_actor_protocol`",
+        "`emit_actor_effect_graph`",
+        "`explain_effect_row`",
+        "warnings included",
+    ] {
+        assert!(
+            text.contains(expected),
+            "prompt lacks `{expected}`:\n{text}"
+        );
+    }
+
+    // A missing argument and an unknown prompt are invalid params.
+    let error = request_err(
+        &mut server,
+        "prompts/get",
+        json!({ "name": "author_supervised_module", "arguments": { "file": "x.hird" } }),
+    );
+    assert_eq!(error["code"], -32602);
+    assert!(
+        error["message"]
+            .as_str()
+            .expect("a message")
+            .contains("purpose")
+    );
+    let error = request_err(&mut server, "prompts/get", json!({ "name": "nonsense" }));
+    assert_eq!(error["code"], -32602);
 }
 
 #[test]

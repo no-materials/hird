@@ -12,6 +12,15 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **MCP resources and an authoring prompt.** `hird-mcp` advertises
+  `resources` and `prompts` alongside `tools`. Three resources serve the
+  documents an agent otherwise had to be handed out of band, embedded in
+  the binary: `hird://docs/writing-hird-llm` (the agent-facing guide),
+  `hird://docs/parser-diagnostics` (the `P…` code index), and
+  `hird://phrasebook`. One prompt, `author_supervised_module(file,
+  purpose)`, scripts the authoring loop: write a supervised actor module,
+  then verify it with `check_file` and the introspection tools until the
+  compiler confirms it.
 - **`list_definitions` MCP tool.** `hird-mcp` gains a module outline:
   every name a file's top-level declarations bind, in source order, with
   kind, line, a one-line signature, doc, and the signature's approximate

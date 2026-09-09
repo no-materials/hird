@@ -209,7 +209,11 @@ module outline with per-symbol token costs), `infer_type`,
 `get_context_for_symbol` (token-budget-aware symbol summaries), and
 `get_context_budget`. Errors come back structured — undefined names
 list the available ones, parse and type errors carry coded
-diagnostics — so agents can self-correct from tool output alone.
+diagnostics — so agents can self-correct from tool output alone. The
+server is self-describing: it serves the agent-facing writing guide,
+the parser code index, and the phrasebook as MCP resources, and one
+prompt (`author_supervised_module`) that scripts the write-then-verify
+loop.
 
 The repository ships a project-scoped `.mcp.json`, so Claude Code
 sessions started here pick the server up automatically (it launches

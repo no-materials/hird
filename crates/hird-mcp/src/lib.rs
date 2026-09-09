@@ -24,6 +24,12 @@
 //! - `get_context_for_symbol` — token-budget-aware symbol summary.
 //! - `get_context_budget` — approximate token costs per declaration category.
 //!
+//! Resources serve the agent-facing documents embedded in the binary —
+//! `hird://docs/writing-hird-llm`, `hird://docs/parser-diagnostics`, and
+//! `hird://phrasebook` — and one prompt, `author_supervised_module`, scripts
+//! the authoring loop: write a supervised actor module, then verify it
+//! through the tools until the compiler confirms it.
+//!
 //! Compilation is lazy and directory-scoped: the queried file's directory
 //! compiles as one program on first query (every `.hird` sibling is a
 //! module, so `use` imports resolve) and the result is cached until any
@@ -33,6 +39,8 @@
 //! protocol failures.
 
 mod analysis;
+mod prompts;
+mod resources;
 mod server;
 mod tools;
 
