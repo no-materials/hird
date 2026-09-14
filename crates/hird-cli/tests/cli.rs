@@ -538,6 +538,7 @@ fn emit_effect_graph_prints_text_and_json() {
     let json = hird(&["emit-effect-graph", &file, "--json"]);
     assert!(json.status.success(), "stderr: {}", stderr(&json));
     let out = stdout(&json);
+    assert!(out.contains("\"modules\""), "stdout: {out}");
     assert!(out.contains("\"schema_version\": 1"), "stdout: {out}");
     assert!(out.contains("\"one_for_one\""), "stdout: {out}");
     assert!(out.contains("\"Tool\""), "stdout: {out}");
@@ -1095,4 +1096,47 @@ fn run_resolves_unqualified_imports_to_the_defining_module() {
         app.contains("fun hird_backlog:actionable/1"),
         "base module: {app}"
     );
+}
+
+/// A second module for directory emission: an actor with its own tool.
+const KEEPER: &str = "type St = St(Int)\n\
+     tool Log : { message: String } -> ()\n\
+     actor Keeper {\n\
+       state: St,\n\
+       message: KeeperMsg = | Note(String),\n\
+       init: fn(c: St) ! {} = c,\n\
+       handle Note(m), st ! {Tool<Log>} = match log({ message: m }) { _ -> Continue(st) },\n\
+     } ! {Tool<Log>}";
+
+/// Directory emission keys the JSON by module name and locates text nodes
+/// by file name alone, so committed output carries no checkout path.
+#[test]
+fn emit_effect_graph_keys_directory_output_by_module() {
+    let dir = scratch("emit_graph_dir");
+    write(&dir, "repo_planner.hird", PLANNER);
+    write(&dir, "keeper.hird", KEEPER);
+    let dir_arg = dir.to_str().expect("utf-8 path");
+
+    let json = hird(&["emit-effect-graph", dir_arg, "--json"]);
+    assert!(json.status.success(), "stderr: {}", stderr(&json));
+    let doc: serde_json::Value = serde_json::from_str(&stdout(&json)).expect("valid JSON");
+    assert_eq!(doc["schema_version"], 1);
+    let modules = doc["modules"].as_object().expect("modules object");
+    assert_eq!(
+        modules.keys().collect::<Vec<_>>(),
+        ["Keeper", "RepoPlanner"]
+    );
+    assert_eq!(modules["RepoPlanner"]["module"], "RepoPlanner");
+    assert_eq!(modules["RepoPlanner"]["actors"][0]["name"], "Planner");
+    assert_eq!(modules["Keeper"]["tools"][0]["name"], "Log");
+
+    let text = hird(&["emit-effect-graph", dir_arg]);
+    assert!(text.status.success(), "stderr: {}", stderr(&text));
+    let out = stdout(&text);
+    assert!(out.contains("module Keeper\n"), "stdout: {out}");
+    assert!(
+        out.contains("actor Keeper  (keeper.hird:3)"),
+        "stdout: {out}"
+    );
+    assert!(!out.contains(dir_arg), "text embeds the input path: {out}");
 }

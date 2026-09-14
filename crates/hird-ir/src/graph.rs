@@ -11,6 +11,25 @@
 //! effect rows are rendered both structurally and as canonical
 //! surface-syntax strings. The schema is versioned by
 //! [`EFFECT_GRAPH_SCHEMA_VERSION`] and evolves additively only.
+//!
+//! A [`ProgramGraph`] gathers the graphs of one program keyed by module
+//! name; the CLI emits it for single files and directories alike.
+//!
+//! # Identity contract
+//!
+//! Committed baselines are diffed against fresh emissions, so every field
+//! is one of two kinds. *Identity* fields describe what the program may
+//! reach; a change to one is a real change. *Incidental* fields locate or
+//! order the description; consumers ignore them.
+//!
+//! Incidental: every `line`, and the order of entries in `actors`,
+//! `supervisors`, `tools`, `handlers`, and `constructors` — consumers key
+//! those by `name` (handlers by `message`). Everything else is identity:
+//! module names; actor, supervisor, tool, message-type, and constructor
+//! names; every type and effect row (`display` and `structure` are two
+//! renderings of one value); tool type parameters; supervisor strategy,
+//! intensity, period, and children — including their order, since start
+//! order drives `rest_for_one`.
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -30,12 +49,34 @@ use crate::ir::{
 /// additions are absorbed without a bump.
 pub const EFFECT_GRAPH_SCHEMA_VERSION: u32 = 1;
 
+/// The effect graphs of one program, keyed by module name: the CLI's
+/// `--json` document for single files and directories alike.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProgramGraph {
+    /// Schema version of this projection ([`EFFECT_GRAPH_SCHEMA_VERSION`]).
+    pub schema_version: u32,
+    /// The modules' graphs, keyed (and so sorted) by module name.
+    pub modules: BTreeMap<String, EffectGraph>,
+}
+
+impl ProgramGraph {
+    /// Gathers `graphs` under their module names; a name occurring twice
+    /// keeps the last graph.
+    #[must_use]
+    pub fn new(graphs: impl IntoIterator<Item = EffectGraph>) -> Self {
+        Self {
+            schema_version: EFFECT_GRAPH_SCHEMA_VERSION,
+            modules: graphs.into_iter().map(|g| (g.module.clone(), g)).collect(),
+        }
+    }
+}
+
 /// The actor/effect graph of one module.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EffectGraph {
     /// Schema version of this projection ([`EFFECT_GRAPH_SCHEMA_VERSION`]).
     pub schema_version: u32,
-    /// The projected module's name.
+    /// The projected module's name: the graph's identity key.
     pub module: String,
     /// Actor declarations, in source order.
     pub actors: Vec<ActorNode>,
@@ -72,7 +113,7 @@ impl EffectGraph {
 pub struct ActorNode {
     /// The actor's name.
     pub name: String,
-    /// 1-based source line of the declaration; 0 when unknown.
+    /// 1-based source line of the declaration; 0 when unknown. Incidental.
     pub line: u32,
     /// The state type.
     pub state: TypeRef,
@@ -137,7 +178,7 @@ pub struct HandlerNode {
 pub struct SupervisorNode {
     /// The supervisor's name.
     pub name: String,
-    /// 1-based source line of the declaration; 0 when unknown.
+    /// 1-based source line of the declaration; 0 when unknown. Incidental.
     pub line: u32,
     /// The restart strategy (`one_for_one`, `one_for_all`, `rest_for_one`).
     pub strategy: String,
@@ -167,7 +208,7 @@ pub struct ChildNode {
 pub struct ToolNode {
     /// The tool's marker-type name.
     pub name: String,
-    /// 1-based source line of the declaration; 0 when unknown.
+    /// 1-based source line of the declaration; 0 when unknown. Incidental.
     pub line: u32,
     /// Type-parameter names of a generic tool; empty otherwise.
     pub params: Vec<String>,

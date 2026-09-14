@@ -180,12 +180,9 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
                 .map(|m| (m.path.clone(), hird_ir::effect_graph(&m.lower())))
                 .collect();
             if json {
-                let rendered = if let [(_, only)] = graphs.as_slice() {
-                    serde_json::to_string_pretty(only)
-                } else {
-                    serde_json::to_string_pretty(&graphs.iter().map(|(_, g)| g).collect::<Vec<_>>())
-                }
-                .map_err(|e| fail!("cannot serialize effect graph: {e}"))?;
+                let program = hird_ir::ProgramGraph::new(graphs.into_iter().map(|(_, g)| g));
+                let rendered = serde_json::to_string_pretty(&program)
+                    .map_err(|e| fail!("cannot serialize effect graph: {e}"))?;
                 println!("{rendered}");
             } else {
                 for (i, (path, graph)) in graphs.iter().enumerate() {

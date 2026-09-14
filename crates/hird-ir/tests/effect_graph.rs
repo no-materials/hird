@@ -5,7 +5,9 @@
 //! module, with the JSON shape pinned by a snapshot.
 
 use hird_ast::{AstNode, SourceFile};
-use hird_ir::{EFFECT_GRAPH_SCHEMA_VERSION, IrModule, TypeStructure, effect_graph, lower_module};
+use hird_ir::{
+    EFFECT_GRAPH_SCHEMA_VERSION, IrModule, ProgramGraph, TypeStructure, effect_graph, lower_module,
+};
 
 /// A planner-shaped module: a tool, an actor using it, and a supervisor.
 const PLANNER: &str = "type Path = Path(String)\n\
@@ -187,4 +189,19 @@ fn generic_tool_renders_parameters_by_declared_name() {
 fn planner_graph_json_shape() {
     let graph = effect_graph(&lower(PLANNER, "Planner"));
     insta::assert_snapshot!(graph.to_json_pretty().expect("graph serializes"));
+}
+
+#[test]
+fn program_graph_keys_modules_by_name() {
+    let planner = effect_graph(&lower(PLANNER, "Planner"));
+    let pick = effect_graph(&lower(GENERIC, "Pick"));
+    let program = ProgramGraph::new([planner, pick]);
+    assert_eq!(program.schema_version, EFFECT_GRAPH_SCHEMA_VERSION);
+    assert_eq!(
+        program.modules.keys().collect::<Vec<_>>(),
+        ["Pick", "Planner"],
+        "modules sort by name, not by input order"
+    );
+    assert_eq!(program.modules["Planner"].actors[0].name, "Planner");
+    assert_eq!(program.modules["Pick"].tools[0].name, "Pick");
 }

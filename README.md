@@ -261,7 +261,8 @@ development loop, and the v0.1 limitations.
 - `demo/` — the v0.1 demo programs.
 - `conformance/` — golden files for the audit-log wire format.
 - `docs/` — normative specifications (grammar, error model, tool
-  effects wire format), the audit stream's guarantees, and editor setup.
+  effects wire format, effect graph), the audit stream's guarantees, and
+  editor setup.
 - `phrasebook.md` — dense surface-syntax reference.
 - `DECISIONS.md` — architecture decision records.
 - `.beads/README.md` — the issue tracker and roadmap, driven by `bd`.

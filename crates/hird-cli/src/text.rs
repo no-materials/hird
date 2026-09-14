@@ -9,12 +9,15 @@ use std::path::Path;
 
 use hird_ir::EffectGraph;
 
-/// Renders `graph` as indented text, locating nodes by `path:line`.
+/// Renders `graph` as indented text, locating nodes by `file:line`, where
+/// `file` is the final component of `path`: the module's own file name, not
+/// a checkout-specific path.
 pub(crate) fn render_graph(graph: &EffectGraph, path: &Path) -> String {
     let mut out = String::new();
+    let file = path.file_name().unwrap_or_default().to_string_lossy();
     let at = |line: u32| {
         if line > 0 {
-            format!("  ({}:{line})", path.display())
+            format!("  ({file}:{line})")
         } else {
             String::new()
         }
