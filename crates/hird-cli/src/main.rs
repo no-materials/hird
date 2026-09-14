@@ -118,6 +118,10 @@ enum Command {
         /// Emit the structured JSON report instead of text.
         #[arg(long)]
         json: bool,
+        /// Exit nonzero on any change, not only widening, so the baseline
+        /// must be regenerated whenever the graph moves.
+        #[arg(long)]
+        exact: bool,
     },
 }
 
@@ -210,6 +214,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             baseline,
             input,
             json,
+            exact,
         } => {
             let baseline = load_baseline(&baseline)?;
             let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
@@ -224,7 +229,8 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             } else {
                 print!("{}", text::render_diff(&report));
             }
-            Ok(if report.widens {
+            let fails = report.widens || (exact && !report.changes.is_empty());
+            Ok(if fails {
                 ExitCode::FAILURE
             } else {
                 ExitCode::SUCCESS

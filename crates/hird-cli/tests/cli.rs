@@ -1259,3 +1259,29 @@ fn effect_diff_rejects_a_foreign_baseline() {
         stderr(&output)
     );
 }
+
+#[test]
+fn effect_diff_exact_fails_on_any_drift() {
+    let dir = scratch("effect_diff_exact");
+    let baseline = planner_baseline(&dir);
+    let file = dir.join("planner.hird").display().to_string();
+    let same = hird(&["effect-diff", "--exact", &baseline, &file]);
+    assert!(same.status.success(), "stderr: {}", stderr(&same));
+
+    let narrowed = PLANNER
+        .replace(
+            "handle PlanRepo(p), st ! {Tool<ReadRepo>} = Continue(read(p, st)),",
+            "handle PlanRepo(p), st ! {} = Continue(st),",
+        )
+        .replace("} ! {Tool<ReadRepo>}", "} ! {}");
+    let file = write(&dir, "planner.hird", &narrowed);
+    let lenient = hird(&["effect-diff", &baseline, &file]);
+    assert!(lenient.status.success(), "narrowing alone passes");
+    let exact = hird(&["effect-diff", "--exact", &baseline, &file]);
+    assert!(!exact.status.success(), "--exact fails on narrowing");
+    assert!(
+        stdout(&exact).contains("narrowed Planner actor Planner"),
+        "stdout: {}",
+        stdout(&exact)
+    );
+}

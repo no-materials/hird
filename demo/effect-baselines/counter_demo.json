@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "modules": {
+    "CounterDemo": {
+      "schema_version": 1,
+      "module": "CounterDemo",
+      "actors": [
+        {
+          "name": "Counter",
+          "line": 17,
+          "state": {
+            "display": "{ count: Int }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "count": {
+                  "kind": "Con",
+                  "name": "Int",
+                  "args": []
+                }
+              }
+            }
+          },
+          "message": {
+            "name": "CounterMsg",
+            "constructors": [
+              {
+                "name": "Increment",
+                "fields": [
+                  {
+                    "display": "Int",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Int",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "GetCount",
+                "fields": [
+                  {
+                    "display": "ReplyTo<Int>",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "ReplyTo",
+                      "args": [
+                        {
+                          "kind": "Con",
+                          "name": "Int",
+                          "args": []
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "init": {
+            "params": [
+              {
+                "name": "config",
+                "type": {
+                  "display": "CounterConfig",
+                  "structure": {
+                    "kind": "Con",
+                    "name": "CounterConfig",
+                    "args": []
+                  }
+                }
+              }
+            ],
+            "effects": {
+              "display": "{}",
+              "effects": [],
+              "open": false
+            }
+          },
+          "handlers": [
+            {
+              "message": "Increment",
+              "effects": {
+                "display": "{}",
+                "effects": [],
+                "open": false
+              }
+            },
+            {
+              "message": "GetCount",
+              "effects": {
+                "display": "{Send<Int>}",
+                "effects": [
+                  {
+                    "display": "Send<Int>",
+                    "head": "Send",
+                    "args": [
+                      {
+                        "display": "Int",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "Int",
+                          "args": []
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "open": false
+              }
+            }
+          ],
+          "effects": {
+            "display": "{Send<Int>}",
+            "effects": [
+              {
+                "display": "Send<Int>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "Int",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Int",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "supervisors": [
+        {
+          "name": "CounterSup",
+          "line": 40,
+          "strategy": "one_for_one",
+          "intensity": 5,
+          "period": 60,
+          "children": [
+            {
+              "id": "counter",
+              "actor": "Counter",
+              "restart": "permanent"
+            }
+          ],
+          "effects": {
+            "display": "{Send<Int>}",
+            "effects": [
+              {
+                "display": "Send<Int>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "Int",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Int",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "tools": [],
+      "functions": [
+        {
+          "name": "initial_config",
+          "line": 36,
+          "params": [],
+          "result": {
+            "display": "CounterConfig",
+            "structure": {
+              "kind": "Con",
+              "name": "CounterConfig",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "main",
+          "line": 52,
+          "params": [],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{Await<Int>, Send<CounterMsg>, Supervise}",
+            "effects": [
+              {
+                "display": "Await<Int>",
+                "head": "Await",
+                "args": [
+                  {
+                    "display": "Int",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Int",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Send<CounterMsg>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "CounterMsg",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "CounterMsg",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Supervise",
+                "head": "Supervise",
+                "args": []
+              }
+            ],
+            "open": false
+          }
+        }
+      ]
+    }
+  }
+}

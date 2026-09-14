@@ -1,0 +1,782 @@
+{
+  "schema_version": 1,
+  "modules": {
+    "AgentPlanner": {
+      "schema_version": 1,
+      "module": "AgentPlanner",
+      "actors": [
+        {
+          "name": "Planner",
+          "line": 72,
+          "state": {
+            "display": "{ repos: Int, tickets: Int }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "repos": {
+                  "kind": "Con",
+                  "name": "Int",
+                  "args": []
+                },
+                "tickets": {
+                  "kind": "Con",
+                  "name": "Int",
+                  "args": []
+                }
+              }
+            }
+          },
+          "message": {
+            "name": "PlannerMsg",
+            "constructors": [
+              {
+                "name": "PlanRepo",
+                "fields": [
+                  {
+                    "display": "Path",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Path",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "GetStatus",
+                "fields": [
+                  {
+                    "display": "ReplyTo<PlannerStatus>",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "ReplyTo",
+                      "args": [
+                        {
+                          "kind": "Con",
+                          "name": "PlannerStatus",
+                          "args": []
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "Shutdown",
+                "fields": []
+              }
+            ]
+          },
+          "init": {
+            "params": [
+              {
+                "name": "config",
+                "type": {
+                  "display": "PlannerConfig",
+                  "structure": {
+                    "kind": "Con",
+                    "name": "PlannerConfig",
+                    "args": []
+                  }
+                }
+              }
+            ],
+            "effects": {
+              "display": "{}",
+              "effects": [],
+              "open": false
+            }
+          },
+          "handlers": [
+            {
+              "message": "PlanRepo",
+              "effects": {
+                "display": "{Tool<CreateTicket>, Tool<Log>, Tool<ReadRepo>}",
+                "effects": [
+                  {
+                    "display": "Tool<CreateTicket>",
+                    "head": "Tool",
+                    "args": [
+                      {
+                        "display": "CreateTicket",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "CreateTicket",
+                          "args": []
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "display": "Tool<Log>",
+                    "head": "Tool",
+                    "args": [
+                      {
+                        "display": "Log",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "Log",
+                          "args": []
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "display": "Tool<ReadRepo>",
+                    "head": "Tool",
+                    "args": [
+                      {
+                        "display": "ReadRepo",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "ReadRepo",
+                          "args": []
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "open": false
+              }
+            },
+            {
+              "message": "GetStatus",
+              "effects": {
+                "display": "{Send<PlannerStatus>}",
+                "effects": [
+                  {
+                    "display": "Send<PlannerStatus>",
+                    "head": "Send",
+                    "args": [
+                      {
+                        "display": "PlannerStatus",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "PlannerStatus",
+                          "args": []
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "open": false
+              }
+            },
+            {
+              "message": "Shutdown",
+              "effects": {
+                "display": "{}",
+                "effects": [],
+                "open": false
+              }
+            }
+          ],
+          "effects": {
+            "display": "{Send<PlannerStatus>, Tool<CreateTicket>, Tool<Log>, Tool<ReadRepo>}",
+            "effects": [
+              {
+                "display": "Send<PlannerStatus>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "PlannerStatus",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerStatus",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<CreateTicket>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "CreateTicket",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "CreateTicket",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<Log>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "Log",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Log",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<ReadRepo>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "ReadRepo",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "ReadRepo",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "supervisors": [
+        {
+          "name": "PlannerSup",
+          "line": 104,
+          "strategy": "one_for_one",
+          "intensity": 5,
+          "period": 60,
+          "children": [
+            {
+              "id": "planner",
+              "actor": "Planner",
+              "restart": "transient"
+            }
+          ],
+          "effects": {
+            "display": "{Send<PlannerStatus>, Tool<CreateTicket>, Tool<Log>, Tool<ReadRepo>}",
+            "effects": [
+              {
+                "display": "Send<PlannerStatus>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "PlannerStatus",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerStatus",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<CreateTicket>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "CreateTicket",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "CreateTicket",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<Log>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "Log",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Log",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<ReadRepo>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "ReadRepo",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "ReadRepo",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "ReadRepo",
+          "line": 40,
+          "params": [],
+          "input": {
+            "display": "{ path: Path }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "path": {
+                  "kind": "Con",
+                  "name": "Path",
+                  "args": []
+                }
+              }
+            }
+          },
+          "output": {
+            "display": "RepoState",
+            "structure": {
+              "kind": "Con",
+              "name": "RepoState",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "CreateTicket",
+          "line": 41,
+          "params": [],
+          "input": {
+            "display": "{ body: String, title: String }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "body": {
+                  "kind": "Con",
+                  "name": "String",
+                  "args": []
+                },
+                "title": {
+                  "kind": "Con",
+                  "name": "String",
+                  "args": []
+                }
+              }
+            }
+          },
+          "output": {
+            "display": "TicketId",
+            "structure": {
+              "kind": "Con",
+              "name": "TicketId",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "Log",
+          "line": 42,
+          "params": [],
+          "input": {
+            "display": "{ level: String, message: String }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "level": {
+                  "kind": "Con",
+                  "name": "String",
+                  "args": []
+                },
+                "message": {
+                  "kind": "Con",
+                  "name": "String",
+                  "args": []
+                }
+              }
+            }
+          },
+          "output": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        }
+      ],
+      "functions": [
+        {
+          "name": "actionable",
+          "line": 47,
+          "params": [
+            {
+              "name": "backlog",
+              "type": {
+                "display": "Backlog",
+                "structure": {
+                  "kind": "Con",
+                  "name": "Backlog",
+                  "args": []
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "Backlog",
+            "structure": {
+              "kind": "Con",
+              "name": "Backlog",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "analyze",
+          "line": 57,
+          "params": [
+            {
+              "name": "repo",
+              "type": {
+                "display": "RepoState",
+                "structure": {
+                  "kind": "Con",
+                  "name": "RepoState",
+                  "args": []
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "Backlog",
+            "structure": {
+              "kind": "Con",
+              "name": "Backlog",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "file_tickets",
+          "line": 61,
+          "params": [
+            {
+              "name": "backlog",
+              "type": {
+                "display": "Backlog",
+                "structure": {
+                  "kind": "Con",
+                  "name": "Backlog",
+                  "args": []
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "Int",
+            "structure": {
+              "kind": "Con",
+              "name": "Int",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{Tool<CreateTicket>, Tool<Log>}",
+            "effects": [
+              {
+                "display": "Tool<CreateTicket>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "CreateTicket",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "CreateTicket",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<Log>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "Log",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Log",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        },
+        {
+          "name": "default_config",
+          "line": 100,
+          "params": [],
+          "result": {
+            "display": "PlannerConfig",
+            "structure": {
+              "kind": "Con",
+              "name": "PlannerConfig",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "demo_read_repo",
+          "line": 116,
+          "params": [
+            {
+              "name": "args",
+              "type": {
+                "display": "{ path: Path }",
+                "structure": {
+                  "kind": "Record",
+                  "fields": {
+                    "path": {
+                      "kind": "Con",
+                      "name": "Path",
+                      "args": []
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "RepoState",
+            "structure": {
+              "kind": "Con",
+              "name": "RepoState",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "demo_create_ticket",
+          "line": 126,
+          "params": [
+            {
+              "name": "args",
+              "type": {
+                "display": "{ body: String, title: String }",
+                "structure": {
+                  "kind": "Record",
+                  "fields": {
+                    "body": {
+                      "kind": "Con",
+                      "name": "String",
+                      "args": []
+                    },
+                    "title": {
+                      "kind": "Con",
+                      "name": "String",
+                      "args": []
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "TicketId",
+            "structure": {
+              "kind": "Con",
+              "name": "TicketId",
+              "args": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "demo_log",
+          "line": 129,
+          "params": [
+            {
+              "name": "args",
+              "type": {
+                "display": "{ level: String, message: String }",
+                "structure": {
+                  "kind": "Record",
+                  "fields": {
+                    "level": {
+                      "kind": "Con",
+                      "name": "String",
+                      "args": []
+                    },
+                    "message": {
+                      "kind": "Con",
+                      "name": "String",
+                      "args": []
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "run_demo",
+          "line": 136,
+          "params": [],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{Await<PlannerStatus>, Send<PlannerMsg>, Supervise}",
+            "effects": [
+              {
+                "display": "Await<PlannerStatus>",
+                "head": "Await",
+                "args": [
+                  {
+                    "display": "PlannerStatus",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerStatus",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Send<PlannerMsg>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "PlannerMsg",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerMsg",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Supervise",
+                "head": "Supervise",
+                "args": []
+              }
+            ],
+            "open": false
+          }
+        },
+        {
+          "name": "main",
+          "line": 146,
+          "params": [],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{Await<PlannerStatus>, Install, Send<PlannerMsg>, Supervise}",
+            "effects": [
+              {
+                "display": "Await<PlannerStatus>",
+                "head": "Await",
+                "args": [
+                  {
+                    "display": "PlannerStatus",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerStatus",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Install",
+                "head": "Install",
+                "args": []
+              },
+              {
+                "display": "Send<PlannerMsg>",
+                "head": "Send",
+                "args": [
+                  {
+                    "display": "PlannerMsg",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "PlannerMsg",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Supervise",
+                "head": "Supervise",
+                "args": []
+              }
+            ],
+            "open": false
+          }
+        }
+      ]
+    }
+  }
+}

@@ -292,6 +292,29 @@ jobs:
       - name: build the tree-sitter grammar
         run: nix build --no-link --print-build-logs .#tree-sitter-hird
 
+  effect-baselines:
+    name: effect baselines
+    # NOTE: The approved-baseline workflow, dogfooded: every demo program's
+    #       effect graph must match its committed baseline exactly, so a
+    #       change that moves a graph carries the baseline update in the same
+    #       diff. Linux only — the graph is platform independent.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: check the demo baselines
+        run: demo/effect-baselines.sh check
+
   # If this fails, consider changing your text or adding something to .typos.toml.
   typos:
     runs-on: ubuntu-latest

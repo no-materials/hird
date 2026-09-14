@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "modules": {
+    "Heartbeat": {
+      "schema_version": 1,
+      "module": "Heartbeat",
+      "actors": [
+        {
+          "name": "Heart",
+          "line": 29,
+          "state": {
+            "display": "{ beats: Int, clock: Clock, period: Int }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "beats": {
+                  "kind": "Con",
+                  "name": "Int",
+                  "args": []
+                },
+                "clock": {
+                  "kind": "Con",
+                  "name": "Clock",
+                  "args": []
+                },
+                "period": {
+                  "kind": "Con",
+                  "name": "Int",
+                  "args": []
+                }
+              }
+            }
+          },
+          "message": {
+            "name": "HeartMsg",
+            "constructors": [
+              {
+                "name": "Beat",
+                "fields": []
+              }
+            ]
+          },
+          "init": {
+            "params": [
+              {
+                "name": "config",
+                "type": {
+                  "display": "HeartConfig",
+                  "structure": {
+                    "kind": "Con",
+                    "name": "HeartConfig",
+                    "args": []
+                  }
+                }
+              }
+            ],
+            "effects": {
+              "display": "{Schedule<HeartMsg>}",
+              "effects": [
+                {
+                  "display": "Schedule<HeartMsg>",
+                  "head": "Schedule",
+                  "args": [
+                    {
+                      "display": "HeartMsg",
+                      "structure": {
+                        "kind": "Con",
+                        "name": "HeartMsg",
+                        "args": []
+                      }
+                    }
+                  ]
+                }
+              ],
+              "open": false
+            }
+          },
+          "handlers": [
+            {
+              "message": "Beat",
+              "effects": {
+                "display": "{Schedule<HeartMsg>, Tool<Log>}",
+                "effects": [
+                  {
+                    "display": "Schedule<HeartMsg>",
+                    "head": "Schedule",
+                    "args": [
+                      {
+                        "display": "HeartMsg",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "HeartMsg",
+                          "args": []
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "display": "Tool<Log>",
+                    "head": "Tool",
+                    "args": [
+                      {
+                        "display": "Log",
+                        "structure": {
+                          "kind": "Con",
+                          "name": "Log",
+                          "args": []
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "open": false
+              }
+            }
+          ],
+          "effects": {
+            "display": "{Schedule<HeartMsg>, Tool<Log>}",
+            "effects": [
+              {
+                "display": "Schedule<HeartMsg>",
+                "head": "Schedule",
+                "args": [
+                  {
+                    "display": "HeartMsg",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "HeartMsg",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<Log>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "Log",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Log",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "supervisors": [
+        {
+          "name": "HeartSup",
+          "line": 49,
+          "strategy": "one_for_one",
+          "intensity": 5,
+          "period": 60,
+          "children": [
+            {
+              "id": "heart",
+              "actor": "Heart",
+              "restart": "permanent"
+            }
+          ],
+          "effects": {
+            "display": "{Clock, Schedule<HeartMsg>, Tool<Log>}",
+            "effects": [
+              {
+                "display": "Clock",
+                "head": "Clock",
+                "args": []
+              },
+              {
+                "display": "Schedule<HeartMsg>",
+                "head": "Schedule",
+                "args": [
+                  {
+                    "display": "HeartMsg",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "HeartMsg",
+                      "args": []
+                    }
+                  }
+                ]
+              },
+              {
+                "display": "Tool<Log>",
+                "head": "Tool",
+                "args": [
+                  {
+                    "display": "Log",
+                    "structure": {
+                      "kind": "Con",
+                      "name": "Log",
+                      "args": []
+                    }
+                  }
+                ]
+              }
+            ],
+            "open": false
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "Log",
+          "line": 25,
+          "params": [],
+          "input": {
+            "display": "{ message: String }",
+            "structure": {
+              "kind": "Record",
+              "fields": {
+                "message": {
+                  "kind": "Con",
+                  "name": "String",
+                  "args": []
+                }
+              }
+            }
+          },
+          "output": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        }
+      ],
+      "functions": [
+        {
+          "name": "demo_log",
+          "line": 62,
+          "params": [
+            {
+              "name": "args",
+              "type": {
+                "display": "{ message: String }",
+                "structure": {
+                  "kind": "Record",
+                  "fields": {
+                    "message": {
+                      "kind": "Con",
+                      "name": "String",
+                      "args": []
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{}",
+            "effects": [],
+            "open": false
+          }
+        },
+        {
+          "name": "main",
+          "line": 68,
+          "params": [],
+          "result": {
+            "display": "()",
+            "structure": {
+              "kind": "Tuple",
+              "elems": []
+            }
+          },
+          "effects": {
+            "display": "{Install, Stand, Supervise}",
+            "effects": [
+              {
+                "display": "Install",
+                "head": "Install",
+                "args": []
+              },
+              {
+                "display": "Stand",
+                "head": "Stand",
+                "args": []
+              },
+              {
+                "display": "Supervise",
+                "head": "Supervise",
+                "args": []
+              }
+            ],
+            "open": false
+          }
+        }
+      ]
+    }
+  }
+}

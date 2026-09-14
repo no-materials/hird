@@ -125,3 +125,50 @@ and evolves additively, like the graph's.
 
 The diff lives in the `hird-policy` crate, so other tooling can gate on
 it without going through the CLI.
+
+## The approved-baseline workflow
+
+The gate becomes a workflow with one convention: the baseline is a
+committed file, CI regenerates the graph and diffs it against that file,
+and a change that moves the graph updates the baseline in the same
+reviewable diff. The reviewer then reads the change to the program and
+the change to its manifest side by side, and the manifest never goes
+stale.
+
+Run CI in `--exact` mode. Plain `effect-diff` fails only on widening, so
+a narrowing passes and leaves the baseline over-granting; against that
+stale baseline, adding the effect back later is no change at all and
+passes without review. `--exact` fails on any drift, which keeps the
+ratchet honest in both directions.
+
+```sh
+# Once, and whenever the graph moves on purpose:
+hird emit-effect-graph src --json > effect-baseline.json
+git add effect-baseline.json
+
+# In CI:
+hird effect-diff --exact effect-baseline.json src
+```
+
+A GitHub Actions job for a project that builds `hird` from this repository:
+
+```yaml
+  effect-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: install hird
+        run: cargo install --git https://github.com/no-materials/hird hird-cli
+      - name: effect reach against the approved baseline
+        run: hird effect-diff --exact effect-baseline.json src
+```
+
+When the job fails, the log names every change with its severity. If the
+change is intended, regenerate the baseline and commit it alongside the
+code; a `widened` line is the cue for a human sign-off on the added reach
+before that commit lands.
+
+This repository runs the recipe on itself. `demo/effect-baselines/` holds
+one baseline per demo program, `demo/effect-baselines.sh check` is the
+CI job, and `demo/effect-baselines.sh update` regenerates them.

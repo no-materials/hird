@@ -677,3 +677,32 @@ fn demo_effect_diff_fails_when_the_planner_gains_a_tool() {
         stdout(&same)
     );
 }
+
+/// The committed baselines under `demo/effect-baselines/` match the demo
+/// programs exactly — the same check CI runs through
+/// `demo/effect-baselines.sh check`. Regenerate with
+/// `demo/effect-baselines.sh update` when a demo's graph moves on purpose.
+#[test]
+fn committed_demo_baselines_are_current() {
+    let demo = demo_path().parent().expect("demo dir").to_path_buf();
+    for (name, input) in [
+        ("agent_planner", "agent_planner.hird"),
+        ("counter_demo", "counter_demo.hird"),
+        ("heartbeat", "heartbeat.hird"),
+        ("agent_fleet", "agent_fleet"),
+    ] {
+        let baseline = demo.join("effect-baselines").join(format!("{name}.json"));
+        let output = hird(&[
+            "effect-diff",
+            "--exact",
+            baseline.to_str().expect("utf-8 path"),
+            demo.join(input).to_str().expect("utf-8 path"),
+        ]);
+        assert!(
+            output.status.success(),
+            "baseline `{name}` drifted; run demo/effect-baselines.sh update\nstdout: {}\nstderr: {}",
+            stdout(&output),
+            stderr(&output)
+        );
+    }
+}
