@@ -103,7 +103,7 @@ source when you can ask the compiler.
 ```sh
 hird check <file-or-dir>                  # full type/effect check, coded diagnostics
 hird emit-ast <file> --json               # typed IR of every definition
-hird emit-effect-graph <file> --json      # actors, mailboxes, handler rows, supervisors, tools
+hird emit-effect-graph <file> --json      # actors, mailboxes, handler rows, supervisors, tools, functions
 hird build <file>                         # + emit and compile Erlang
 hird run <file>                           # + execute; audit JSON lines on stdout
 ```

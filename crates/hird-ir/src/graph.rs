@@ -6,8 +6,9 @@
 //! server).
 //!
 //! The graph shows actors (message types, per-handler effect rows, the
-//! declared summary), supervisors (strategy and children), and tool
-//! declarations (argument/result types, declared trailing row). Types and
+//! declared summary), supervisors (strategy and children), tool
+//! declarations (argument/result types, declared trailing row), and plain
+//! functions (signature and declared row). Types and
 //! effect rows are rendered both structurally and as canonical
 //! surface-syntax strings. The schema is versioned by
 //! [`EFFECT_GRAPH_SCHEMA_VERSION`] and evolves additively only.
@@ -23,9 +24,10 @@
 //! order the description; consumers ignore them.
 //!
 //! Incidental: every `line`, and the order of entries in `actors`,
-//! `supervisors`, `tools`, `handlers`, and `constructors` — consumers key
-//! those by `name` (handlers by `message`). Everything else is identity:
-//! module names; actor, supervisor, tool, message-type, and constructor
+//! `supervisors`, `tools`, `functions`, `handlers`, and `constructors` —
+//! consumers key those by `name` (handlers by `message`). Everything else
+//! is identity: module names; actor, supervisor, tool, function,
+//! message-type, and constructor
 //! names; every type and effect row (`display` and `structure` are two
 //! renderings of one value); tool type parameters; supervisor strategy,
 //! intensity, period, and children — including their order, since start
@@ -42,7 +44,8 @@ use hird_types::{Effect, EffectRow, Type};
 use serde::Serialize;
 
 use crate::ir::{
-    IrActorDef, IrDecl, IrModule, IrParam, IrPattern, IrSupervisorDef, IrToolDef, IrTypeDef,
+    IrActorDef, IrDecl, IrFnDef, IrModule, IrParam, IrPattern, IrSupervisorDef, IrToolDef,
+    IrTypeDef,
 };
 
 /// Version of the effect-graph schema. Bumped only for breaking changes;
@@ -84,6 +87,8 @@ pub struct EffectGraph {
     pub supervisors: Vec<SupervisorNode>,
     /// Tool declarations, in source order.
     pub tools: Vec<ToolNode>,
+    /// Plain function declarations, in source order.
+    pub functions: Vec<FnNode>,
 }
 
 impl EffectGraph {
@@ -221,6 +226,21 @@ pub struct ToolNode {
     pub effects: EffectRowRef,
 }
 
+/// A plain function declaration: its signature and declared row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FnNode {
+    /// The function's name.
+    pub name: String,
+    /// 1-based source line of the declaration; 0 when unknown. Incidental.
+    pub line: u32,
+    /// The parameters, in order.
+    pub params: Vec<ParamNode>,
+    /// The result type.
+    pub result: TypeRef,
+    /// The declared effect row.
+    pub effects: EffectRowRef,
+}
+
 /// A type, rendered canonically and structurally.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TypeRef {
@@ -304,12 +324,14 @@ pub fn effect_graph(module: &IrModule) -> EffectGraph {
     let mut actors = Vec::new();
     let mut supervisors = Vec::new();
     let mut tools = Vec::new();
+    let mut functions = Vec::new();
     for decl in &module.declarations {
         match decl {
             IrDecl::Actor(actor) => actors.push(actor_node(actor)),
             IrDecl::Supervisor(sup) => supervisors.push(supervisor_node(sup)),
             IrDecl::Tool(tool) => tools.push(tool_node(tool)),
-            IrDecl::Fn(_) | IrDecl::Type(_) | IrDecl::Extern(_) => {}
+            IrDecl::Fn(f) => functions.push(fn_node(f)),
+            IrDecl::Type(_) | IrDecl::Extern(_) => {}
         }
     }
     EffectGraph {
@@ -318,6 +340,7 @@ pub fn effect_graph(module: &IrModule) -> EffectGraph {
         actors,
         supervisors,
         tools,
+        functions,
     }
 }
 
@@ -412,6 +435,37 @@ fn tool_node(tool: &IrToolDef) -> ToolNode {
         params: tool.params.clone(),
         input: type_ref(&params[0]),
         output: type_ref(&output),
+        effects: row_ref(&row),
+    }
+}
+
+/// Projects one plain function. Parameters, result, and declared row are
+/// renumbered together (through the function's own type), so a generic
+/// function's type parameters render consistently across all three.
+fn fn_node(f: &IrFnDef) -> FnNode {
+    let signature = Type::func_eff(
+        f.params.iter().map(|p| p.ty.clone()).collect(),
+        f.return_type.clone(),
+        f.effect_row.clone(),
+    )
+    .normalized();
+    let Type::TyFn(params, result, row) = signature else {
+        // `func_eff` always yields `TyFn`, and `normalized` preserves shape.
+        unreachable!("normalizing a function type yields a function type");
+    };
+    FnNode {
+        name: f.name.clone(),
+        line: f.span.line,
+        params: f
+            .params
+            .iter()
+            .zip(&params)
+            .map(|(p, ty)| ParamNode {
+                name: p.name.clone(),
+                ty: type_ref(ty),
+            })
+            .collect(),
+        result: type_ref(&result),
         effects: row_ref(&row),
     }
 }

@@ -534,6 +534,10 @@ fn emit_effect_graph_prints_text_and_json() {
     assert!(out.contains("actor Planner"), "stdout: {out}");
     assert!(out.contains("supervisor PlannerSup"), "stdout: {out}");
     assert!(out.contains("tool ReadRepo"), "stdout: {out}");
+    assert!(
+        out.contains("fn read(p: Path, st: St) \u{2192} St ! {Tool<ReadRepo>}"),
+        "stdout: {out}"
+    );
 
     let json = hird(&["emit-effect-graph", &file, "--json"]);
     assert!(json.status.success(), "stderr: {}", stderr(&json));

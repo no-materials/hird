@@ -204,6 +204,12 @@ fn demo_effect_graph_names_actor_supervisor_and_tools() {
     let out = stdout(&text);
     assert!(out.contains("actor Planner"), "stdout: {out}");
     assert!(out.contains("supervisor PlannerSup"), "stdout: {out}");
+    assert!(
+        out.contains(
+            "fn file_tickets(backlog: Backlog) \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
+        ),
+        "stdout: {out}"
+    );
 
     let json = hird(&["emit-effect-graph", file, "--json"]);
     assert!(json.status.success(), "stderr: {}", stderr(&json));
@@ -235,6 +241,12 @@ fn demo_effect_graph_names_actor_supervisor_and_tools() {
             "missing {tool}: {out}"
         );
     }
+    // Plain functions with their declared rows.
+    assert!(out.contains("\"name\": \"file_tickets\""), "stdout: {out}");
+    assert!(
+        out.contains("\"display\": \"{Tool<CreateTicket>, Tool<Log>}\""),
+        "stdout: {out}"
+    );
 }
 
 /// The dry-run harness: the demo program with the install block swapped to

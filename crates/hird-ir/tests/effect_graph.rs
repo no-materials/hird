@@ -205,3 +205,36 @@ fn program_graph_keys_modules_by_name() {
     assert_eq!(program.modules["Planner"].actors[0].name, "Planner");
     assert_eq!(program.modules["Pick"].tools[0].name, "Pick");
 }
+
+/// A pure generic function and an effectful one, for the functions section.
+const FUNCTIONS: &str = "type Path = Path(String)\n\
+     tool ReadRepo : { path: Path } -> Int\n\
+     fn first(xs: List<t>, fallback: t) -> t = fallback\n\
+     fn read(p: Path) -> Int ! {Tool<ReadRepo>} = read_repo({ path: p })";
+
+#[test]
+fn graph_projects_plain_function_rows() {
+    let graph = effect_graph(&lower(FUNCTIONS, "Fns"));
+    let names: Vec<&str> = graph.functions.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["first", "read"], "functions in source order");
+
+    let first = &graph.functions[0];
+    assert!(first.line > 0, "function carries its source line");
+    assert_eq!(first.params[0].name, "xs");
+    assert_eq!(first.params[0].ty.display, "List<t>");
+    assert_eq!(
+        first.params[1].ty.display, "t",
+        "parameters render by declared name, consistently with the result"
+    );
+    assert_eq!(first.result.display, "t");
+    assert!(
+        first.effects.effects.is_empty(),
+        "pure function has an empty row"
+    );
+    assert!(!first.effects.open, "declared row is closed");
+
+    let read = &graph.functions[1];
+    assert_eq!(read.effects.display, "{Tool<ReadRepo>}");
+    assert_eq!(read.effects.effects[0].head, "Tool");
+    assert_eq!(read.result.display, "Int");
+}

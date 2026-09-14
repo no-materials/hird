@@ -104,7 +104,7 @@ legal input.
 | `hird run <file-or-dir>` | build, then execute `fn main` on BEAM |
 | `hird demo` | record one run of the built-in demo, replay it against variants of the program |
 | `hird emit-ast <file> --json` | the typed IR of every definition |
-| `hird emit-effect-graph <file-or-dir> --json` | actors, mailboxes, handler rows, supervisors, tools |
+| `hird emit-effect-graph <file-or-dir> --json` | actors, mailboxes, handler rows, supervisors, tools, function rows |
 
 [`docs/writing-hird-human.md`](docs/writing-hird-human.md) is the guided
 tour, and [`phrasebook.md`](phrasebook.md) the dense syntax reference.

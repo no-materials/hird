@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use hird_ir::EffectGraph;
+use hird_ir::{EffectGraph, EffectRowRef};
 
 /// Renders `graph` as indented text, locating nodes by `file:line`, where
 /// `file` is the final component of `path`: the module's own file name, not
@@ -81,11 +81,6 @@ pub(crate) fn render_graph(graph: &EffectGraph, path: &Path) -> String {
         } else {
             format!("<{}>", tool.params.join(", "))
         };
-        let row = if tool.effects.effects.is_empty() && !tool.effects.open {
-            String::new()
-        } else {
-            format!(" ! {}", tool.effects.display)
-        };
         let _ = writeln!(
             out,
             "tool {}{} : {} \u{2192} {}{}{}",
@@ -93,9 +88,35 @@ pub(crate) fn render_graph(graph: &EffectGraph, path: &Path) -> String {
             params,
             tool.input.display,
             tool.output.display,
-            row,
+            row_suffix(&tool.effects),
             at(tool.line)
         );
     }
+    for f in &graph.functions {
+        let _ = writeln!(out);
+        let params: Vec<String> = f
+            .params
+            .iter()
+            .map(|p| format!("{}: {}", p.name, p.ty.display))
+            .collect();
+        let _ = writeln!(
+            out,
+            "fn {}({}) \u{2192} {}{}{}",
+            f.name,
+            params.join(", "),
+            f.result.display,
+            row_suffix(&f.effects),
+            at(f.line)
+        );
+    }
     out
+}
+
+/// ` ! {row}` for a declared row; empty for a pure, closed one.
+fn row_suffix(row: &EffectRowRef) -> String {
+    if row.effects.is_empty() && !row.open {
+        String::new()
+    } else {
+        format!(" ! {}", row.display)
+    }
 }

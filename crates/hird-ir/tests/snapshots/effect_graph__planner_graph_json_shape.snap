@@ -252,5 +252,81 @@ expression: "graph.to_json_pretty().expect(\"graph serializes\")"
         "open": false
       }
     }
+  ],
+  "functions": [
+    {
+      "name": "read",
+      "line": 6,
+      "params": [
+        {
+          "name": "p",
+          "type": {
+            "display": "Path",
+            "structure": {
+              "kind": "Con",
+              "name": "Path",
+              "args": []
+            }
+          }
+        },
+        {
+          "name": "st",
+          "type": {
+            "display": "St",
+            "structure": {
+              "kind": "Con",
+              "name": "St",
+              "args": []
+            }
+          }
+        }
+      ],
+      "result": {
+        "display": "St",
+        "structure": {
+          "kind": "Con",
+          "name": "St",
+          "args": []
+        }
+      },
+      "effects": {
+        "display": "{Tool<ReadRepo>}",
+        "effects": [
+          {
+            "display": "Tool<ReadRepo>",
+            "head": "Tool",
+            "args": [
+              {
+                "display": "ReadRepo",
+                "structure": {
+                  "kind": "Con",
+                  "name": "ReadRepo",
+                  "args": []
+                }
+              }
+            ]
+          }
+        ],
+        "open": false
+      }
+    },
+    {
+      "name": "default_config",
+      "line": 8,
+      "params": [],
+      "result": {
+        "display": "St",
+        "structure": {
+          "kind": "Con",
+          "name": "St",
+          "args": []
+        }
+      },
+      "effects": {
+        "display": "{}",
+        "effects": [],
+        "open": false
+      }
+    }
   ]
 }

@@ -1,7 +1,8 @@
 # The effect graph
 
 `hird emit-effect-graph <input>` projects a program's actors, supervisors,
-and tools with their effect rows: what every part of the program may reach.
+tools, and functions with their effect rows: what every part of the
+program may reach.
 It is the surface teams commit as an approved baseline and diff against, so
 its shape and its identity rules are stated here.
 
@@ -33,6 +34,9 @@ Within a module:
 - `supervisors`: `name`, `line`, `strategy`, `intensity`, `period`,
   `children` (`id`, `actor`, `restart`), and the derived `effects`.
 - `tools`: `name`, `line`, `params`, `input`, `output`, `effects`.
+- `functions`: `name`, `line`, `params` (`name`, `type`), `result`, and the
+  declared `effects`. Plain functions, so a reviewer reads off the graph
+  that a function is honestly `! {Tool<X>}` and nothing more.
 
 Types and effect rows appear twice: `display` is the canonical surface
 syntax (`{Tool<ReadRepo>, Send<Status>}`), `structure` the same value as
@@ -49,8 +53,8 @@ edits, so every field is one of two kinds.
 | Kind | Fields | Rule |
 |---|---|---|
 | Incidental | every `line` | Locates the declaration in its file. Ignored by diffs. |
-| Incidental | order of `actors`, `supervisors`, `tools`, `handlers`, `constructors` | Source order. Key entries by `name` (handlers by `message`). |
-| Identity | everything else | Module names; actor, supervisor, tool, message-type, and constructor names; every type and effect row; tool type parameters; supervisor strategy, intensity, period, and children. |
+| Incidental | order of `actors`, `supervisors`, `tools`, `functions`, `handlers`, `constructors` | Source order. Key entries by `name` (handlers by `message`). |
+| Identity | everything else | Module names; actor, supervisor, tool, function, message-type, and constructor names; every type and effect row; tool type parameters; supervisor strategy, intensity, period, and children. |
 
 Children keep their order as identity: start order drives `rest_for_one`.
 
