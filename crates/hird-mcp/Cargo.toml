@@ -21,6 +21,7 @@ hird-lex.workspace = true
 hird-parse.workspace = true
 hird-types.workspace = true
 
+serde = { default-features = false, version = "1" }
 serde_json = "1"
 
 [lints]

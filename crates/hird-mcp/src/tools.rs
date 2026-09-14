@@ -158,8 +158,9 @@ pub(crate) fn descriptors() -> Value {
         json!({
             "type": "string",
             "description": format!(
-                "{what}, as declared in this file. Actors are not resolved through imports; \
-                 an unknown name fails with `not_found` and `error.data.available_actors`."
+                "{what}: a local actor, or a sibling module's as `Qualifier.name` through \
+                 `use Mod` (or `Module.name` for any module of the program). An unknown \
+                 name fails with `not_found` and `error.data.available_actors`."
             ),
         })
     };
@@ -412,8 +413,11 @@ pub(crate) fn descriptors() -> Value {
              reaches transitively, and `lookup_definition` if you only need its location. \
              Returns `actor` with `name`, `line`, `state`, `message` (`name`, \
              `constructors`), `init` (`params`, `effects`), `handlers` (`message`, \
-             `effects`), and `effects`; types and rows carry a `display` string.",
-            json!({ "file": file, "actor_name": actor_name("The actor's name") }),
+             `effects`), and `effects`; types and rows carry a `display` string. \
+             `actor_name` resolves like any symbol: a local actor, a selectively \
+             imported one, or `Qualifier.name` through a `use`; `module` and `file` name \
+             the defining module.",
+            json!({ "file": file, "actor_name": actor_name("The actor's name, as the file would write it (`Planner`, `Fleet.Planner`)") }),
             json!({
                 "module": string,
                 "file": string,
@@ -445,10 +449,14 @@ pub(crate) fn descriptors() -> Value {
              this actor transitively do or depend on'; effect rows are per-process, so no \
              single signature shows this. Use `explain_actor_protocol` for one actor's own \
              interface and `get_context_budget` to gauge the size before requesting it. \
-             Returns `schema_version` (1), `module`, `root`, and the included `actors`, \
-             `supervisors`, and `tools`, whose nodes share the shape of `hird \
-             emit-effect-graph --json`; declarations the root does not reach are omitted.",
-            json!({ "file": file, "actor_name": actor_name("The root actor's name") }),
+             The reach spans the whole program: a row's type names resolve through \
+             the naming module's imports, so a sibling module's actors, supervisors, \
+             and tools are included and same-named declarations in two modules stay \
+             distinct. Returns `schema_version` (1), `module` (the root's), `root`, and \
+             the included `actors`, `supervisors`, and `tools`, whose nodes share the \
+             shape of `hird emit-effect-graph --json` plus a `module` tag; declarations \
+             the root does not reach are omitted.",
+            json!({ "file": file, "actor_name": actor_name("The root actor's name, as the file would write it (`Planner`, `Fleet.Planner`)") }),
             json!({
                 "schema_version": integer,
                 "module": string,
@@ -796,10 +804,10 @@ fn render_ir_fragment(query: Query<'_>, args: &Value) -> Result<Value, ToolError
 }
 
 /// `explain_actor_protocol(file, actor_name)` — an actor's mailbox, state,
-/// init, handlers, and effect summary.
+/// init, handlers, and effect summary. The actor resolves like any symbol:
+/// local, selectively imported, or `Qualifier.name`.
 fn explain_actor_protocol(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
-    let module = query.module;
-    let actor = find_actor(module, str_arg(args, "actor_name")?)?;
+    let (module, actor) = resolve_actor(query, str_arg(args, "actor_name")?)?;
     let actor = serde_json::to_value(actor)
         .map_err(|e| ToolError::new("internal", format!("cannot serialize actor: {e}")))?;
     Ok(json!({
@@ -809,59 +817,96 @@ fn explain_actor_protocol(query: Query<'_>, args: &Value) -> Result<Value, ToolE
     }))
 }
 
-/// `emit_actor_effect_graph(file, actor_name)` — the subgraph reachable from
-/// one actor: actors (following `Send`/`Await`/`Spawn`/`Schedule` message
-/// types),
-/// supervisors of included actors (and their whole child sets), and every
-/// tool named by an included actor's effect summary.
-fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
-    let root = find_actor(query.module, str_arg(args, "actor_name")?)?;
-    let graph = query.module.graph()?;
+/// A graph node located in its module: `(module index, declaration name)`.
+type Located<'a> = (usize, &'a str);
 
-    let mut actors: BTreeSet<&str> = BTreeSet::from([root.name.as_str()]);
-    let mut supervisors: BTreeSet<&str> = BTreeSet::new();
-    let mut tools: BTreeSet<&str> = BTreeSet::new();
+/// `emit_actor_effect_graph(file, actor_name)` — the subgraph reachable from
+/// one actor across the whole program: actors (following
+/// `Send`/`Await`/`Spawn`/`Schedule` message types), supervisors of included
+/// actors (and their whole child sets), and every tool named by an included
+/// actor's effect summary. Every type name in a row resolves through the
+/// naming module's own scope, so two modules' same-named declarations stay
+/// distinct; every emitted node is tagged with its `module`.
+fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, ToolError> {
+    let (root_module, root) = resolve_actor(query, str_arg(args, "actor_name")?)?;
+    let program = query.program;
+    let index_of = |module: &Module| {
+        program
+            .modules
+            .iter()
+            .position(|m| std::ptr::eq(m, module))
+            .expect("a program module")
+    };
+    // A graph for every module; a module with type errors has none and
+    // contributes nothing.
+    let graphs: Vec<Option<&hird_ir::EffectGraph>> =
+        program.modules.iter().map(|m| m.graph().ok()).collect();
+    // The module `name` refers to from `module`'s scope, with its bare
+    // member name.
+    let resolve = |module: usize, name: &str| -> Option<Located<'_>> {
+        let scope = Query {
+            program,
+            module: &program.modules[module],
+        };
+        let (target, member) = scope.resolve(name)?;
+        Some((index_of(target), member))
+    };
+
+    let mut actors: BTreeSet<Located<'_>> = BTreeSet::from([(index_of(root_module), &*root.name)]);
+    let mut supervisors: BTreeSet<Located<'_>> = BTreeSet::new();
+    let mut tools: BTreeSet<Located<'_>> = BTreeSet::new();
     loop {
         let before = (actors.len(), supervisors.len(), tools.len());
-        let current: Vec<&ActorNode> = graph
-            .actors
+        let current: Vec<(usize, &ActorNode)> = actors
             .iter()
-            .filter(|a| actors.contains(a.name.as_str()))
+            .filter_map(|&(m, name)| {
+                let actor = graphs[m]?.actors.iter().find(|a| a.name == name)?;
+                Some((m, actor))
+            })
             .collect();
-        for actor in current {
+        for (m, actor) in current {
             for effect in &actor.effects.effects {
-                let arg = effect.args.first().map(|t| t.display.as_str());
+                let Some(arg) = effect.args.first() else {
+                    continue;
+                };
+                let Some((target, member)) = resolve(m, &arg.display) else {
+                    continue;
+                };
+                let Some(graph) = graphs[target] else {
+                    continue;
+                };
                 match effect.head.as_str() {
                     "Tool" => {
-                        if let Some(tool) =
-                            graph.tools.iter().find(|t| Some(t.name.as_str()) == arg)
-                        {
-                            tools.insert(&tool.name);
+                        if let Some(tool) = graph.tools.iter().find(|t| t.name == member) {
+                            tools.insert((target, &tool.name));
                         }
                     }
                     "Send" | "Await" | "Spawn" | "Schedule" => {
-                        if let Some(target) = graph
-                            .actors
-                            .iter()
-                            .find(|a| Some(a.message.name.as_str()) == arg)
+                        if let Some(actor) = graph.actors.iter().find(|a| a.message.name == member)
                         {
-                            actors.insert(&target.name);
+                            actors.insert((target, &actor.name));
                         }
                     }
                     _ => {}
                 }
             }
         }
-        for sup in &graph.supervisors {
-            if sup
-                .children
-                .iter()
-                .any(|c| actors.contains(c.actor.as_str()))
-            {
-                supervisors.insert(&sup.name);
-                for child in &sup.children {
-                    if graph.actors.iter().any(|a| a.name == child.actor) {
-                        actors.insert(child.actor.as_str());
+        // Child specs name actors of their own module.
+        for (m, graph) in graphs.iter().enumerate() {
+            let Some(graph) = graph else {
+                continue;
+            };
+            for sup in &graph.supervisors {
+                if sup
+                    .children
+                    .iter()
+                    .any(|c| actors.contains(&(m, c.actor.as_str())))
+                {
+                    supervisors.insert((m, &sup.name));
+                    for child in &sup.children {
+                        if let Some(actor) = graph.actors.iter().find(|a| a.name == child.actor) {
+                            actors.insert((m, &actor.name));
+                        }
                     }
                 }
             }
@@ -871,29 +916,55 @@ fn emit_actor_effect_graph(query: Query<'_>, args: &Value) -> Result<Value, Tool
         }
     }
 
-    let included_actors: Vec<&ActorNode> = graph
-        .actors
-        .iter()
-        .filter(|a| actors.contains(a.name.as_str()))
-        .collect();
-    let included_supervisors: Vec<_> = graph
-        .supervisors
-        .iter()
-        .filter(|s| supervisors.contains(s.name.as_str()))
-        .collect();
-    let included_tools: Vec<_> = graph
-        .tools
-        .iter()
-        .filter(|t| tools.contains(t.name.as_str()))
-        .collect();
+    // Program order, then source order, each node tagged with its module.
+    let mut included_actors = Vec::new();
+    let mut included_supervisors = Vec::new();
+    let mut included_tools = Vec::new();
+    for (m, graph) in graphs.iter().enumerate() {
+        let Some(graph) = graph else {
+            continue;
+        };
+        let module = graph.module.as_str();
+        for actor in graph
+            .actors
+            .iter()
+            .filter(|a| actors.contains(&(m, &*a.name)))
+        {
+            included_actors.push(tagged(actor, module)?);
+        }
+        for sup in graph
+            .supervisors
+            .iter()
+            .filter(|s| supervisors.contains(&(m, &*s.name)))
+        {
+            included_supervisors.push(tagged(sup, module)?);
+        }
+        for tool in graph
+            .tools
+            .iter()
+            .filter(|t| tools.contains(&(m, &*t.name)))
+        {
+            included_tools.push(tagged(tool, module)?);
+        }
+    }
     Ok(json!({
         "schema_version": EFFECT_GRAPH_SCHEMA_VERSION,
-        "module": graph.module,
+        "module": root_module.name,
         "root": root.name,
         "actors": included_actors,
         "supervisors": included_supervisors,
         "tools": included_tools,
     }))
+}
+
+/// `node` as JSON with a `module` tag added.
+fn tagged(node: &impl serde::Serialize, module: &str) -> Result<Value, ToolError> {
+    let mut value = serde_json::to_value(node)
+        .map_err(|e| ToolError::new("internal", format!("cannot serialize graph node: {e}")))?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("module".into(), Value::from(module));
+    }
+    Ok(value)
 }
 
 /// `get_context_for_symbol(file, name, budget)` — a prompt-ready summary of
@@ -1141,16 +1212,50 @@ fn find_decl<'a>(query: Query<'a>, name: &str) -> Result<(&'a Module, &'a IrDecl
 }
 
 /// The actor node named `name`, or a `not_found` error listing the actors.
-fn find_actor<'a>(module: &'a Module, name: &str) -> Result<&'a ActorNode, ToolError> {
-    let graph = module.graph()?;
-    graph.actors.iter().find(|a| a.name == name).ok_or_else(|| {
-        let available: Vec<&str> = graph.actors.iter().map(|a| a.name.as_str()).collect();
-        ToolError::with_data(
-            "not_found",
-            format!("`{name}` is not an actor in `{}`", module.file),
-            json!({ "available_actors": available }),
-        )
-    })
+/// The actor `name` names from the queried module's scope — a local actor,
+/// a selectively imported one, or `Qualifier.name` through a whole-module
+/// import — with its defining module. Falls back to `Module.name` for any
+/// program module, so an unimported sibling's actor is still reachable.
+/// Otherwise `not_found`, listing every actor of the program by the name
+/// the queried module would use.
+fn resolve_actor<'a>(
+    query: Query<'a>,
+    name: &str,
+) -> Result<(&'a Module, &'a ActorNode), ToolError> {
+    let program = query.program;
+    let (module, member) = query
+        .resolve(name)
+        .or_else(|| {
+            let (qualifier, member) = name.rsplit_once('.')?;
+            let module = program.modules.iter().find(|m| m.name == qualifier)?;
+            Some((module, member))
+        })
+        .unwrap_or((query.module, name));
+    if let Some(actor) = module.graph()?.actors.iter().find(|a| a.name == member) {
+        return Ok((module, actor));
+    }
+    let mut available = Vec::new();
+    for m in &program.modules {
+        let Ok(graph) = m.graph() else {
+            continue;
+        };
+        for actor in &graph.actors {
+            if std::ptr::eq(m, query.module) {
+                available.push(actor.name.clone());
+            } else {
+                let mut names = query.names_for(query.module, m, &actor.name);
+                if names.is_empty() {
+                    names.push(format!("{}.{}", m.name, actor.name));
+                }
+                available.extend(names);
+            }
+        }
+    }
+    Err(ToolError::with_data(
+        "not_found",
+        format!("`{name}` is not an actor in `{}`", query.module.file),
+        json!({ "available_actors": available }),
+    ))
 }
 
 /// The name a declaration binds.

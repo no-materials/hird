@@ -1,0 +1,25 @@
+module Boss
+
+use Worker
+use Worker.{Job}
+
+// Same name as the worker's tool; a different declaration.
+tool Run : { order: String } -> ()
+
+actor Chief {
+  state: Int,
+  message: BossMsg = | Kick,
+  init: fn(n: Int) ! {} = n,
+  handle Kick, n ! {Tool<Run>} = match run({ order: "go" }) { _ -> Continue(n) },
+} ! {Tool<Run>}
+
+supervisor ChiefSup {
+  strategy: one_for_one,
+  intensity: 3,
+  period: 60,
+  children: [
+    { id: chief, actor: Chief, start_args: 0, restart: permanent },
+  ]
+}
+
+fn describe(j: Job) -> String = match j { Job(s) -> s }

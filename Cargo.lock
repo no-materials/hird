@@ -550,6 +550,7 @@ dependencies = [
  "hird-lex",
  "hird-parse",
  "hird-types",
+ "serde",
  "serde_json",
 ]
 

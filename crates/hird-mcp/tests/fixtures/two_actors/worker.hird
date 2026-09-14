@@ -1,0 +1,22 @@
+module Worker
+
+pub type Job = Job(String)
+
+tool Run : { job: String } -> ()
+
+// Runs one job at a time.
+actor Runner {
+  state: Int,
+  message: WorkerMsg = | Do(Job),
+  init: fn(n: Int) ! {} = n,
+  handle Do(Job(s)), n ! {Tool<Run>} = match run({ job: s }) { _ -> Continue(n + 1) },
+} ! {Tool<Run>}
+
+supervisor RunnerSup {
+  strategy: one_for_one,
+  intensity: 3,
+  period: 60,
+  children: [
+    { id: runner, actor: Runner, start_args: 0, restart: permanent },
+  ]
+}

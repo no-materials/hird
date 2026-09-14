@@ -715,7 +715,11 @@ fn errors_are_structured_not_crashes() {
         json!({ "file": file, "actor_name": "analyze" }),
     );
     assert_eq!(error["code"], "not_found");
-    assert_eq!(error["data"]["available_actors"], json!(["Planner"]));
+    // The program's actors, siblings by the name this file would use.
+    assert_eq!(
+        error["data"]["available_actors"],
+        json!(["Planner", "CounterDemo.Counter", "Heartbeat.Heart"])
+    );
 
     // A parse error comes back with diagnostics.
     let broken = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("broken.hird");
@@ -1255,4 +1259,100 @@ fn type_aliases_answer_every_symbol_tool() {
     assert_eq!(result["type"], "\u{2200}a. (a, a)");
     let result = call_tool(&mut server, "get_context_budget", json!({ "file": file }));
     assert!(result["approx_tokens"]["types"].as_u64().expect("a count") > 0);
+}
+
+// ── actors across modules ───────────────────────────────────────
+
+/// The path of one file of the two-actor fixture (`boss.hird` imports
+/// `Worker`; both modules declare a tool named `Run`).
+fn two_actors_path(file: &str) -> String {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/two_actors")
+        .join(file)
+        .display()
+        .to_string()
+}
+
+#[test]
+fn actor_protocol_resolves_an_imported_actor() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "explain_actor_protocol",
+        json!({ "file": two_actors_path("boss.hird"), "actor_name": "Worker.Runner" }),
+    );
+    assert_eq!(result["module"], "Worker");
+    assert!(
+        result["file"]
+            .as_str()
+            .expect("a file")
+            .ends_with("worker.hird"),
+        "{result}"
+    );
+    assert_eq!(result["actor"]["name"], "Runner");
+    assert_eq!(result["actor"]["message"]["name"], "WorkerMsg");
+}
+
+#[test]
+fn actor_effect_graph_crosses_into_the_imported_module() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "emit_actor_effect_graph",
+        json!({ "file": two_actors_path("boss.hird"), "actor_name": "Worker.Runner" }),
+    );
+    assert_eq!(result["module"], "Worker");
+    assert_eq!(result["root"], "Runner");
+    let names = |key: &str| -> Vec<(String, String)> {
+        result[key]
+            .as_array()
+            .expect(key)
+            .iter()
+            .map(|n| {
+                (
+                    n["module"].as_str().expect("a module tag").to_owned(),
+                    n["name"].as_str().expect("a name").to_owned(),
+                )
+            })
+            .collect()
+    };
+    let pair = |m: &str, n: &str| (m.to_owned(), n.to_owned());
+    assert_eq!(names("actors"), [pair("Worker", "Runner")]);
+    assert_eq!(names("supervisors"), [pair("Worker", "RunnerSup")]);
+    assert_eq!(names("tools"), [pair("Worker", "Run")]);
+    assert_eq!(result["tools"][0]["input"]["display"], "{ job: String }");
+}
+
+#[test]
+fn actor_effect_graph_keeps_same_named_tools_apart() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "emit_actor_effect_graph",
+        json!({ "file": two_actors_path("boss.hird"), "actor_name": "Chief" }),
+    );
+    assert_eq!(result["module"], "Boss");
+    let tools = result["tools"].as_array().expect("tools");
+    assert_eq!(tools.len(), 1, "{result}");
+    assert_eq!(tools[0]["module"], "Boss");
+    assert_eq!(tools[0]["name"], "Run");
+    assert_eq!(tools[0]["input"]["display"], "{ order: String }");
+    assert_eq!(result["actors"][0]["module"], "Boss");
+    assert_eq!(result["supervisors"][0]["name"], "ChiefSup");
+}
+
+#[test]
+fn unknown_actor_lists_the_program_actors_by_reachable_name() {
+    let mut server = Server::new();
+    let error = call_tool_err(
+        &mut server,
+        "explain_actor_protocol",
+        json!({ "file": two_actors_path("boss.hird"), "actor_name": "Nobody" }),
+    );
+    assert_eq!(error["code"], "not_found");
+    assert_eq!(
+        error["data"]["available_actors"],
+        json!(["Chief", "Worker.Runner"]),
+        "{error}"
+    );
 }

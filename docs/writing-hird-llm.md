@@ -137,7 +137,7 @@ position (`line`/`column` to an exclusive `end_line`/`end_column`).
 | `explain_effect_row(file, fn_name)` | A function's row with each effect explained. |
 | `render_ir_fragment(file, name)` | IR JSON for one definition. |
 | `explain_actor_protocol(file, actor_name)` | Message constructors, state type, handler signatures, effect summary. |
-| `emit_actor_effect_graph(file, actor_name)` | Actor/effect graph rooted at the actor: supervisors, transitive tool effects. |
+| `emit_actor_effect_graph(file, actor_name)` | Actor/effect graph rooted at the actor across the whole program: supervisors, transitive tool effects, each node tagged with its module. `actor_name` may be `Qualifier.name`. |
 | `get_context_for_symbol(file, name, budget)` | Token-budget-aware symbol summary (type, row, callers, callees). |
 | `get_context_budget(file)` | Approximate token cost of the project's types/effects/actors/tools. |
 
