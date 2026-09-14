@@ -65,3 +65,63 @@ per module. Declarations are located by `file:line`, where `file` is the
 module's own file name (`agent_fleet.hird:12`), never a checkout path, so
 the text is stable across machines. The text is for reading; commit and
 diff the JSON.
+
+## Diffing against a baseline
+
+```sh
+hird emit-effect-graph src --json > effects.json   # commit this
+hird effect-diff effects.json src                  # in CI
+```
+
+`effect-diff` re-emits the graph, diffs it against the baseline under the
+identity contract, prints every change, and exits nonzero when effect
+reach *widened*. A baseline from another `schema_version` is refused.
+
+Every change carries one of three severities:
+
+| Severity | Meaning | Examples |
+|---|---|---|
+| `widened` | The program may reach more than the baseline allowed. Fails the gate. | A row gains an effect or opens; a constructor is added, removed, or reshaped; an actor or tool is added; a function or supervisor is added with a non-empty row. |
+| `narrowed` | The program reaches less. | A row loses an effect or closes; a declaration or module is removed. |
+| `changed` | Reach is the same; the shape moved. | A type in a signature; a supervisor's strategy, budget, or child set; a pure declaration added; a module added. |
+
+The text form prints one line per change, severity first:
+
+```
+widened  AgentPlanner actor Planner: handle Shutdown gains Tool<Probe>
+widened  AgentPlanner actor Planner: summary gains Tool<Probe>
+widened  AgentPlanner supervisor PlannerSup: summary gains Tool<Probe>
+widened  AgentPlanner tool Probe: added
+
+4 widened, 0 narrowed, 0 changed
+effect reach widened
+```
+
+`--json` prints the report as a document of its own:
+
+```json
+{
+  "schema_version": 1,
+  "widens": true,
+  "changes": [
+    {
+      "module": "AgentPlanner",
+      "kind": "actor",
+      "name": "Planner",
+      "severity": "widened",
+      "detail": { "change": "row", "site": "handle Shutdown", "added": ["Tool<Probe>"], "removed": [], "opened": null }
+    }
+  ]
+}
+```
+
+`kind` is `module`, `actor`, `supervisor`, `tool`, or `function`. `detail`
+is tagged by `change`: `added`, `removed`, `row` (`site`, `added`,
+`removed`, `opened`), `constructors` (`added`, `removed`, `changed`),
+`type` (`site`, `before`, `after`), `supervision` (`field`, `before`,
+`after`), or `children` (`added`, `removed`, `changed`). Changes are
+ordered by module, kind, then name. The report's `schema_version` is `1`
+and evolves additively, like the graph's.
+
+The diff lives in the `hird-policy` crate, so other tooling can gate on
+it without going through the CLI.

@@ -1144,3 +1144,118 @@ fn emit_effect_graph_keys_directory_output_by_module() {
     );
     assert!(!out.contains(dir_arg), "text embeds the input path: {out}");
 }
+
+// ── effect-diff ─────────────────────────────────────────────────
+
+/// `PLANNER` with `Tool<Log>` added to the handler row and summary.
+fn widened_planner() -> String {
+    PLANNER
+        .replace(
+            "tool ReadRepo : { path: Path } -> RepoState\n",
+            "tool ReadRepo : { path: Path } -> RepoState\ntool Log : { message: String } -> ()\n",
+        )
+        .replace(
+            "handle PlanRepo(p), st ! {Tool<ReadRepo>} = Continue(read(p, st)),",
+            "handle PlanRepo(p), st ! {Tool<ReadRepo>, Tool<Log>} = match log({ message: \"plan\" }) { _ -> Continue(read(p, st)) },",
+        )
+        .replace("} ! {Tool<ReadRepo>}", "} ! {Tool<ReadRepo>, Tool<Log>}")
+}
+
+/// Writes `PLANNER`'s baseline into `dir`, returning its path.
+fn planner_baseline(dir: &Path) -> String {
+    let file = write(dir, "planner.hird", PLANNER);
+    let json = hird(&["emit-effect-graph", &file, "--json"]);
+    assert!(json.status.success(), "stderr: {}", stderr(&json));
+    let baseline = dir.join("baseline.json");
+    fs::write(&baseline, stdout(&json)).expect("write baseline");
+    baseline.display().to_string()
+}
+
+#[test]
+fn effect_diff_passes_an_unchanged_program() {
+    let dir = scratch("effect_diff_same");
+    let baseline = planner_baseline(&dir);
+    let file = dir.join("planner.hird").display().to_string();
+    let output = hird(&["effect-diff", &baseline, &file]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(out.contains("no changes"), "stdout: {out}");
+    assert!(out.contains("effect reach not widened"), "stdout: {out}");
+}
+
+#[test]
+fn effect_diff_fails_when_reach_widens() {
+    let dir = scratch("effect_diff_widen");
+    let baseline = planner_baseline(&dir);
+    let file = write(&dir, "planner.hird", &widened_planner());
+
+    let output = hird(&["effect-diff", &baseline, &file]);
+    assert!(!output.status.success(), "widening must exit nonzero");
+    let out = stdout(&output);
+    assert!(
+        out.contains("widened  Planner actor Planner: handle PlanRepo gains Tool<Log>"),
+        "stdout: {out}"
+    );
+    assert!(
+        out.contains("widened  Planner tool Log: added"),
+        "stdout: {out}"
+    );
+    assert!(out.contains("effect reach widened"), "stdout: {out}");
+
+    let json = hird(&["effect-diff", &baseline, &file, "--json"]);
+    assert!(
+        !json.status.success(),
+        "widening must exit nonzero in JSON mode too"
+    );
+    let doc: serde_json::Value = serde_json::from_str(&stdout(&json)).expect("valid JSON");
+    assert_eq!(doc["schema_version"], 1);
+    assert_eq!(doc["widens"], true);
+    let changes = doc["changes"].as_array().expect("changes array");
+    assert!(
+        changes.iter().any(|c| c["kind"] == "actor"
+            && c["name"] == "Planner"
+            && c["severity"] == "widened"
+            && c["detail"]["change"] == "row"
+            && c["detail"]["added"][0] == "Tool<Log>"),
+        "{doc}"
+    );
+}
+
+#[test]
+fn effect_diff_reports_narrowing_and_passes() {
+    let dir = scratch("effect_diff_narrow");
+    let baseline = planner_baseline(&dir);
+    let narrowed = PLANNER
+        .replace(
+            "handle PlanRepo(p), st ! {Tool<ReadRepo>} = Continue(read(p, st)),",
+            "handle PlanRepo(p), st ! {} = Continue(st),",
+        )
+        .replace("} ! {Tool<ReadRepo>}", "} ! {}");
+    let file = write(&dir, "planner.hird", &narrowed);
+    let output = hird(&["effect-diff", &baseline, &file]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(
+        out.contains("narrowed Planner actor Planner: handle PlanRepo loses Tool<ReadRepo>"),
+        "stdout: {out}"
+    );
+    assert!(out.contains("effect reach not widened"), "stdout: {out}");
+}
+
+#[test]
+fn effect_diff_rejects_a_foreign_baseline() {
+    let dir = scratch("effect_diff_bad");
+    let file = write(&dir, "planner.hird", PLANNER);
+    let bogus = write(
+        &dir,
+        "bogus.json",
+        "{\"schema_version\": 99, \"modules\": {}}",
+    );
+    let output = hird(&["effect-diff", &bogus, &file]);
+    assert!(!output.status.success(), "a foreign schema must fail");
+    assert!(
+        stderr(&output).contains("schema version 99"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}

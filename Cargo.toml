@@ -11,6 +11,7 @@ members = [
     "crates/hird-lsp",
     "crates/hird-mcp",
     "crates/hird-parse",
+    "crates/hird-policy",
     "crates/hird-types",
 ]
 
@@ -95,4 +96,5 @@ hird-lex = { path = "crates/hird-lex" }
 hird-lsp = { path = "crates/hird-lsp" }
 hird-mcp = { path = "crates/hird-mcp" }
 hird-parse = { path = "crates/hird-parse" }
+hird-policy = { path = "crates/hird-policy" }
 hird-types = { path = "crates/hird-types" }

@@ -1,0 +1,22 @@
+[package]
+name = "hird-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Effect-graph policy: baseline diffing and widening classification"
+publish = false
+
+[dependencies]
+hird-ir.workspace = true
+serde = { default-features = false, features = ["alloc", "derive"], version = "1" }
+
+[dev-dependencies]
+hird-ast.workspace = true
+hird-check.workspace = true
+hird-parse.workspace = true
+serde_json = "1"
+
+[lints]
+workspace = true

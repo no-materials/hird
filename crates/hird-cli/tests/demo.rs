@@ -614,3 +614,66 @@ fn the_demo_subcommand_records_a_run_and_prints_the_divergence_table() {
     let out = stdout(&again);
     assert!(out.contains(table), "stdout: {out}");
 }
+
+/// The CI gate on the demo: its committed graph is the baseline, and
+/// giving the Planner one more tool fails the diff naming the actor and
+/// the effect it gained.
+#[test]
+fn demo_effect_diff_fails_when_the_planner_gains_a_tool() {
+    let dir = scratch("demo_effect_diff");
+    let path = demo_path();
+    let json = hird(&[
+        "emit-effect-graph",
+        path.to_str().expect("utf-8 path"),
+        "--json",
+    ]);
+    assert!(json.status.success(), "stderr: {}", stderr(&json));
+    let baseline = dir.join("baseline.json");
+    fs::write(&baseline, stdout(&json)).expect("write baseline");
+
+    let demo = fs::read_to_string(&path).expect("read the demo source");
+    let widened = demo
+        .replace(
+            "tool Log : LogArgs \u{2192} ()\n",
+            "tool Log : LogArgs \u{2192} ()\ntool Probe : LogArgs \u{2192} ()\n",
+        )
+        .replace(
+            "handle Shutdown, _ ! {} = Stop,",
+            "handle Shutdown, _ ! {Tool<Probe>} = probe({ level: \"info\", message: \"probe\" }); Stop,",
+        )
+        .replace(
+            "} ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Send<PlannerStatus>}",
+            "} ! {Tool<ReadRepo>, Tool<CreateTicket>, Tool<Log>, Tool<Probe>, Send<PlannerStatus>}",
+        );
+    assert_ne!(widened, demo, "the demo source no longer matches the edits");
+    let edited = dir.join("agent_planner.hird");
+    fs::write(&edited, widened).expect("write the edited demo");
+
+    let output = hird(&[
+        "effect-diff",
+        baseline.to_str().expect("utf-8 path"),
+        edited.to_str().expect("utf-8 path"),
+    ]);
+    assert!(!output.status.success(), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(
+        out.contains("widened  AgentPlanner actor Planner: handle Shutdown gains Tool<Probe>"),
+        "stdout: {out}"
+    );
+    assert!(
+        out.contains("widened  AgentPlanner tool Probe: added"),
+        "stdout: {out}"
+    );
+
+    let same = hird(&[
+        "effect-diff",
+        baseline.to_str().expect("utf-8 path"),
+        path.to_str().expect("utf-8 path"),
+    ]);
+    assert!(same.status.success(), "stderr: {}", stderr(&same));
+    assert!(
+        stdout(&same).contains("no changes"),
+        "stdout: {}",
+        stdout(&same)
+    );
+}

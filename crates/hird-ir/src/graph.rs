@@ -11,7 +11,9 @@
 //! functions (signature and declared row). Types and
 //! effect rows are rendered both structurally and as canonical
 //! surface-syntax strings. The schema is versioned by
-//! [`EFFECT_GRAPH_SCHEMA_VERSION`] and evolves additively only.
+//! [`EFFECT_GRAPH_SCHEMA_VERSION`] and evolves additively only: a field
+//! added after the version was minted carries `#[serde(default)]`, so a
+//! baseline written before it still loads.
 //!
 //! A [`ProgramGraph`] gathers the graphs of one program keyed by module
 //! name; the CLI emits it for single files and directories alike.
@@ -41,7 +43,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use hird_types::{Effect, EffectRow, Type};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ir::{
     IrActorDef, IrDecl, IrFnDef, IrModule, IrParam, IrPattern, IrSupervisorDef, IrToolDef,
@@ -54,7 +56,7 @@ pub const EFFECT_GRAPH_SCHEMA_VERSION: u32 = 1;
 
 /// The effect graphs of one program, keyed by module name: the CLI's
 /// `--json` document for single files and directories alike.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProgramGraph {
     /// Schema version of this projection ([`EFFECT_GRAPH_SCHEMA_VERSION`]).
     pub schema_version: u32,
@@ -75,7 +77,7 @@ impl ProgramGraph {
 }
 
 /// The actor/effect graph of one module.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EffectGraph {
     /// Schema version of this projection ([`EFFECT_GRAPH_SCHEMA_VERSION`]).
     pub schema_version: u32,
@@ -87,7 +89,9 @@ pub struct EffectGraph {
     pub supervisors: Vec<SupervisorNode>,
     /// Tool declarations, in source order.
     pub tools: Vec<ToolNode>,
-    /// Plain function declarations, in source order.
+    /// Plain function declarations, in source order. Absent from graphs
+    /// emitted before the field existed; read as empty.
+    #[serde(default)]
     pub functions: Vec<FnNode>,
 }
 
@@ -114,7 +118,7 @@ impl EffectGraph {
 }
 
 /// An actor: mailbox type, init, handlers, and its declared effect summary.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActorNode {
     /// The actor's name.
     pub name: String,
@@ -133,7 +137,7 @@ pub struct ActorNode {
 }
 
 /// An actor's message sum type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageNode {
     /// The message type's name.
     pub name: String,
@@ -142,7 +146,7 @@ pub struct MessageNode {
 }
 
 /// One constructor of a message type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructorNode {
     /// The constructor's name.
     pub name: String,
@@ -151,7 +155,7 @@ pub struct ConstructorNode {
 }
 
 /// An actor's init member.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InitNode {
     /// The init parameters.
     pub params: Vec<ParamNode>,
@@ -160,7 +164,7 @@ pub struct InitNode {
 }
 
 /// A named, typed parameter.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParamNode {
     /// The parameter's name.
     pub name: String,
@@ -170,7 +174,7 @@ pub struct ParamNode {
 }
 
 /// One message handler of an actor.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandlerNode {
     /// The handled message constructor's name.
     pub message: String,
@@ -179,7 +183,7 @@ pub struct HandlerNode {
 }
 
 /// A supervisor: strategy, restart budget, and supervised children.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SupervisorNode {
     /// The supervisor's name.
     pub name: String,
@@ -198,7 +202,7 @@ pub struct SupervisorNode {
 }
 
 /// One supervised child.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChildNode {
     /// The child's id.
     pub id: String,
@@ -209,7 +213,7 @@ pub struct ChildNode {
 }
 
 /// A tool declaration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolNode {
     /// The tool's marker-type name.
     pub name: String,
@@ -227,7 +231,7 @@ pub struct ToolNode {
 }
 
 /// A plain function declaration: its signature and declared row.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FnNode {
     /// The function's name.
     pub name: String,
@@ -242,7 +246,7 @@ pub struct FnNode {
 }
 
 /// A type, rendered canonically and structurally.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeRef {
     /// Canonical surface-syntax rendering (e.g. `List<Option<a>>`).
     pub display: String,
@@ -251,7 +255,7 @@ pub struct TypeRef {
 }
 
 /// The structural rendering of a type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum TypeStructure {
     /// A type variable.
@@ -297,7 +301,7 @@ pub enum TypeStructure {
 }
 
 /// An effect row, rendered canonically and structurally.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EffectRowRef {
     /// Canonical surface-syntax rendering (e.g. `{Log, Tool<ReadRepo>}`).
     pub display: String,
@@ -308,7 +312,7 @@ pub struct EffectRowRef {
 }
 
 /// One effect of a row.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EffectRef {
     /// Canonical surface-syntax rendering (e.g. `Tool<ReadRepo>`).
     pub display: String,

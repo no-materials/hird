@@ -4,6 +4,7 @@
 //! Hirð compiler CLI: type-check, compile to Erlang/BEAM, run, and dump the
 //! typed AST or the actor/effect graph.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -107,6 +108,17 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Compare the effect graph against a committed baseline; exit nonzero
+    /// when effect reach widens.
+    EffectDiff {
+        /// A baseline written by `emit-effect-graph --json`.
+        baseline: PathBuf,
+        /// A `.hird` file, or a directory of independent `.hird` modules.
+        input: PathBuf,
+        /// Emit the structured JSON report instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -194,7 +206,49 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             }
             Ok(ExitCode::SUCCESS)
         }
+        Command::EffectDiff {
+            baseline,
+            input,
+            json,
+        } => {
+            let baseline = load_baseline(&baseline)?;
+            let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
+            let current = hird_ir::ProgramGraph::new(
+                modules.iter().map(|m| hird_ir::effect_graph(&m.lower())),
+            );
+            let report = hird_policy::diff(&baseline, &current);
+            if json {
+                let rendered = serde_json::to_string_pretty(&report)
+                    .map_err(|e| fail!("cannot serialize diff report: {e}"))?;
+                println!("{rendered}");
+            } else {
+                print!("{}", text::render_diff(&report));
+            }
+            Ok(if report.widens {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            })
+        }
     }
+}
+
+/// Reads a baseline written by `emit-effect-graph --json`, refusing one
+/// from another schema version.
+fn load_baseline(path: &Path) -> Result<hird_ir::ProgramGraph, Failure> {
+    let text = fs::read_to_string(path)
+        .map_err(|e| fail!("cannot read baseline `{}`: {e}", path.display()))?;
+    let graph: hird_ir::ProgramGraph = serde_json::from_str(&text)
+        .map_err(|e| fail!("`{}` is not an effect-graph baseline: {e}", path.display()))?;
+    if graph.schema_version != hird_ir::EFFECT_GRAPH_SCHEMA_VERSION {
+        return Err(fail!(
+            "baseline `{}` has schema version {}; this hird reads version {}",
+            path.display(),
+            graph.schema_version,
+            hird_ir::EFFECT_GRAPH_SCHEMA_VERSION
+        ));
+    }
+    Ok(graph)
 }
 
 /// Checks `input` and builds it into `out_dir`; the audit stream goes to

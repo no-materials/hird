@@ -347,6 +347,7 @@ restart makes sense, it is a crash. The normative treatment is in
 | `hird run <input>` | Build, then run on BEAM via the boot module. |
 | `hird emit-ast <input> [--json]` | Dump the typed IR of one file. |
 | `hird emit-effect-graph <input> [--json]` | Dump the actor/effect graph: actors, mailboxes, per-handler rows, supervisors, tools, function rows. JSON is keyed by module; see [`effect-graph.md`](effect-graph.md). |
+| `hird effect-diff <baseline> <input> [--json]` | Diff the effect graph against a committed baseline; exit nonzero when effect reach widens. See [`effect-graph.md`](effect-graph.md). |
 | `hird demo` | Record one run of the built-in demo planner, replay it against variants of the program, print the divergence table. |
 
 `<input>` is a `.hird` file or a directory of modules. `hird run`

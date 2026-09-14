@@ -18,6 +18,7 @@ hird-check.workspace = true
 hird-codegen.workspace = true
 hird-ir.workspace = true
 hird-parse = { features = ["std"], workspace = true }
+hird-policy.workspace = true
 hird-types.workspace = true
 
 clap = { features = ["derive"], version = "4" }

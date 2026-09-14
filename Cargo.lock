@@ -482,6 +482,7 @@ dependencies = [
  "hird-codegen",
  "hird-ir",
  "hird-parse",
+ "hird-policy",
  "hird-types",
  "miette",
  "serde_json",
@@ -561,6 +562,18 @@ dependencies = [
  "insta",
  "miette",
  "proptest",
+]
+
+[[package]]
+name = "hird-policy"
+version = "0.3.0"
+dependencies = [
+ "hird-ast",
+ "hird-check",
+ "hird-ir",
+ "hird-parse",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

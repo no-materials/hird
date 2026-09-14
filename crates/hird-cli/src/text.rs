@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Human-readable rendering of the actor/effect graph (the
-//! `emit-effect-graph` default; `--json` serializes the same projection).
+//! `emit-effect-graph` default; `--json` serializes the same projection)
+//! and of an effect-diff report.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 use hird_ir::{EffectGraph, EffectRowRef};
+use hird_policy::{GraphDiff, Severity};
 
 /// Renders `graph` as indented text, locating nodes by `file:line`, where
 /// `file` is the final component of `path`: the module's own file name, not
@@ -119,4 +121,39 @@ fn row_suffix(row: &EffectRowRef) -> String {
     } else {
         format!(" ! {}", row.display)
     }
+}
+
+/// Renders `diff` as one line per change, then a count and the verdict.
+pub(crate) fn render_diff(diff: &GraphDiff) -> String {
+    let mut out = String::new();
+    for change in &diff.changes {
+        let _ = writeln!(out, "{:<8} {change}", change.severity.to_string());
+    }
+    if diff.changes.is_empty() {
+        let _ = writeln!(out, "no changes");
+    } else {
+        let count = |severity: Severity| {
+            diff.changes
+                .iter()
+                .filter(|c| c.severity == severity)
+                .count()
+        };
+        let _ = writeln!(
+            out,
+            "\n{} widened, {} narrowed, {} changed",
+            count(Severity::Widened),
+            count(Severity::Narrowed),
+            count(Severity::Changed)
+        );
+    }
+    let _ = writeln!(
+        out,
+        "{}",
+        if diff.widens {
+            "effect reach widened"
+        } else {
+            "effect reach not widened"
+        }
+    );
+    out
 }
