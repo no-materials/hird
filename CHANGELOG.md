@@ -10,8 +10,51 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-15
+
 ### Added
 
+- **`hird effect-diff`, a gate on effect reach.** A new `hird-policy`
+  crate diffs a committed effect graph against a freshly emitted one
+  under the graph's identity contract and classifies every change: a row
+  gaining an effect or opening, a protocol constructor added, removed, or
+  reshaped, and a new actor or tool *widen*; a removal *narrows*; a
+  signature change, a supervision change, and a pure addition are
+  neutral. `hird effect-diff <baseline> <input>` re-emits the graph,
+  prints the report as text or `--json`, and exits nonzero when reach
+  widened, so a change cannot quietly grant a program more than its
+  baseline allowed. `--exact` exits nonzero on any drift, so a narrowing
+  cannot leave the baseline over-granting either. A baseline written
+  under another `schema_version` is refused; fields added after schema 1
+  default when absent.
+- **The approved-baseline workflow, dogfooded.** `demo/effect-baselines/`
+  holds one committed graph per demo program, `demo/effect-baselines.sh`
+  checks or regenerates them, a CI job runs the check, and a test guards
+  them locally, so a change that moves a graph must update its baseline
+  in the same reviewable diff. `docs/effect-graph.md` states the JSON
+  shape, the identity contract — which fields a diff compares, and which
+  (every `line`, and source order) it ignores — and the copyable recipe.
+- **Functions in the effect graph.** The graph gains a `functions`
+  section: name, line, parameters, result, and the declared row, so a
+  reviewer reads off the graph that a plain function is honestly
+  `! {Tool<X>}` and nothing more. The text form prints one `fn` line per
+  declaration. Additive under schema version 1.
+- **`pub` tools, actors, and supervisors cross module boundaries.** A
+  `pub tool` exports its marker — for `Tool<Name>` rows and `handle`
+  arms — and its generated function; a `pub actor` exports the actor
+  entry for `spawn` and child specs and its message type transparently,
+  so another module names `Pid<Msg>` and builds messages; a `pub
+  supervisor` exports the name for `supervise` and `child`. Each imports
+  selectively by name, and a qualifier import reaches the tool function.
+  Supervisor children carry their actor's message type, so `child()` on
+  an imported supervisor types without importing the actor. The IR
+  records an imported tool under the qualified spelling its calls carry,
+  and codegen routes those calls through the tool dispatcher rather than
+  emitting a remote call into a function the declaring module never
+  emits.
+- **`docs/context-packing.md`.** Real `get_context_for_symbol`
+  transcripts for the demo `Planner` actor at 50 and 400 tokens, what
+  each budget dropped and why, with a README pointer.
 - **MCP resources and an authoring prompt.** `hird-mcp` advertises
   `resources` and `prompts` alongside `tools`. Three resources serve the
   documents an agent otherwise had to be handed out of band, embedded in
@@ -67,6 +110,22 @@ schedule and is not covered by these entries.
 
 ### Changed
 
+- **`emit-effect-graph --json` is keyed by module.** The flag emitted a
+  single module's graph; it now emits one document for a file and a
+  directory alike — `schema_version` plus `modules`, the program's module
+  graphs keyed by module name and sorted by it, each still carrying its
+  own `schema_version` and `module` so one graph stays self-describing
+  when consumed alone. A consumer of the 0.3 shape now reads through
+  `modules`. The text form locates declarations by the module's own file
+  name (`agent_fleet.hird:12`), never a checkout path, so it is stable
+  across machines.
+- **MCP actor tools follow imports.** `explain_actor_protocol` and
+  `emit_actor_effect_graph` take `actor_name` as the file would write it:
+  local, selectively imported, `Qualifier.name` through a `use`, or
+  `Module.name` for any module in the program. Actor reach is now built
+  program-wide, resolving each row's type names through the naming
+  module's own scope so same-named declarations in two modules stay
+  distinct, and every emitted node carries a module tag.
 - **MCP diagnostics carry codes, hints, and positions.** Parse diagnostics
   in `error.data.diagnostics` now include their `P…` code and `help` hint
   (they carried message and line only); parse and check diagnostics alike
@@ -275,6 +334,7 @@ The v0.1 milestone: a typed language for agent systems on BEAM with
 effect-row tracking, auditable tool effects, typed actors, and OTP
 supervision, plus LSP and MCP servers over the same compiler pipeline.
 
+[0.4.0]: https://github.com/no-materials/hird/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/no-materials/hird/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/no-materials/hird/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/no-materials/hird/compare/v0.1.0...v0.1.1

@@ -449,11 +449,11 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hird-actors"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "hird-ast"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cstree",
  "hird-parse",
@@ -461,7 +461,7 @@ dependencies = [
 
 [[package]]
 name = "hird-check"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hird-ast",
  "hird-lex",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "hird-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "ctrlc",
@@ -490,7 +490,7 @@ dependencies = [
 
 [[package]]
 name = "hird-codegen"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hird-ast",
  "hird-check",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "hird-ir"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hird-ast",
  "hird-check",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "hird-lex"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "insta",
  "proptest",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "hird-lsp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cstree",
  "futures",
@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "hird-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cstree",
  "hird-ast",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "hird-parse"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cstree",
  "hird-lex",
@@ -567,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "hird-policy"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hird-ast",
  "hird-check",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "hird-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hird-lex",
 ]
