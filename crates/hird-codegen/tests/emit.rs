@@ -714,3 +714,107 @@ fn demo_programs_compile_with_erlc_without_warnings() {
     }
     assert!(seen > 0, "no demo programs found in {}", demos.display());
 }
+
+// ── tools called across modules ─────────────────────────────────
+
+/// Parses, checks, and lowers a whole program, returning the module named
+/// `name`.
+fn lower_program(sources: &[(&str, &str)], name: &str) -> IrModule {
+    use hird_check::ModuleName;
+
+    let program: Vec<(ModuleName, SourceFile)> = sources
+        .iter()
+        .map(|(module, src)| {
+            let parsed = hird_parse::parse(src, 0);
+            assert!(
+                parsed.is_ok(),
+                "module `{module}` has parse errors: {:?}",
+                parsed.diagnostics()
+            );
+            (
+                ModuleName::new(*module),
+                SourceFile::cast(parsed.syntax().clone()).expect("root is a source file"),
+            )
+        })
+        .collect();
+    let mut checked = hird_check::check_program(&program);
+    let module = checked
+        .modules
+        .remove(&ModuleName::new(name))
+        .expect("module was checked");
+    assert!(
+        !module.has_errors(),
+        "type errors: {:?}",
+        module.diagnostics
+    );
+    let (_, file) = program
+        .iter()
+        .find(|(m, _)| m.as_str() == name)
+        .expect("module is in the program");
+    hird_ir::lower_module(file, &module, name)
+}
+
+/// A worker module exporting a tool and an actor, and an app that calls the
+/// tool by its imported name, through a qualifier, and as a value, and
+/// spawns the imported actor.
+const CROSS_MODULE: &[(&str, &str)] = &[
+    (
+        "Worker",
+        "module Worker\n\
+         pub tool Run : { job: String } -> ()\n\
+         pub actor Runner {\n\
+           state: Int,\n\
+           message: WorkerMsg = | Do(String),\n\
+           init: fn(n: Int) ! {} = n,\n\
+           handle Do(s), n ! {Tool<Run>} = match run({ job: s }) { _ -> Continue(n + 1) },\n\
+         } ! {Tool<Run>}",
+    ),
+    (
+        "App",
+        "module App\n\
+         use Worker.{Run, Runner, WorkerMsg, Do}\n\
+         use Worker as W\n\
+         pub fn go(j: String) -> () ! {Tool<Run>} = run({ job: j })\n\
+         pub fn again(j: String) -> () ! {Tool<Run>} = W.run({ job: j })\n\
+         pub fn as_value() -> ({ job: String }) -> () ! {Tool<Run>} = W.run\n\
+         pub fn dry(j: String) -> () = handle { Tool<Run> -> \\a -> () } in go(j)\n\
+         pub fn start(j: String) -> () ! {Spawn<WorkerMsg>, Send<WorkerMsg>} =\n\
+           let p = spawn(Runner, 0) in send(p, Do(j))",
+    ),
+];
+
+/// An imported tool's calls route through the dispatcher under the tool's
+/// bare name, never as a remote call into the declaring module (which emits
+/// no function for a tool); the spawn of an imported actor names the
+/// actor's own module.
+#[test]
+fn imported_tool_calls_dispatch_like_local_ones() {
+    let module = lower_program(CROSS_MODULE, "App");
+    let app = emit_modules(&module, "src/app.hird").swap_remove(0).source;
+    assert_eq!(
+        app.matches("hird_tool_dispatch:call(run, ").count(),
+        3,
+        "{app}"
+    );
+    assert!(!app.contains("hird_worker:run"), "{app}");
+    assert!(!app.contains("hird_w:run"), "{app}");
+    assert!(!app.contains("hird_tools@"), "{app}");
+    assert!(app.contains("hird_runner:start_link(0)"), "{app}");
+    insta::assert_snapshot!(app);
+}
+
+/// Both modules of the cross-module program compile with stock `erlc`.
+#[test]
+fn cross_module_program_compiles_with_erlc() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("erlc");
+    std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
+    for (name, _) in CROSS_MODULE {
+        let module = lower_program(CROSS_MODULE, name);
+        let modules = emit_modules(&module, &format!("src/{}.hird", name.to_lowercase()));
+        assert_erlc_clean(&dir, &modules);
+    }
+}

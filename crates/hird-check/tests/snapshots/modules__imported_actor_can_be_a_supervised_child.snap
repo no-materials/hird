@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\",\n\"module App\\n\\\n             use Worker.{Runner, WorkerMsg}\\n\\\n             supervisor AppSup {\\n\\\n               strategy: one_for_one,\\n\\\n               intensity: 1,\\n\\\n               period: 5,\\n\\\n               children: [\\n\\\n                 { id: worker, actor: Runner, start_args: 1, restart: transient },\\n\\\n               ]\\n\\\n             }\\n\\\n             pub fn worker() -> Pid<WorkerMsg> = child(AppSup, worker)\",),])"
+---
+== App ==
+worker : () → Pid<WorkerMsg>
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

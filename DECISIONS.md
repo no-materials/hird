@@ -987,6 +987,11 @@ ordinary namespaces, and what "state encapsulation" means mechanically.
 - Actors are module-local in v0.1: the module system does not export actors,
   so cross-module `spawn` is not yet expressible. Lifted when the module
   interface learns actor entries.
+  *Amended 2026-09-15*: lifted. `pub actor` exports the actor name and its
+  message type (transparently), `pub tool` the marker and generated function,
+  `pub supervisor` the supervisor name; each is imported selectively by its
+  own name. Qualified type paths stay out (ADR-010), so `Tool<Worker.Run>` is
+  still spelled through a selective import.
 - A future session-type layer slots in as new actor members or annotations
   without disturbing the sum-type mailbox core.
 

@@ -76,6 +76,28 @@ pub struct IrModule {
     /// source order. Imports are resolved away, and effect declarations are
     /// synthesised on printing rather than stored, so neither appears here.
     pub declarations: Vec<IrDecl>,
+    /// Tools other modules declare that this module calls, by the qualified
+    /// spelling those calls carry. The one trace of imports the IR keeps: a
+    /// tool call is a dispatcher call rather than a remote function call, so
+    /// codegen must know which qualified names are tools.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub imported_tools: Vec<IrToolRef>,
+}
+
+/// A tool declared by another module and called from this one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrToolRef {
+    /// The qualified spelling the module's calls carry (`Util.read_repo`):
+    /// the qualifier for a whole-module or aliased import, the module name
+    /// for a selective one.
+    pub name: String,
+    /// The declaring module.
+    pub module: String,
+    /// The tool's marker name (`ReadRepo`).
+    pub tool: String,
+    /// The tool function's type (a quantified scheme when generic).
+    #[serde(serialize_with = "serialize_type")]
+    pub ty: Type,
 }
 
 impl IrModule {

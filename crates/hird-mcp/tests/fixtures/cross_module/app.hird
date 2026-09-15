@@ -1,0 +1,13 @@
+module App
+
+use Worker.{Job, Run, Runner, WorkerMsg, Do}
+
+// Drives one worker: spawns it at init, forwards each kick as a job, and
+// runs the worker's tool itself.
+actor Chief {
+  state: Pid<WorkerMsg>,
+  message: ChiefMsg = | Kick,
+  init: fn(n: Int) ! {Spawn<WorkerMsg>} = spawn(Runner, n),
+  handle Kick, p ! {Send<WorkerMsg>, Tool<Run>} =
+    let sent = send(p, Do(Job("go"))) in match run({ job: "go" }) { _ -> Continue(p) },
+} ! {Spawn<WorkerMsg>, Send<WorkerMsg>, Tool<Run>}

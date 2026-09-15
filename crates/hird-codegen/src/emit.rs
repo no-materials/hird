@@ -307,6 +307,11 @@ impl<'a> Emitter<'a> {
                 IrDecl::Supervisor(_) => {}
             }
         }
+        // Another module's tools, under the qualified spelling their calls
+        // carry: dispatched like this module's own rather than remote-called.
+        for tool in &module.imported_tools {
+            tools.insert(tool.name.clone(), unquantified(&tool.ty).clone());
+        }
         Self {
             module,
             tools,
@@ -1186,7 +1191,7 @@ impl<'a> Emitter<'a> {
                 let args = self.expr(args_record, env, cx, indent, Ctx::Expr);
                 return format!(
                     "hird_tool_dispatch:call({}, {}, {handlers}, {args})",
-                    atom(&v.name),
+                    atom(dispatch_name(&v.name)),
                     caller_literal(env)
                 );
             }
@@ -1287,7 +1292,7 @@ impl<'a> Emitter<'a> {
                 let handlers = map_arg.unwrap_or_else(|| handlers_ref(env, cx));
                 return format!(
                     "hird_tool_dispatch:call({}, {}, {handlers}, {args_record})",
-                    atom(&v.name),
+                    atom(dispatch_name(&v.name)),
                     caller_literal(env)
                 );
             }
@@ -1325,7 +1330,7 @@ impl<'a> Emitter<'a> {
             let map = cx.fresh_internal("Handlers");
             return format!(
                 "fun({args}, {map}) -> hird_tool_dispatch:call({}, {}, {map}, {args}) end",
-                atom(&v.name),
+                atom(dispatch_name(&v.name)),
                 caller_literal(env)
             );
         }
@@ -1650,6 +1655,13 @@ fn unquantified(ty: &Type) -> &Type {
         Type::TyForall(_, _, body) => body,
         other => other,
     }
+}
+
+/// The dispatcher's name for a tool call: the bare generated function name,
+/// with any module qualifier of an imported tool stripped (`Util.read_repo`
+/// → `read_repo`).
+fn dispatch_name(name: &str) -> &str {
+    name.rsplit_once('.').map_or(name, |(_, member)| member)
 }
 
 /// `ty` as a function type, looking through quantifiers.

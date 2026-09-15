@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\", \"module App\\nuse Worker.{Runner}\\npub fn bad() -> Int = Runner\",),])"
+---
+== App ==
+bad : () → Int
+error[C0040] 53..59: `Runner` is an actor, not a value; its state is only accessible within its own handlers
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

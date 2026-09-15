@@ -1356,3 +1356,65 @@ fn unknown_actor_lists_the_program_actors_by_reachable_name() {
         "{error}"
     );
 }
+
+// ── actors, mailboxes, and tools exported across modules ────────
+
+/// The path of one file of the cross-module fixture: `app.hird` imports
+/// `Worker`'s exported actor, mailbox type, constructor, and tool by name.
+fn cross_module_path(file: &str) -> String {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/cross_module")
+        .join(file)
+        .display()
+        .to_string()
+}
+
+#[test]
+fn actor_effect_graph_follows_send_and_tool_edges_into_the_exporting_module() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "emit_actor_effect_graph",
+        json!({ "file": cross_module_path("app.hird"), "actor_name": "Chief" }),
+    );
+    assert_eq!(result["module"], "App");
+    assert_eq!(result["root"], "Chief");
+    let names = |key: &str| -> Vec<(String, String)> {
+        result[key]
+            .as_array()
+            .expect(key)
+            .iter()
+            .map(|n| {
+                (
+                    n["module"].as_str().expect("a module tag").to_owned(),
+                    n["name"].as_str().expect("a name").to_owned(),
+                )
+            })
+            .collect()
+    };
+    let pair = |m: &str, n: &str| (m.to_owned(), n.to_owned());
+    assert_eq!(
+        names("actors"),
+        [pair("App", "Chief"), pair("Worker", "Runner")],
+        "{result}"
+    );
+    assert_eq!(names("tools"), [pair("Worker", "Run")], "{result}");
+    assert_eq!(
+        names("supervisors"),
+        [pair("Worker", "RunnerSup")],
+        "{result}"
+    );
+}
+
+#[test]
+fn actor_protocol_resolves_a_selectively_imported_actor() {
+    let mut server = Server::new();
+    let result = call_tool(
+        &mut server,
+        "explain_actor_protocol",
+        json!({ "file": cross_module_path("app.hird"), "actor_name": "Runner" }),
+    );
+    assert_eq!(result["module"], "Worker");
+    assert_eq!(result["actor"]["name"], "Runner");
+    assert_eq!(result["actor"]["message"]["name"], "WorkerMsg");
+}

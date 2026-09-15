@@ -1,0 +1,13 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\",\n\"module App\\n\\\n             use Worker.{RunnerSup, WorkerMsg}\\n\\\n             pub fn boot() -> () ! {Supervise} = supervise(RunnerSup)\\n\\\n             pub fn runner() -> Pid<WorkerMsg> = child(RunnerSup, runner)\\n\\\n             pub fn missing() -> Pid<WorkerMsg> = child(RunnerSup, nobody)\",),])"
+---
+== App ==
+boot : () → () ! {Supervise}
+missing : () → Pid<WorkerMsg>
+runner : () → Pid<WorkerMsg>
+error[C0053] 217..223: supervisor `RunnerSup` declares no child with id `nobody`
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

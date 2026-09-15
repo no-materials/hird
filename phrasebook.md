@@ -467,6 +467,13 @@ pub fn plan(config: PlannerConfig) → Plan ! {Tool<ReadRepo>, Tool<Log>} = ...
 
 - `pub` for exports; `pub opaque type` exports the name but keeps
   constructors module-private. Unprefixed is module-private.
+- `pub tool` exports the tool: its marker (for `Tool<Name>` rows and
+  `handle` arms) and its generated function. `pub actor` exports the actor
+  name for `spawn` and child specs, and its message type transparently, so
+  another module can name `Pid<Msg>` and construct messages. `pub supervisor`
+  exports the name for `supervise` and `child`. Each is imported by its own
+  name (`use Worker.{Run, Runner, WorkerMsg, RunnerSup}`); a qualifier import
+  reaches the tool function (`Worker.run`) and the constructors only.
 - `use Mod` and `use Mod as M` bind a qualifier for `Mod.member` / `M.member`.
   `use Mod.{a, b}` binds `a` and `b` unqualified — and only that: it does not
   also bind the `Mod` qualifier.

@@ -1,0 +1,36 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: app
+---
+%% Generated from src/app.hird by the Hirð compiler. Do not edit.
+-module(hird_app).
+-export([go/2, again/2, as_value/0, dry/1, start/2]).
+
+%% src/app.hird:4
+go(J, Handlers@) ->
+    hird_tool_dispatch:call(run, <<"App.go"/utf8>>, Handlers@, #{job => J}).
+
+%% src/app.hird:5
+again(J, Handlers@) ->
+    hird_tool_dispatch:call(run, <<"App.again"/utf8>>, Handlers@, #{job => J}).
+
+%% src/app.hird:6
+as_value() ->
+    fun(Args@1, Handlers@2) -> hird_tool_dispatch:call(run, <<"App.as_value"/utf8>>, Handlers@2, Args@1) end.
+
+%% src/app.hird:7
+dry(J) ->
+    Handlers@3 = #{
+        {tool, run} => fun(Args@1, _Handlers@2) -> (fun(_A) ->
+            ok
+        end)(Args@1) end
+    },
+    go(J, Handlers@3).
+
+%% src/app.hird:8
+start(J, _Handlers@) ->
+    P = begin
+        {ok, Pid@1} = hird_runner:start_link(0),
+        Pid@1
+    end,
+    gen_server:cast(P, {do, J}).

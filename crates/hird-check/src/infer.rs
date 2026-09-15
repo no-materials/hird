@@ -419,7 +419,7 @@ impl Checker {
             && let [marker] = effect.args()
         {
             match self.subst.resolve(marker) {
-                Type::TyCon(name, _) if self.tool_signatures.contains_key(&name) => {
+                Type::TyCon(name, _) if self.tool_signature(&name).is_some() => {
                     tool = Some(name);
                 }
                 other => {
@@ -476,7 +476,7 @@ impl Checker {
     /// mock may be pure and need not carry the tool's declared trailing row.
     /// A mismatch is reported as C0034, not a raw unification error.
     fn check_tool_handler(&mut self, tool: &Name, handler_ty: &Type, span: Span) {
-        let Some(scheme) = self.tool_signatures.get(tool).cloned() else {
+        let Some(scheme) = self.tool_signature(tool).cloned() else {
             return;
         };
         let Type::TyFn(params, ret, _) = self.subst.instantiate(&scheme) else {
@@ -695,7 +695,7 @@ impl Checker {
                 format!("`{sup}` is not a declared supervisor"),
             ));
         };
-        let Some((_, actor)) = info.children.iter().find(|(cid, _)| cid == id) else {
+        let Some(spec) = info.children.iter().find(|c| c.id == id) else {
             let at = child
                 .child_token()
                 .map_or(span, |t| token_span(t, self.source_id));
@@ -705,13 +705,13 @@ impl Checker {
                 format!("supervisor `{sup}` declares no child with id `{id}`"),
             ));
         };
-        let Some(actor_info) = self.actors.get(actor) else {
+        let Some(message) = &spec.message else {
             // The child's actor does not resolve; supervisor checking reports
             // C0047 against the declaration after function checking, so abort
             // without a second diagnostic here.
             return Err(Aborted);
         };
-        let message = Type::con(actor_info.message.as_str(), Vec::new());
+        let message = Type::con(message.as_str(), Vec::new());
         Ok(Type::con("Pid", Vec::from([message])))
     }
 

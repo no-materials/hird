@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\",\n\"module App\\n\\\n             use Worker.{Run}\\n\\\n             pub fn go(j: String) -> () ! {Tool<Run>} = run({ job: j })\\n\\\n             pub fn dry(j: String) -> () = handle { Tool<Run> -> \\\\a -> () } in go(j)\",),])"
+---
+== App ==
+dry : String → ()
+go : String → () ! {Tool<Run>}
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

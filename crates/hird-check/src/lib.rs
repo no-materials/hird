@@ -188,6 +188,17 @@ impl NodeKey {
     }
 }
 
+/// A tool declared by another module and callable from the checked one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedTool {
+    /// The declaring module.
+    pub module: ModuleName,
+    /// The tool's marker name (`ReadRepo`, not `read_repo`).
+    pub name: Name,
+    /// The tool function's generalised scheme.
+    pub scheme: Type,
+}
+
 /// Result of checking one source file.
 #[derive(Debug)]
 pub struct CheckedFile {
@@ -228,6 +239,12 @@ pub struct CheckedFile {
     /// the name expression's node and valued with the defining module.
     /// Lowering reads these to qualify each use to the module that defines it.
     pub import_origins: BTreeMap<NodeKey, ModuleName>,
+    /// Tools other modules declare that this module can call, keyed by the
+    /// qualified spelling lowering gives each call: `Qualifier.read_repo`
+    /// for a whole-module or aliased import, `Module.read_repo` for a
+    /// selective one. Codegen routes these calls through the tool dispatcher
+    /// exactly like the module's own tools.
+    pub imported_tools: BTreeMap<String, ImportedTool>,
     /// Each of this module's type aliases as the type it expands to, keyed
     /// by alias name; a parametric alias is quantified over its parameters
     /// and renders with [`Type::normalized`]. Aliases have no identity in

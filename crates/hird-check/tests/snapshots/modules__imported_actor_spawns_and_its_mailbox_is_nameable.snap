@@ -1,0 +1,12 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\",\n\"module App\\n\\\n             use Worker.{Runner, WorkerMsg, Do}\\n\\\n             use Worker\\n\\\n             pub fn start() -> Pid<WorkerMsg> ! {Spawn<WorkerMsg>} = spawn(Runner, 0)\\n\\\n             pub fn kick(p: Pid<WorkerMsg>, j: String) -> () ! {Send<WorkerMsg>} = send(p, Do(j))\\n\\\n             pub fn halt(p: Pid<WorkerMsg>) -> () ! {Send<WorkerMsg>} = send(p, Worker.Halt)\",),])"
+---
+== App ==
+halt : Pid<WorkerMsg> → () ! {Send<WorkerMsg>}
+kick : Pid<WorkerMsg> → String → () ! {Send<WorkerMsg>}
+start : () → Pid<WorkerMsg> ! {Spawn<WorkerMsg>}
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

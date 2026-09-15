@@ -1,0 +1,15 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\",\n\"module Worker\\n\\\n             tool Run : { job: String } -> ()\\n\\\n             actor Runner {\\n\\\n               state: Int,\\n\\\n               message: WorkerMsg = | Do(String),\\n\\\n               init: fn(n: Int) ! {} = n,\\n\\\n               handle Do(s), n ! {} = Continue(n),\\n\\\n             } ! {}\\n\\\n             supervisor RunnerSup {\\n\\\n               strategy: one_for_one,\\n\\\n               intensity: 3,\\n\\\n               period: 60,\\n\\\n               children: [\\n\\\n                 { id: runner, actor: Runner, start_args: 0, restart: permanent },\\n\\\n               ]\\n\\\n             }\",),\n(\"App\",\n\"module App\\n\\\n             use Worker.{Run, Runner, WorkerMsg, Do, RunnerSup}\\n\\\n             use Worker\\n\\\n             pub fn go(j: String) = Worker.run({ job: j })\",),])"
+---
+== App ==
+go : ∀a. a
+error[C0023] 23..26: module `Worker` does not export `Run`
+error[C0023] 28..34: module `Worker` does not export `Runner`
+error[C0023] 36..45: module `Worker` does not export `WorkerMsg`
+error[C0023] 47..49: module `Worker` does not export `Do`
+error[C0023] 51..60: module `Worker` does not export `RunnerSup`
+error[C0024] 95..106: module `Worker` has no exported value `run`
+== Worker ==
+Do : String → WorkerMsg
+run : { job: String } → () ! {Tool<Run>}

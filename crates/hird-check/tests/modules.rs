@@ -321,3 +321,191 @@ fn module_name_must_match_path() {
         "module Wrong\npub fn f() -> Int = 0"
     )]));
 }
+
+// ── tools, actors, and supervisors across modules ───────────────
+
+/// A worker module exporting a tool, an actor with its mailbox, and a
+/// supervisor over that actor.
+const WORKER: &str = "module Worker\n\
+     pub tool Run : { job: String } -> ()\n\
+     pub actor Runner {\n\
+       state: Int,\n\
+       message: WorkerMsg = | Do(String) | Halt,\n\
+       init: fn(n: Int) ! {} = n,\n\
+       handle Do(s), n ! {Tool<Run>} = match run({ job: s }) { _ -> Continue(n + 1) },\n\
+       handle Halt, _ ! {} = Stop,\n\
+     } ! {Tool<Run>}\n\
+     pub supervisor RunnerSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 3,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: runner, actor: Runner, start_args: 0, restart: permanent },\n\
+       ]\n\
+     }";
+
+#[test]
+fn imported_tool_is_callable_handleable_and_nameable_in_rows() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Run}\n\
+             pub fn go(j: String) -> () ! {Tool<Run>} = run({ job: j })\n\
+             pub fn dry(j: String) -> () = handle { Tool<Run> -> \\a -> () } in go(j)",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_tool_handler_must_match_its_signature() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Run}\n\
+             pub fn dry(j: String) -> () = handle { Tool<Run> -> \\a -> 42 } in run({ job: j })",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_tool_is_callable_qualified() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Run}\n\
+             use Worker\n\
+             use Worker as W\n\
+             pub fn go(j: String) -> () ! {Tool<Run>} = Worker.run({ job: j })\n\
+             pub fn again(j: String) -> () ! {Tool<Run>} = W.run({ job: j })",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_tools_are_recorded_by_qualified_spelling() {
+    let program = checked(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Run}\n\
+             use Worker as W\n\
+             pub fn go(j: String) -> () ! {Tool<Run>} = run({ job: j })\n\
+             pub fn again(j: String) -> () ! {Tool<Run>} = W.run({ job: j })",
+        ),
+    ]);
+    assert!(!program.has_errors(), "{program:?}");
+    let app = &program.modules[&ModuleName::new("App")];
+    let spellings: Vec<&str> = app.imported_tools.keys().map(String::as_str).collect();
+    assert_eq!(spellings, ["W.run", "Worker.run"]);
+    for tool in app.imported_tools.values() {
+        assert_eq!(tool.module.as_str(), "Worker");
+        assert_eq!(tool.name.as_str(), "Run");
+    }
+    let worker = &program.modules[&ModuleName::new("Worker")];
+    assert!(worker.imported_tools.is_empty());
+    // The declaring module's own table stays its own.
+    assert_eq!(worker.tools.len(), 1);
+    assert!(app.tools.is_empty());
+}
+
+#[test]
+fn imported_actor_spawns_and_its_mailbox_is_nameable() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Runner, WorkerMsg, Do}\n\
+             use Worker\n\
+             pub fn start() -> Pid<WorkerMsg> ! {Spawn<WorkerMsg>} = spawn(Runner, 0)\n\
+             pub fn kick(p: Pid<WorkerMsg>, j: String) -> () ! {Send<WorkerMsg>} = send(p, Do(j))\n\
+             pub fn halt(p: Pid<WorkerMsg>) -> () ! {Send<WorkerMsg>} = send(p, Worker.Halt)",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_actor_is_not_a_value() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\nuse Worker.{Runner}\npub fn bad() -> Int = Runner",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_supervisor_supervises_and_looks_up_children() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{RunnerSup, WorkerMsg}\n\
+             pub fn boot() -> () ! {Supervise} = supervise(RunnerSup)\n\
+             pub fn runner() -> Pid<WorkerMsg> = child(RunnerSup, runner)\n\
+             pub fn missing() -> Pid<WorkerMsg> = child(RunnerSup, nobody)",
+        ),
+    ]));
+}
+
+#[test]
+fn private_tool_actor_and_supervisor_are_not_exported() {
+    insta::assert_snapshot!(check_modules(&[
+        (
+            "Worker",
+            "module Worker\n\
+             tool Run : { job: String } -> ()\n\
+             actor Runner {\n\
+               state: Int,\n\
+               message: WorkerMsg = | Do(String),\n\
+               init: fn(n: Int) ! {} = n,\n\
+               handle Do(s), n ! {} = Continue(n),\n\
+             } ! {}\n\
+             supervisor RunnerSup {\n\
+               strategy: one_for_one,\n\
+               intensity: 3,\n\
+               period: 60,\n\
+               children: [\n\
+                 { id: runner, actor: Runner, start_args: 0, restart: permanent },\n\
+               ]\n\
+             }",
+        ),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Run, Runner, WorkerMsg, Do, RunnerSup}\n\
+             use Worker\n\
+             pub fn go(j: String) = Worker.run({ job: j })",
+        ),
+    ]));
+}
+
+#[test]
+fn imported_actor_can_be_a_supervised_child() {
+    insta::assert_snapshot!(check_modules(&[
+        ("Worker", WORKER),
+        (
+            "App",
+            "module App\n\
+             use Worker.{Runner, WorkerMsg}\n\
+             supervisor AppSup {\n\
+               strategy: one_for_one,\n\
+               intensity: 1,\n\
+               period: 5,\n\
+               children: [\n\
+                 { id: worker, actor: Runner, start_args: 1, restart: transient },\n\
+               ]\n\
+             }\n\
+             pub fn worker() -> Pid<WorkerMsg> = child(AppSup, worker)",
+        ),
+    ]));
+}

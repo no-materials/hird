@@ -1069,3 +1069,92 @@ fn imported_function_uses_qualify_to_the_defining_module() {
     };
     assert_eq!(var_name(&shadow.body), "double");
 }
+
+// ── imported tools are recorded for codegen ─────────────────────
+
+/// A call to another module's tool lowers as the qualified variable any
+/// imported name does, and the module records that qualified spelling as a
+/// tool so codegen can dispatch it rather than remote-call it. Both the
+/// selective (`Worker.run`) and aliased (`W.run`) spellings are recorded.
+#[test]
+fn imported_tool_calls_are_recorded_by_qualified_spelling() {
+    use hird_check::ModuleName;
+
+    let sources = [
+        (
+            "Worker",
+            "module Worker\npub tool Run : { job: String } -> ()",
+        ),
+        (
+            "App",
+            "module App\nuse Worker.{Run}\nuse Worker as W\n\
+             fn go(j: String) -> () ! {Tool<Run>} = run({ job: j })\n\
+             fn again(j: String) -> () ! {Tool<Run>} = W.run({ job: j })",
+        ),
+    ];
+    let program: Vec<(ModuleName, SourceFile)> = sources
+        .iter()
+        .map(|(name, src)| {
+            let parsed = hird_parse::parse(src, 0);
+            assert!(
+                parsed.is_ok(),
+                "module `{name}` has parse errors: {:?}",
+                parsed.diagnostics()
+            );
+            (
+                ModuleName::new(*name),
+                SourceFile::cast(parsed.syntax().clone()).expect("root is a source file"),
+            )
+        })
+        .collect();
+    let mut checked = hird_check::check_program(&program);
+    let app = checked
+        .modules
+        .remove(&ModuleName::new("App"))
+        .expect("App was checked");
+    assert!(!app.has_errors(), "type errors: {:?}", app.diagnostics);
+    let module = lower_module(&program[1].1, &app, "App");
+
+    let mut refs: Vec<(&str, &str, &str)> = module
+        .imported_tools
+        .iter()
+        .map(|t| (t.name.as_str(), t.module.as_str(), t.tool.as_str()))
+        .collect();
+    refs.sort_unstable();
+    assert_eq!(
+        refs,
+        [("W.run", "Worker", "Run"), ("Worker.run", "Worker", "Run")]
+    );
+    for tool in &module.imported_tools {
+        assert_eq!(
+            tool.ty.to_string(),
+            "{ job: String } \u{2192} () ! {Tool<Run>}"
+        );
+    }
+
+    let callee = |name: &str| -> String {
+        let IrDecl::Fn(f) = module
+            .declarations
+            .iter()
+            .find(|d| matches!(d, IrDecl::Fn(f) if f.name == name))
+            .expect("function is lowered")
+        else {
+            unreachable!()
+        };
+        match &f.body {
+            IrExpr::App(app) => match app.func.as_ref() {
+                IrExpr::Var(v) => v.name.clone(),
+                other => panic!("expected a variable callee, got {other:?}"),
+            },
+            other => panic!("expected an application, got {other:?}"),
+        }
+    };
+    assert_eq!(callee("go"), "Worker.run");
+    assert_eq!(callee("again"), "W.run");
+
+    // A module that imports no tools records none, and the field stays out
+    // of its JSON.
+    let worker = lower(sources[0].1, "Worker");
+    assert!(worker.imported_tools.is_empty());
+    assert!(!worker.to_json().expect("json").contains("imported_tools"));
+}

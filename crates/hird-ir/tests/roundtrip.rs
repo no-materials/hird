@@ -180,6 +180,7 @@ fn normalize(module: &IrModule) -> IrModule {
     IrModule {
         name: module.name.clone(),
         declarations: module.declarations.iter().map(normalize_decl).collect(),
+        imported_tools: module.imported_tools.clone(),
     }
 }
 

@@ -26,7 +26,9 @@ use crate::elaborate::Scope;
 use crate::env::Env;
 use crate::program::{ExportedType, ModuleInterface};
 use crate::registry::{CtorInfo, Registry};
-use crate::{CheckedFile, ModuleName, NodeKey, expr_span, name_token_span, node_span};
+use crate::{
+    CheckedFile, ImportedTool, ModuleName, NodeKey, expr_span, name_token_span, node_span,
+};
 
 /// Marker: the current declaration's check stopped after an error. The
 /// triggering diagnostic has already been recorded.
@@ -103,6 +105,13 @@ pub(crate) struct Checker {
     /// Consulted by `handle`-arm checking; a side-table rather than a value-env
     /// lookup of the generated function, which user code could shadow.
     pub(crate) tool_signatures: BTreeMap<Name, Type>,
+    /// Schemes of tools brought into scope by a selective `use`, keyed by
+    /// marker name; `handle`-arm checking consults these after the declared
+    /// ones.
+    imported_tool_signatures: BTreeMap<Name, Type>,
+    /// Tools other modules declare that this module can call, keyed by the
+    /// qualified spelling lowering gives each call.
+    imported_tools: BTreeMap<String, ImportedTool>,
     /// Declared actors by name — the actor namespace. `spawn` resolves its
     /// actor argument here; actor names are not values.
     pub(crate) actors: BTreeMap<String, crate::actors::ActorInfo>,
@@ -156,7 +165,13 @@ pub(crate) struct Checker {
     /// Names of this module's exported (`pub`) functions.
     exported_fns: Vec<String>,
     /// This module's exported (`pub`) types paired with their opacity.
-    exported_types: Vec<(Name, bool)>,
+    pub(crate) exported_types: Vec<(Name, bool)>,
+    /// Marker names of this module's exported (`pub`) tools.
+    exported_tools: Vec<Name>,
+    /// Names of this module's exported (`pub`) actors.
+    pub(crate) exported_actors: Vec<String>,
+    /// Names of this module's exported (`pub`) supervisors.
+    pub(crate) exported_supervisors: Vec<String>,
     /// Declared and imported type aliases by name, expanded on demand.
     aliases: BTreeMap<String, AliasState>,
     /// Aliases whose expansion is in progress, outermost first, for cycle
@@ -204,6 +219,8 @@ impl Checker {
             handled_effects: Vec::new(),
             invocation_records: Vec::new(),
             tool_signatures: BTreeMap::new(),
+            imported_tool_signatures: BTreeMap::new(),
+            imported_tools: BTreeMap::new(),
             actors: BTreeMap::new(),
             supervisors: BTreeMap::new(),
             current_actor: None,
@@ -221,6 +238,9 @@ impl Checker {
             import_origins: BTreeMap::new(),
             exported_fns: Vec::new(),
             exported_types: Vec::new(),
+            exported_tools: Vec::new(),
+            exported_actors: Vec::new(),
+            exported_supervisors: Vec::new(),
             aliases: BTreeMap::new(),
             alias_stack: Vec::new(),
             exported_aliases: Vec::new(),
@@ -361,13 +381,86 @@ impl Checker {
         self.diags.push(diag);
     }
 
-    /// Binds a qualifier to a module's exported values for `Mod.member` access.
+    /// Binds a qualifier to a module's exported values for `Mod.member` access,
+    /// recording the module's exported tools under their qualified spelling so
+    /// lowering and codegen can tell a tool call from a remote function call.
     pub(crate) fn seed_module_qualifier(
         &mut self,
         qualifier: &str,
-        values: BTreeMap<String, Type>,
+        interface: &ModuleInterface,
+        from: &ModuleName,
     ) {
-        self.modules.insert(String::from(qualifier), values);
+        self.modules
+            .insert(String::from(qualifier), interface.exported_values());
+        for (marker, scheme) in &interface.tools {
+            self.imported_tools.insert(
+                format!("{qualifier}.{}", tool_fn_name(marker.as_str())),
+                ImportedTool {
+                    module: from.clone(),
+                    name: marker.clone(),
+                    scheme: scheme.clone(),
+                },
+            );
+        }
+    }
+
+    /// Brings an imported tool into scope unqualified: its marker type (so
+    /// `Tool<Name>` rows and `handle` arms resolve), its generated function,
+    /// and its signature for handler checking.
+    pub(crate) fn seed_import_tool(
+        &mut self,
+        marker: &Name,
+        scheme: Type,
+        from: ModuleName,
+        span: Span,
+    ) {
+        self.note_type_name(marker.as_str(), span);
+        self.registry.declare_adt(marker.clone(), 0, Vec::new());
+        self.imported_tool_signatures
+            .insert(marker.clone(), scheme.clone());
+        let fn_name = tool_fn_name(marker.as_str());
+        self.imported_tools.insert(
+            format!("{from}.{fn_name}"),
+            ImportedTool {
+                module: from.clone(),
+                name: marker.clone(),
+                scheme: scheme.clone(),
+            },
+        );
+        self.seed_import_function(&fn_name, scheme, from, span);
+    }
+
+    /// Brings an imported actor into the actor namespace, so `spawn` and
+    /// child specs may name it. Its message type and constructors are
+    /// ordinary exports, imported by their own names.
+    pub(crate) fn seed_import_actor(
+        &mut self,
+        name: &str,
+        info: crate::actors::ActorInfo,
+        span: Span,
+    ) {
+        self.note_actor_name(name, span);
+        self.actors.insert(String::from(name), info);
+    }
+
+    /// Brings an imported supervisor into the supervisor namespace, so
+    /// `supervise` and `child` may name it.
+    pub(crate) fn seed_import_supervisor(
+        &mut self,
+        name: &str,
+        info: crate::supervisors::SupervisorInfo,
+        span: Span,
+    ) {
+        self.note_supervisor_name(name, span);
+        self.supervisors.insert(String::from(name), info);
+    }
+
+    /// The generalised scheme of the declared or imported tool `marker`, for
+    /// `handle`-arm checking.
+    pub(crate) fn tool_signature(&self, marker: &Name) -> Option<&Type> {
+        self.tool_signatures
+            .get(marker)
+            .or_else(|| self.imported_tool_signatures.get(marker))
     }
 
     /// Brings an imported function into scope unqualified, recording its
@@ -798,6 +891,9 @@ impl Checker {
     /// the marker — not an effect per tool.
     fn register_tool_marker(&mut self, decl: &ToolDecl) {
         let Some(name) = decl.name() else { return };
+        if decl.is_pub() {
+            self.exported_tools.push(Name::new(name));
+        }
         self.registry.declare_adt(Name::new(name), 0, Vec::new());
     }
 
@@ -1385,10 +1481,40 @@ impl Checker {
                 _ => None,
             })
             .collect();
+        let exported_tools = self
+            .exported_tools
+            .iter()
+            .filter_map(|name| {
+                self.tool_signatures
+                    .get(name)
+                    .map(|ty| (name.clone(), self.subst.resolve(ty)))
+            })
+            .collect();
+        let exported_actors = self
+            .exported_actors
+            .iter()
+            .filter_map(|name| {
+                self.actors
+                    .get(name)
+                    .map(|info| (name.clone(), info.resolved(&self.subst)))
+            })
+            .collect();
+        let exported_supervisors = self
+            .exported_supervisors
+            .iter()
+            .filter_map(|name| {
+                self.supervisors
+                    .get(name)
+                    .map(|info| (name.clone(), info.clone()))
+            })
+            .collect();
         let interface = ModuleInterface {
             functions,
             types: exported,
             aliases,
+            tools: exported_tools,
+            actors: exported_actors,
+            supervisors: exported_supervisors,
         };
 
         let aliases = self
@@ -1422,6 +1548,7 @@ impl Checker {
             tools,
             invocation_records,
             import_origins: self.import_origins,
+            imported_tools: self.imported_tools,
             aliases,
             diagnostics: self.diags,
         };
@@ -1458,7 +1585,7 @@ fn is_fully_annotated(decl: &FnDecl) -> bool {
 /// The generated function name of a tool: the `PascalCase` tool name in
 /// `snake_case`, with acronym runs kept whole (`ReadRepo` → `read_repo`,
 /// `LLMCall` → `llm_call`).
-fn tool_fn_name(name: &str) -> String {
+pub(crate) fn tool_fn_name(name: &str) -> String {
     let bytes = name.as_bytes();
     let mut out = String::with_capacity(bytes.len() + 4);
     for (i, &b) in bytes.iter().enumerate() {

@@ -52,7 +52,8 @@ pub use ir::{
     IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
     IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField,
     IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise,
-    IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat,
+    LiteralValue,
 };
 pub use lower::lower_module;
 pub use pretty::pretty_print;

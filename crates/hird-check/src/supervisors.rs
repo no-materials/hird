@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use hird_ast::{AstNode, Expr, RecordField, RecordLit, SupervisorDecl, SupervisorField};
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
-use hird_types::EffectRow;
+use hird_types::{EffectRow, Name};
 
 use crate::checker::Checker;
 use crate::diag::{CheckCode, CheckDiagnostic};
@@ -38,8 +38,19 @@ const RESTARTS: [&str; 3] = ["permanent", "temporary", "transient"];
 /// against.
 #[derive(Debug, Clone)]
 pub(crate) struct SupervisorInfo {
-    /// Declared children as `(id, actor name)` pairs, in source order.
-    pub(crate) children: Vec<(String, String)>,
+    /// Declared children, in source order.
+    pub(crate) children: Vec<SupervisedChild>,
+}
+
+/// One child of a registered supervisor, as `child` lookups see it.
+#[derive(Debug, Clone)]
+pub(crate) struct SupervisedChild {
+    /// The child's id.
+    pub(crate) id: String,
+    /// The child actor's message type, read off the actor namespace at
+    /// registration; `None` when the actor is undeclared (reported by
+    /// [`Checker::check_supervisor`]).
+    pub(crate) message: Option<Name>,
 }
 
 impl Checker {
@@ -71,9 +82,13 @@ impl Checker {
                         })
                 };
                 if let (Some(id), Some(actor)) = (field("id"), field("actor")) {
-                    children.push((id, actor));
+                    let message = self.actors.get(&actor).map(|a| a.message.clone());
+                    children.push(SupervisedChild { id, message });
                 }
             }
+        }
+        if decl.is_pub() {
+            self.exported_supervisors.push(String::from(name));
         }
         self.supervisors
             .insert(String::from(name), SupervisorInfo { children });

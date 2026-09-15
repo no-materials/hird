@@ -27,7 +27,7 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use hird_ast::{
@@ -47,7 +47,8 @@ use crate::ir::{
     IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
     IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField,
     IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise,
-    IrSupervisorDef, IrToolDef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat, LiteralValue,
+    IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat,
+    LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -84,9 +85,20 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
             _ => {}
         }
     }
+    let imported_tools = checked
+        .imported_tools
+        .iter()
+        .map(|(name, tool)| IrToolRef {
+            name: name.clone(),
+            module: tool.module.to_string(),
+            tool: String::from(tool.name.as_str()),
+            ty: tool.scheme.clone(),
+        })
+        .collect();
     IrModule {
         name: String::from(name),
         declarations,
+        imported_tools,
     }
 }
 

@@ -23,7 +23,7 @@ use alloc::vec::Vec;
 
 use hird_ast::{ActorDecl, ActorField, ActorHandler, AstNode, Expr, Pattern, TypeExpr};
 use hird_lex::Span;
-use hird_types::{EffectRow, Name, Type, TypeError, unify_row};
+use hird_types::{EffectRow, Name, Subst, Type, TypeError, unify_row};
 
 use crate::checker::{Aborted, Checked, Checker};
 use crate::diag::{CheckCode, CheckDiagnostic};
@@ -50,10 +50,26 @@ pub(crate) struct ActorInfo {
     pub(crate) summary: Option<EffectRow>,
 }
 
+impl ActorInfo {
+    /// This interface with every type resolved against `subst`, for export
+    /// to modules that import the actor.
+    pub(crate) fn resolved(&self, subst: &Subst) -> Self {
+        Self {
+            message: self.message.clone(),
+            state: subst.resolve(&self.state),
+            init_params: self.init_params.iter().map(|p| subst.resolve(p)).collect(),
+            init_row: subst.resolve_row(&self.init_row),
+            summary: self.summary.as_ref().map(|row| subst.resolve_row(row)),
+        }
+    }
+}
+
 impl Checker {
     /// Registers an actor's message type as an ADT header (name, arity 0,
     /// constructor names), so constructor fields anywhere — including other
-    /// actors' messages — can reference it.
+    /// actors' messages — can reference it. A `pub` actor exports its message
+    /// type transparently: senders in other modules must be able to name it
+    /// and construct messages.
     pub(crate) fn register_actor_message_header(&mut self, decl: &ActorDecl) {
         let Some(field) = actor_field(decl, "message") else {
             return;
@@ -61,6 +77,9 @@ impl Checker {
         let Some(name) = message_type_name(&field) else {
             return;
         };
+        if decl.is_pub() {
+            self.exported_types.push((Name::new(name.as_str()), false));
+        }
         let ctors = field
             .constructors()
             .filter_map(|c| c.name().map(Name::new))
@@ -131,6 +150,9 @@ impl Checker {
             Some(ann) => self.elaborate_row_closed(&ann, &mut Scope::new()).ok(),
         };
 
+        if decl.is_pub() {
+            self.exported_actors.push(String::from(name));
+        }
         // First declaration wins, consistent with duplicate reporting: a
         // duplicate actor (already reported) must not re-key the original's
         // interface out from under its own body check.

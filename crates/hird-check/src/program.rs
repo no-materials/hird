@@ -23,16 +23,20 @@ use hird_ast::{AstNode, Decl, SourceFile, UseDecl};
 use hird_lex::Span;
 use hird_types::{Name, Type};
 
-use crate::checker::{AliasExpansion, Checker, tarjan};
+use crate::actors::ActorInfo;
+use crate::checker::{AliasExpansion, Checker, tarjan, tool_fn_name};
 use crate::diag::{CheckCode, CheckDiagnostic};
+use crate::supervisors::SupervisorInfo;
 use crate::{CheckedFile, ModuleName, node_span, token_span};
 
 /// The public surface one module presents to the modules that import it.
 ///
-/// Holds exported (`pub`) functions, types, and aliases. Each exported type carries its
-/// constructor schemes — usable for a transparent type, diagnostic-only for an
-/// opaque one (so an out-of-module destructure names the type rather than
-/// reporting an unknown constructor).
+/// Holds exported (`pub`) functions, types, aliases, tools, actors, and
+/// supervisors. Each exported type carries its constructor schemes — usable
+/// for a transparent type, diagnostic-only for an opaque one (so an
+/// out-of-module destructure names the type rather than reporting an unknown
+/// constructor). An exported actor's message type is exported alongside it as
+/// a transparent type.
 #[derive(Debug)]
 pub(crate) struct ModuleInterface {
     /// Exported function name → generalised scheme.
@@ -41,6 +45,12 @@ pub(crate) struct ModuleInterface {
     pub(crate) types: BTreeMap<Name, ExportedType>,
     /// Exported alias name → its expansion; an importer sees the expansion.
     pub(crate) aliases: BTreeMap<Name, AliasExpansion>,
+    /// Exported tool marker → the tool function's generalised scheme.
+    pub(crate) tools: BTreeMap<Name, Type>,
+    /// Exported actor name → its interface, types resolved.
+    pub(crate) actors: BTreeMap<String, ActorInfo>,
+    /// Exported supervisor name → its interface.
+    pub(crate) supervisors: BTreeMap<String, SupervisorInfo>,
 }
 
 /// An exported type's importable shape.
@@ -77,11 +87,15 @@ impl ModuleInterface {
     }
 
     /// Every value reachable through a qualifier (`Mod.member`): exported
-    /// functions plus the constructors of transparent exported types.
-    fn exported_values(&self) -> BTreeMap<String, Type> {
+    /// functions, the constructors of transparent exported types, and the
+    /// generated functions of exported tools.
+    pub(crate) fn exported_values(&self) -> BTreeMap<String, Type> {
         let mut values = self.functions.clone();
         for (_, ctor, scheme) in self.transparent_ctors() {
             values.insert(String::from(ctor.as_str()), scheme.clone());
+        }
+        for (marker, scheme) in &self.tools {
+            values.insert(tool_fn_name(marker.as_str()), scheme.clone());
         }
         values
     }
@@ -294,7 +308,7 @@ fn seed_use(
         .expect("dependency checked before dependant");
 
     if u.selected.is_empty() {
-        checker.seed_module_qualifier(u.qualifier(), interface.exported_values());
+        checker.seed_module_qualifier(u.qualifier(), interface, &u.target);
         return;
     }
 
@@ -307,6 +321,18 @@ fn seed_use(
         }
         if let Some(expansion) = interface.aliases.get(&member_name) {
             checker.seed_import_alias(&member_name, expansion.clone(), *span);
+            found = true;
+        }
+        if let Some(scheme) = interface.tools.get(&member_name) {
+            checker.seed_import_tool(&member_name, scheme.clone(), u.target.clone(), *span);
+            found = true;
+        }
+        if let Some(info) = interface.actors.get(member) {
+            checker.seed_import_actor(member, info.clone(), *span);
+            found = true;
+        }
+        if let Some(info) = interface.supervisors.get(member) {
+            checker.seed_import_supervisor(member, info.clone(), *span);
             found = true;
         }
         if let Some(scheme) = interface.functions.get(member) {

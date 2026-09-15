@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"Worker\", WORKER),\n(\"App\",\n\"module App\\n\\\n             use Worker.{Run}\\n\\\n             pub fn dry(j: String) -> () = handle { Tool<Run> -> \\\\a -> 42 } in run({ job: j })\",),])"
+---
+== App ==
+dry : String → ()
+error[C0034] 79..88: handler for tool `Run` must have type `{ job: String } → ()`, but this has type `a → Int`
+== Worker ==
+Do : String → WorkerMsg
+Halt : WorkerMsg
+run : { job: String } → () ! {Tool<Run>}
