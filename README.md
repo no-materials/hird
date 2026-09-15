@@ -238,7 +238,9 @@ counter written by an LLM agent that verified itself against the MCP
 tools alone — it type-checks and runs on BEAM unmodified. And
 `demo/heartbeat.hird` is the smallest standing program: one actor, one
 clock, one beat a second until Ctrl-C. `docs/writing-hird-llm.md` is
-the agent-facing guide.
+the agent-facing guide, and `docs/context-packing.md` shows the third
+prompt answered for real: the Planner at 50 and 400 tokens, and what
+each budget dropped.
 
 ## Editor support
 
