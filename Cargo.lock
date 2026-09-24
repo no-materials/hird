@@ -460,6 +460,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hird-bench"
+version = "0.4.0"
+dependencies = [
+ "clap",
+ "hird-ast",
+ "hird-check",
+ "hird-codegen",
+ "hird-ir",
+ "hird-lex",
+ "hird-parse",
+]
+
+[[package]]
 name = "hird-check"
 version = "0.4.0"
 dependencies = [

@@ -104,6 +104,24 @@ Some notes on the parts that surprise people:
 [`README.md`](README.md#repository-layout) has the repository layout;
 `docs/` holds the normative specifications.
 
+### Benchmarks
+
+`hird-bench` generates a program of one shape at one size, then times
+each compiler stage (lex, parse, check, lower, emit, `erlc`, emulator
+boot) and the `hird` subcommands end to end, with the emulators each
+one boots:
+
+```sh
+cargo build --release -p hird-cli -p hird-bench
+target/release/hird-bench tools --size 400
+```
+
+`--help` lists the shapes. A seed (`--seed`, default 0) always writes
+the same bytes, and the program stays under `_build/hird-bench/` for
+`hird check`, the LSP, or MCP to reuse. The BEAM and CLI timings use
+the `hird` binary beside `hird-bench` (or `--hird`), so build both in
+the same profile; `--front-only` skips them.
+
 ## Definition of done
 
 A change is finished when:

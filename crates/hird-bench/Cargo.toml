@@ -1,0 +1,22 @@
+[package]
+name = "hird-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Hirð benchmark runner: generated corpora, per-stage and CLI timings"
+publish = false
+
+[dependencies]
+hird-ast.workspace = true
+hird-check.workspace = true
+hird-codegen.workspace = true
+hird-ir.workspace = true
+hird-lex.workspace = true
+hird-parse.workspace = true
+
+clap = { features = ["derive"], version = "4" }
+
+[lints]
+workspace = true

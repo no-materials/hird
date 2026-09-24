@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/hird-actors",
     "crates/hird-ast",
+    "crates/hird-bench",
     "crates/hird-check",
     "crates/hird-cli",
     "crates/hird-codegen",

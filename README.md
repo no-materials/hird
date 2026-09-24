@@ -257,7 +257,7 @@ development loop, and the v0.1 limitations.
 ## Repository layout
 
 - `crates/` — the Rust compiler workspace (lexer, parser, checker, IR,
-  codegen, CLI, LSP and MCP servers).
+  codegen, CLI, LSP and MCP servers, benchmark runner).
 - `tree-sitter-hird/` — the tree-sitter grammar and editor queries.
 - `runtime/` — the hand-written Erlang runtime support library (tool
   dispatch, audit sink, handler registry).
