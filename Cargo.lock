@@ -497,6 +497,7 @@ dependencies = [
  "hird-parse",
  "hird-policy",
  "hird-types",
+ "insta",
  "miette",
  "serde_json",
 ]

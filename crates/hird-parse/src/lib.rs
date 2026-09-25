@@ -24,5 +24,5 @@ pub mod syntax_kind;
 
 mod parser;
 
-pub use parser::{ParseResult, parse};
+pub use parser::{ParseResult, ParseStats, parse};
 pub use syntax_kind::SyntaxKind;

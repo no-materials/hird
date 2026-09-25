@@ -297,8 +297,24 @@ impl Checker {
     /// useful (every value it matches is already covered).
     ///
     /// `col_types` gives each column's type, in step with the pattern vectors;
-    /// every row and `q` have `col_types.len()` columns.
+    /// every row and `q` have `col_types.len()` columns. Counts the rows it
+    /// visits and the witness rows it returns.
     fn useful(
+        &mut self,
+        matrix: &[Vec<Pat>],
+        q: &[Pat],
+        col_types: &[Type],
+        span: Span,
+    ) -> Vec<Vec<Witness>> {
+        self.stats.exhaustiveness_rows += matrix.len() as u64;
+        let witnesses = self.useful_step(matrix, q, col_types, span);
+        self.stats.exhaustiveness_witnesses += witnesses.len() as u64;
+        witnesses
+    }
+
+    /// One level of [`Self::useful`]: splits on `q`'s first column and
+    /// recurses through the counting entry point.
+    fn useful_step(
         &mut self,
         matrix: &[Vec<Pat>],
         q: &[Pat],

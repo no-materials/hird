@@ -27,7 +27,8 @@ use crate::env::Env;
 use crate::program::{ExportedType, ModuleInterface};
 use crate::registry::{CtorInfo, Registry};
 use crate::{
-    CheckedFile, ImportedTool, ModuleName, NodeKey, expr_span, name_token_span, node_span,
+    CheckStats, CheckedFile, ImportedTool, ModuleName, NodeKey, expr_span, name_token_span,
+    node_span,
 };
 
 /// Marker: the current declaration's check stopped after an error. The
@@ -182,6 +183,9 @@ pub(crate) struct Checker {
     /// Every alias this module declares, in declaration order, for the
     /// result table of expansions.
     declared_aliases: Vec<String>,
+    /// Work counters kept during the walk; the substitution's and the type
+    /// table's are read at [`Checker::finish_with_interface`].
+    pub(crate) stats: CheckStats,
 }
 
 impl Checker {
@@ -245,6 +249,7 @@ impl Checker {
             alias_stack: Vec::new(),
             exported_aliases: Vec::new(),
             declared_aliases: Vec::new(),
+            stats: CheckStats::default(),
         }
     }
 
@@ -1326,6 +1331,7 @@ impl Checker {
             return;
         }
         let mut acc = self.subst.resolve_row(&self.current_row);
+        self.stats.effect_row_merges += (added.effect_count() + acc.effect_count()) as u64;
         for effect in added.effects() {
             self.current_prov.push(EffectIntro {
                 effect: effect.clone(),
@@ -1405,11 +1411,18 @@ impl Checker {
     /// sorts diagnostics into source order, snapshots the ADT table, and
     /// gathers the `pub` surface from the accumulated export markers.
     fn finish_with_interface(mut self) -> (CheckedFile, ModuleInterface) {
-        let types = self
+        let types: BTreeMap<NodeKey, Type> = self
             .types
             .iter()
             .map(|(key, ty)| (*key, self.subst.resolve(ty)))
             .collect();
+        let subst = self.subst.stats();
+        let stats = CheckStats {
+            typed_nodes: types.len() as u64,
+            unify_calls: subst.unify_calls,
+            subst_slots: subst.type_vars + subst.row_vars,
+            ..self.stats
+        };
         let effect_rows = self
             .effect_rows
             .iter()
@@ -1551,6 +1564,7 @@ impl Checker {
             imported_tools: self.imported_tools,
             aliases,
             diagnostics: self.diags,
+            stats,
         };
         (checked, interface)
     }

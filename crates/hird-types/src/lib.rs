@@ -38,6 +38,6 @@ mod unify;
 pub use effect::{BUILTIN_EFFECTS, Effect, EffectRow, RowVar, builtin_effect_arity, handle_row};
 pub use error::TypeError;
 pub use name::{Label, Name};
-pub use subst::Subst;
+pub use subst::{Subst, SubstStats};
 pub use ty::Type;
 pub use unify::{unify, unify_row};

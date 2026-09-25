@@ -1,0 +1,19 @@
+---
+source: crates/hird-cli/tests/timings.rs
+expression: counters(&report)
+---
+{
+  "cst_nodes": 97,
+  "effect_row_merges": 11,
+  "emulator_boots": 0,
+  "erl_bytes": 0,
+  "exhaustiveness_rows": 4,
+  "exhaustiveness_witnesses": 0,
+  "modules": 1,
+  "modules_compiled": 0,
+  "modules_reused": 0,
+  "subst_slots": 6,
+  "tokens": 298,
+  "typed_nodes": 59,
+  "unify_calls": 43
+}

@@ -122,6 +122,13 @@ the same bytes, and the program stays under `_build/hird-bench/` for
 the `hird` binary beside `hird-bench` (or `--hird`), so build both in
 the same profile; `--front-only` skips them.
 
+`hird check`, `build`, and `run` take `--timings` (or `--timings=json`)
+to print each phase's wall time and the pipeline's work counters —
+tokens, unify calls, exhaustiveness rows and witnesses, effect-row
+merges, emulator boots, and more. Wall time is noisy; the counters are
+deterministic, so a change that moves one shows it in a diff.
+`hird check --help` defines each one.
+
 ## Definition of done
 
 A change is finished when:

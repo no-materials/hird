@@ -27,7 +27,7 @@ use crate::actors::ActorInfo;
 use crate::checker::{AliasExpansion, Checker, tarjan, tool_fn_name};
 use crate::diag::{CheckCode, CheckDiagnostic};
 use crate::supervisors::SupervisorInfo;
-use crate::{CheckedFile, ModuleName, node_span, token_span};
+use crate::{CheckStats, CheckedFile, ModuleName, node_span, token_span};
 
 /// The public surface one module presents to the modules that import it.
 ///
@@ -114,6 +114,16 @@ impl CheckedProgram {
     #[must_use]
     pub fn has_errors(&self) -> bool {
         self.modules.values().any(CheckedFile::has_errors)
+    }
+
+    /// Work counters summed over every module.
+    #[must_use]
+    pub fn stats(&self) -> CheckStats {
+        let mut total = CheckStats::default();
+        for module in self.modules.values() {
+            total += module.stats;
+        }
+        total
     }
 }
 

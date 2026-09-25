@@ -98,6 +98,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::AddAssign;
 
 use hird_ast::{Expr, SourceFile, SyntaxNode, SyntaxToken};
 use hird_lex::Span;
@@ -254,6 +255,40 @@ pub struct CheckedFile {
     pub aliases: BTreeMap<Name, Type>,
     /// Errors and warnings, in source order.
     pub diagnostics: Vec<CheckDiagnostic>,
+    /// Work counters for checking this module.
+    pub stats: CheckStats,
+}
+
+/// Work counters for checking one module: deterministic for a given
+/// program.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CheckStats {
+    /// Expressions, patterns, and declarations given a type
+    /// ([`CheckedFile::types`] entries).
+    pub typed_nodes: u64,
+    /// `unify` and `unify_row` calls, recursive calls included.
+    pub unify_calls: u64,
+    /// Type and row variables the substitution allocated.
+    pub subst_slots: u64,
+    /// Pattern-matrix rows the usefulness check visited.
+    pub exhaustiveness_rows: u64,
+    /// Witness rows the usefulness check built, counted at every level of
+    /// its recursion.
+    pub exhaustiveness_witnesses: u64,
+    /// Effects visited merging call rows into body rows: the resolved
+    /// accumulator plus the incoming row, per merge.
+    pub effect_row_merges: u64,
+}
+
+impl AddAssign for CheckStats {
+    fn add_assign(&mut self, other: Self) {
+        self.typed_nodes += other.typed_nodes;
+        self.unify_calls += other.unify_calls;
+        self.subst_slots += other.subst_slots;
+        self.exhaustiveness_rows += other.exhaustiveness_rows;
+        self.exhaustiveness_witnesses += other.exhaustiveness_witnesses;
+        self.effect_row_merges += other.effect_row_merges;
+    }
 }
 
 impl CheckedFile {

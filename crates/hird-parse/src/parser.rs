@@ -7,6 +7,7 @@
 //! whitespace tokens for gaps, and builds a cstree green tree.
 
 use alloc::vec::Vec;
+use core::ops::AddAssign;
 
 use cstree::build::{Checkpoint, GreenNodeBuilder};
 use cstree::green::GreenNode;
@@ -25,6 +26,24 @@ pub struct ParseResult {
     syntax: ResolvedNode<SyntaxKind>,
     /// Diagnostics emitted during parsing.
     diagnostics: Vec<ParseDiagnostic>,
+    /// Work counters for this parse.
+    stats: ParseStats,
+}
+
+/// Work counters for one parse: deterministic for a given source.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ParseStats {
+    /// Tokens lexed, comments included; whitespace is synthesised, not lexed.
+    pub tokens: u64,
+    /// CST nodes built.
+    pub nodes: u64,
+}
+
+impl AddAssign for ParseStats {
+    fn add_assign(&mut self, other: Self) {
+        self.tokens += other.tokens;
+        self.nodes += other.nodes;
+    }
 }
 
 impl ParseResult {
@@ -53,6 +72,12 @@ impl ParseResult {
     pub fn is_ok(&self) -> bool {
         self.diagnostics.is_empty()
     }
+
+    /// Returns the parse's work counters.
+    #[must_use]
+    pub fn stats(&self) -> ParseStats {
+        self.stats
+    }
 }
 
 /// Parse `source` into a CST.
@@ -72,6 +97,10 @@ pub fn parse(source: &str, source_id: u32) -> ParseResult {
     ParseResult {
         syntax,
         diagnostics: parser.diagnostics,
+        stats: ParseStats {
+            tokens: tokens.len() as u64,
+            nodes: parser.nodes,
+        },
     }
 }
 
@@ -107,6 +136,8 @@ struct Parser<'src, 'tok> {
     builder: GreenNodeBuilder<'static, 'static, SyntaxKind>,
     /// Errors collected during parsing.
     diagnostics: Vec<ParseDiagnostic>,
+    /// CST nodes opened so far.
+    nodes: u64,
 }
 
 impl<'src, 'tok> Parser<'src, 'tok> {
@@ -121,6 +152,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
             depth: 0,
             builder: GreenNodeBuilder::new(),
             diagnostics: Vec::new(),
+            nodes: 0,
         }
     }
 
@@ -392,6 +424,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
 
     /// Opens a new CST node of `kind`.
     fn start_node(&mut self, kind: SyntaxKind) {
+        self.nodes += 1;
         self.builder.start_node(kind);
     }
 
@@ -409,6 +442,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
     /// Retroactively opens a `kind` node at `checkpoint`, wrapping the children
     /// parsed since.
     fn start_node_at(&mut self, checkpoint: Checkpoint, kind: SyntaxKind) {
+        self.nodes += 1;
         self.builder.start_node_at(checkpoint, kind);
     }
 

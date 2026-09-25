@@ -16,6 +16,7 @@ use hird_codegen::erlang_module_name;
 use hird_ir::{IrDecl, IrFnDef, IrModule};
 use hird_types::Type;
 
+use crate::timings::Timings;
 use crate::{Failure, fail};
 
 /// The hand-written Erlang runtime library, embedded so the compiled binary
@@ -110,15 +111,17 @@ pub(crate) struct BuildOutput {
 }
 
 /// Emits `modules` (paired with their source paths) plus the runtime and
-/// boot module into `out_dir`, then compiles everything with `erlc`. The
-/// boot module's audit sink appends to `audit_file` when given, stdout
-/// otherwise; with `replay` it starts a replay cursor over that log
-/// before running `main`.
+/// boot module into `out_dir`, then compiles everything with `erlc`,
+/// recording the `emit`, `write`, and `erlc` phases and their counters in
+/// `timings`. The boot module's audit sink appends to `audit_file` when
+/// given, stdout otherwise; with `replay` it starts a replay cursor over
+/// that log before running `main`.
 pub(crate) fn build(
     modules: &[(PathBuf, IrModule)],
     out_dir: &Path,
     audit_file: Option<&Path>,
     replay: Option<&Path>,
+    timings: &mut Timings,
 ) -> Result<BuildOutput, Failure> {
     let entry = find_entry_point(modules)?;
     let audit_file = match audit_file {
@@ -136,6 +139,63 @@ pub(crate) fn build(
         None => None,
     };
 
+    let emitted = timings.phase("emit", || emit(modules))?;
+    timings.erl_bytes = emitted.iter().map(|(_, source)| source.len() as u64).sum();
+
+    let erl_files = timings.phase("write", || -> Result<Vec<PathBuf>, Failure> {
+        fs::create_dir_all(out_dir)
+            .map_err(|e| fail!("cannot create `{}`: {e}", out_dir.display()))?;
+        let mut erl_files = Vec::new();
+        for (name, source) in emitted.iter().map(|(n, s)| (n.as_str(), s.as_str())) {
+            erl_files.push(write_erl(out_dir, name, source)?);
+        }
+        for (name, source) in RUNTIME {
+            erl_files.push(write_erl(out_dir, name, source)?);
+        }
+        if let Some(entry) = &entry {
+            let tool_modules: Vec<String> = modules
+                .iter()
+                .filter(|(_, m)| m.declarations.iter().any(|d| matches!(d, IrDecl::Tool(_))))
+                .map(|(_, m)| erlang_module_name(&m.name))
+                .collect();
+            erl_files.push(write_erl(
+                out_dir,
+                BOOT_MODULE,
+                &boot_module(entry, &tool_modules, audit_file, replay),
+            )?);
+        }
+        Ok(erl_files)
+    })?;
+
+    let mut erlc = Command::new("erlc");
+    erlc.arg("-o").arg(out_dir).args(&erl_files);
+    timings.modules_compiled = erl_files.len() as u64;
+    timings.emulator_boots += 1;
+    let output = timings
+        .phase("erlc", || erlc.output())
+        .map_err(erlang_unavailable)?;
+    io::Write::write_all(&mut io::stderr(), &output.stdout)
+        .and_then(|()| io::Write::write_all(&mut io::stderr(), &output.stderr))
+        .map_err(|e| fail!("cannot write erlc output: {e}"))?;
+    if !output.status.success() {
+        return Err(fail!("erlc failed with {}", output.status));
+    }
+
+    eprintln!(
+        "compiled {} module(s) to {}",
+        erl_files.len(),
+        out_dir.display()
+    );
+    Ok(BuildOutput {
+        out_dir: out_dir.to_path_buf(),
+        entry,
+    })
+}
+
+/// Generates Erlang for `modules`: one `(module name, source)` per emitted
+/// module, refusing a generated name that collides with another or with
+/// the runtime.
+fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failure> {
     let mut emitted: Vec<(String, String)> = Vec::new();
     let mut origin: std::collections::BTreeMap<String, PathBuf> = RUNTIME
         .iter()
@@ -155,47 +215,7 @@ pub(crate) fn build(
             emitted.push((out.name, out.source));
         }
     }
-
-    fs::create_dir_all(out_dir).map_err(|e| fail!("cannot create `{}`: {e}", out_dir.display()))?;
-    let mut erl_files = Vec::new();
-    for (name, source) in emitted.iter().map(|(n, s)| (n.as_str(), s.as_str())) {
-        erl_files.push(write_erl(out_dir, name, source)?);
-    }
-    for (name, source) in RUNTIME {
-        erl_files.push(write_erl(out_dir, name, source)?);
-    }
-    if let Some(entry) = &entry {
-        let tool_modules: Vec<String> = modules
-            .iter()
-            .filter(|(_, m)| m.declarations.iter().any(|d| matches!(d, IrDecl::Tool(_))))
-            .map(|(_, m)| erlang_module_name(&m.name))
-            .collect();
-        erl_files.push(write_erl(
-            out_dir,
-            BOOT_MODULE,
-            &boot_module(entry, &tool_modules, audit_file, replay),
-        )?);
-    }
-
-    let mut erlc = Command::new("erlc");
-    erlc.arg("-o").arg(out_dir).args(&erl_files);
-    let output = erlc.output().map_err(erlang_unavailable)?;
-    io::Write::write_all(&mut io::stderr(), &output.stdout)
-        .and_then(|()| io::Write::write_all(&mut io::stderr(), &output.stderr))
-        .map_err(|e| fail!("cannot write erlc output: {e}"))?;
-    if !output.status.success() {
-        return Err(fail!("erlc failed with {}", output.status));
-    }
-
-    eprintln!(
-        "compiled {} module(s) to {}",
-        erl_files.len(),
-        out_dir.display()
-    );
-    Ok(BuildOutput {
-        out_dir: out_dir.to_path_buf(),
-        entry,
-    })
+    Ok(emitted)
 }
 
 /// Runs a built program on BEAM through the generated boot module, returning
@@ -209,7 +229,7 @@ pub(crate) fn build(
 /// console delivers Ctrl-C to the emulator too, where the BEAM's break
 /// handler would act on it, so the emulator is told to ignore it (`+Bi`) and
 /// the pipe is the only stop path. Nothing here is platform-specific.
-pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
+pub(crate) fn run(build: &BuildOutput, timings: &mut Timings) -> Result<i32, Failure> {
     let entry_module = match &build.entry {
         Some(_) => BOOT_MODULE,
         None => {
@@ -218,24 +238,27 @@ pub(crate) fn run(build: &BuildOutput) -> Result<i32, Failure> {
             ));
         }
     };
-    let mut child = Command::new("erl")
-        .arg("+Bi")
-        .arg("-noshell")
-        .arg("-pa")
-        .arg(&build.out_dir)
-        .arg("-s")
-        .arg(entry_module)
-        .arg("run")
-        .arg("-hird_stop")
-        .arg("stdin")
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(erlang_unavailable)?;
-    let stdin = child.stdin.take().expect("the emulator's stdin is piped");
-    stop_on_termination(stdin)?;
-    let status = child
-        .wait()
-        .map_err(|e| fail!("cannot wait for Erlang/OTP: {e}"))?;
+    timings.emulator_boots += 1;
+    let status = timings.phase("run", || -> Result<_, Failure> {
+        let mut child = Command::new("erl")
+            .arg("+Bi")
+            .arg("-noshell")
+            .arg("-pa")
+            .arg(&build.out_dir)
+            .arg("-s")
+            .arg(entry_module)
+            .arg("run")
+            .arg("-hird_stop")
+            .arg("stdin")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(erlang_unavailable)?;
+        let stdin = child.stdin.take().expect("the emulator's stdin is piped");
+        stop_on_termination(stdin)?;
+        child
+            .wait()
+            .map_err(|e| fail!("cannot wait for Erlang/OTP: {e}"))
+    })?;
     Ok(status.code().unwrap_or(1))
 }
 

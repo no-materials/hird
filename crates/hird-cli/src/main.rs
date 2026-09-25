@@ -8,13 +8,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 mod build;
 mod demo;
 mod pipeline;
 mod report;
 mod text;
+mod timings;
+
+use timings::Timings;
 
 /// A failed subcommand: either a message still to print, or diagnostics
 /// already rendered to stderr.
@@ -47,6 +50,9 @@ enum Command {
     Check {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,
+        /// Timing and work-counter reporting.
+        #[command(flatten)]
+        timings: TimingsArg,
     },
     /// Compile to Erlang source and .beam files.
     Build {
@@ -62,6 +68,9 @@ enum Command {
         /// dispatching to handlers.
         #[arg(long)]
         replay: Option<PathBuf>,
+        /// Timing and work-counter reporting.
+        #[command(flatten)]
+        timings: TimingsArg,
     },
     /// Build, then run on BEAM (requires a module defining `fn main`).
     Run {
@@ -80,6 +89,9 @@ enum Command {
         /// Arguments for `main` (reserved; not supported in v0.1).
         #[arg(last = true)]
         args: Vec<String>,
+        /// Timing and work-counter reporting.
+        #[command(flatten)]
+        timings: TimingsArg,
     },
     /// Record one run of the built-in demo and replay it against variants.
     ///
@@ -125,6 +137,48 @@ enum Command {
     },
 }
 
+/// `--timings[=FORMAT]`, shared by `check`, `build`, and `run`.
+#[derive(Args)]
+struct TimingsArg {
+    /// Print wall time per phase and work counters to stderr when done.
+    ///
+    /// `--timings` prints text; `--timings=json` prints one JSON object on
+    /// one line, with `schema_version`, `phases` (each a `name` and its
+    /// `wall_us`), and `counters` (by name).
+    ///
+    /// Phases, in the order a command runs them: `load` (read the sources),
+    /// `parse` (lexing included), `check`, `lower`, `emit` (generate
+    /// Erlang), `write` (the `.erl` files), `erlc`, and `run` (the
+    /// emulator).
+    ///
+    /// Counters depend only on the sources and the paths they are named by:
+    /// `modules`, `tokens`, `cst_nodes`, `typed_nodes`, `unify_calls`
+    /// (recursive calls included), `subst_slots` (type and row variables),
+    /// `exhaustiveness_rows` (pattern-matrix rows visited),
+    /// `exhaustiveness_witnesses` (witness rows built), `effect_row_merges`
+    /// (effects visited merging call rows into body rows), `erl_bytes`
+    /// (generated Erlang; the runtime and boot module excluded),
+    /// `modules_compiled` and `modules_reused` (Erlang modules), and
+    /// `emulator_boots`.
+    #[arg(
+        long,
+        value_name = "FORMAT",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "text"
+    )]
+    timings: Option<timings::Format>,
+}
+
+impl TimingsArg {
+    /// Prints `timings` in the requested format, if any.
+    fn report(&self, timings: &Timings) {
+        if let Some(format) = self.timings {
+            timings.report(format);
+        }
+    }
+}
+
 fn main() -> ExitCode {
     match dispatch(Cli::parse().command) {
         Ok(code) => code,
@@ -139,9 +193,14 @@ fn main() -> ExitCode {
 /// Runs one subcommand, returning its exit code.
 fn dispatch(command: Command) -> Result<ExitCode, Failure> {
     match command {
-        Command::Check { input } => {
-            let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
+        Command::Check {
+            input,
+            timings: report,
+        } => {
+            let mut timings = Timings::default();
+            let modules = check_input(&input, &mut timings)?;
             eprintln!("checked {} module(s)", modules.len());
+            report.report(&timings);
             Ok(ExitCode::SUCCESS)
         }
         Command::Build {
@@ -149,8 +208,17 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             out_dir,
             audit_file,
             replay,
+            timings: report,
         } => {
-            build_input(&input, &out_dir, audit_file.as_deref(), replay.as_deref())?;
+            let mut timings = Timings::default();
+            build_input(
+                &input,
+                &out_dir,
+                audit_file.as_deref(),
+                replay.as_deref(),
+                &mut timings,
+            )?;
+            report.report(&timings);
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
@@ -159,14 +227,23 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             audit_file,
             replay,
             args,
+            timings: report,
         } => {
             if !args.is_empty() {
                 return Err(fail!(
                     "arguments to `main` are reserved and not supported in v0.1"
                 ));
             }
-            let output = build_input(&input, &out_dir, audit_file.as_deref(), replay.as_deref())?;
-            let status = build::run(&output)?;
+            let mut timings = Timings::default();
+            let output = build_input(
+                &input,
+                &out_dir,
+                audit_file.as_deref(),
+                replay.as_deref(),
+                &mut timings,
+            )?;
+            let status = build::run(&output, &mut timings)?;
+            report.report(&timings);
             Ok(u8::try_from(status).map_or(ExitCode::FAILURE, ExitCode::from))
         }
         Command::Demo { out_dir } => {
@@ -177,7 +254,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             if input.is_dir() {
                 return Err(fail!("emit-ast takes a single .hird file"));
             }
-            let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
+            let modules = check_input(&input, &mut Timings::default())?;
             let ir = modules[0].lower();
             if json {
                 let rendered = ir
@@ -190,7 +267,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             Ok(ExitCode::SUCCESS)
         }
         Command::EmitEffectGraph { input, json } => {
-            let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
+            let modules = check_input(&input, &mut Timings::default())?;
             let graphs: Vec<(PathBuf, hird_ir::EffectGraph)> = modules
                 .iter()
                 .map(|m| (m.path.clone(), hird_ir::effect_graph(&m.lower())))
@@ -217,7 +294,7 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             exact,
         } => {
             let baseline = load_baseline(&baseline)?;
-            let modules = pipeline::parse_and_check(pipeline::load(&input)?)?;
+            let modules = check_input(&input, &mut Timings::default())?;
             let current = hird_ir::ProgramGraph::new(
                 modules.iter().map(|m| hird_ir::effect_graph(&m.lower())),
             );
@@ -257,19 +334,33 @@ fn load_baseline(path: &Path) -> Result<hird_ir::ProgramGraph, Failure> {
     Ok(graph)
 }
 
-/// Checks `input` and builds it into `out_dir`; the audit stream goes to
-/// `audit_file` when given, stdout otherwise, and `replay` makes the boot
-/// module replay tool calls from that recorded log.
+/// Loads, parses, and checks `input`, recording the `load`, `parse`, and
+/// `check` phases in `timings`.
+fn check_input(
+    input: &Path,
+    timings: &mut Timings,
+) -> Result<Vec<pipeline::CheckedModule>, Failure> {
+    let modules = timings.phase("load", || pipeline::load(input))?;
+    pipeline::parse_and_check(modules, timings)
+}
+
+/// Checks `input` and builds it into `out_dir`, recording every phase in
+/// `timings`; the audit stream goes to `audit_file` when given, stdout
+/// otherwise, and `replay` makes the boot module replay tool calls from
+/// that recorded log.
 fn build_input(
     input: &Path,
     out_dir: &Path,
     audit_file: Option<&Path>,
     replay: Option<&Path>,
+    timings: &mut Timings,
 ) -> Result<build::BuildOutput, Failure> {
-    let modules = pipeline::parse_and_check(pipeline::load(input)?)?;
-    let lowered: Vec<(PathBuf, hird_ir::IrModule)> = modules
-        .iter()
-        .map(|m| (m.path.clone(), m.lower()))
-        .collect();
-    build::build(&lowered, out_dir, audit_file, replay)
+    let modules = check_input(input, timings)?;
+    let lowered: Vec<(PathBuf, hird_ir::IrModule)> = timings.phase("lower", || {
+        modules
+            .iter()
+            .map(|m| (m.path.clone(), m.lower()))
+            .collect()
+    });
+    build::build(&lowered, out_dir, audit_file, replay, timings)
 }

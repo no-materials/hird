@@ -24,6 +24,7 @@ use crate::ty::Type;
 /// unification is a caller error (it must be instantiated first) and yields
 /// [`TypeError::QuantifiedType`] rather than unifying under the binder.
 pub fn unify(subst: &mut Subst, expected: &Type, got: &Type, span: Span) -> Result<(), TypeError> {
+    subst.count_unify();
     let a = subst.head(expected);
     let b = subst.head(got);
     match (a.as_ref(), b.as_ref()) {
@@ -108,6 +109,7 @@ pub fn unify_row(
     got: &EffectRow,
     span: Span,
 ) -> Result<(), TypeError> {
+    subst.count_unify();
     let r1 = subst.resolve_row(expected);
     let r2 = subst.resolve_row(got);
 
@@ -289,7 +291,7 @@ mod tests {
     use super::{unify, unify_row};
     use crate::effect::{Effect, EffectRow};
     use crate::error::TypeError;
-    use crate::subst::Subst;
+    use crate::subst::{Subst, SubstStats};
     use crate::ty::Type;
 
     // Docstring notation: α, β are unification variables. `~` is "unify",
@@ -721,6 +723,30 @@ mod tests {
         assert_eq!(
             s.resolve_row(&EffectRow::of_var(r)),
             EffectRow::closed([named("Log")])
+        );
+    }
+
+    /// `(α → β ! {r}) ~ (Int → String ! {Log})` counts one call per node it
+    /// visits — the functions, the parameter, the result, the row — and the
+    /// table reports the variables it allocated.
+    #[test]
+    fn stats_count_unify_calls_and_variables() {
+        let mut s = Subst::new();
+        let (a, b, r) = (s.fresh(), s.fresh(), s.fresh_row());
+        let lhs = Type::func_eff(vec![Type::var(a)], Type::var(b), EffectRow::of_var(r));
+        let rhs = Type::func_eff(
+            vec![Type::int()],
+            Type::string(),
+            EffectRow::closed([named("Log")]),
+        );
+        unify(&mut s, &lhs, &rhs, span()).unwrap();
+        assert_eq!(
+            s.stats(),
+            SubstStats {
+                type_vars: 2,
+                row_vars: 1,
+                unify_calls: 4,
+            }
         );
     }
 

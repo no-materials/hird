@@ -620,4 +620,16 @@ proptest! {
         let parsed = hird_parse::parse(&s, 0);
         prop_assert!(parsed.syntax().text() == s.as_str(), "CST is not lossless for {s:?}");
     }
+
+    /// The work counters agree with the tree and the lexer, on well-formed
+    /// programs and on token soup (error recovery included).
+    #[test]
+    fn stats_count_the_tree(prog in program(), soup in token_soup()) {
+        for src in [render_program(&prog, Spelling::Unicode), soup] {
+            let parsed = hird_parse::parse(&src, 0);
+            let stats = parsed.stats();
+            prop_assert_eq!(stats.nodes, parsed.syntax().descendants().count() as u64);
+            prop_assert_eq!(stats.tokens, hird_lex::Lexer::new(&src, 0).count() as u64);
+        }
+    }
 }

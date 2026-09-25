@@ -78,6 +78,22 @@ pub struct Subst {
     /// generalisation scope (a `let` value or a top-level binding group).
     /// Shared by both variable kinds.
     level: u32,
+    /// [`unify`](fn@crate::unify) and [`unify_row`](fn@crate::unify_row) calls
+    /// made against this table, recursive calls included.
+    unify_calls: u64,
+}
+
+/// Work counters for one substitution table: deterministic for a given
+/// sequence of operations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SubstStats {
+    /// Type variables allocated.
+    pub type_vars: u64,
+    /// Row variables allocated.
+    pub row_vars: u64,
+    /// [`unify`](fn@crate::unify) and [`unify_row`](fn@crate::unify_row) calls,
+    /// recursive calls included.
+    pub unify_calls: u64,
 }
 
 impl Subst {
@@ -88,7 +104,23 @@ impl Subst {
             slots: Vec::new(),
             row_slots: Vec::new(),
             level: 0,
+            unify_calls: 0,
         }
+    }
+
+    /// The table's work counters so far.
+    #[must_use]
+    pub fn stats(&self) -> SubstStats {
+        SubstStats {
+            type_vars: self.slots.len() as u64,
+            row_vars: self.row_slots.len() as u64,
+            unify_calls: self.unify_calls,
+        }
+    }
+
+    /// Counts one unification step.
+    pub(crate) fn count_unify(&mut self) {
+        self.unify_calls += 1;
     }
 
     /// Allocates a fresh unbound variable at the current level and returns

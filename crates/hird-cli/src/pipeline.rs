@@ -12,6 +12,7 @@ use hird_check::{CheckedFile, ModuleName};
 use hird_ir::IrModule;
 
 use crate::report;
+use crate::timings::Timings;
 use crate::{Failure, fail};
 
 /// One `.hird` source: its path, path-derived module name, and text.
@@ -107,14 +108,26 @@ fn module_name(stem: &str) -> String {
         .collect()
 }
 
-/// Parses and type-checks `modules` as one program. Parse and check
+/// Parses and type-checks `modules` as one program, recording the `parse`
+/// and `check` phases and their counters in `timings`. Parse and check
 /// diagnostics render to stderr; any error fails the pipeline. The returned
 /// modules keep the input order.
-pub(crate) fn parse_and_check(modules: Vec<SourceModule>) -> Result<Vec<CheckedModule>, Failure> {
+pub(crate) fn parse_and_check(
+    modules: Vec<SourceModule>,
+    timings: &mut Timings,
+) -> Result<Vec<CheckedModule>, Failure> {
+    let parses = timings.phase("parse", || {
+        modules
+            .iter()
+            .enumerate()
+            .map(|(source_id, module)| hird_parse::parse(&module.source, id_of(source_id)))
+            .collect::<Vec<_>>()
+    });
+    timings.modules = modules.len() as u64;
     let mut parsed_files = Vec::new();
     let mut parse_errors = false;
-    for (source_id, module) in modules.iter().enumerate() {
-        let parsed = hird_parse::parse(&module.source, id_of(source_id));
+    for (module, parsed) in modules.iter().zip(&parses) {
+        timings.parse += parsed.stats();
         for diagnostic in parsed.diagnostics() {
             parse_errors = true;
             eprintln!("{}: parse error", module.path.display());
@@ -136,7 +149,8 @@ pub(crate) fn parse_and_check(modules: Vec<SourceModule>) -> Result<Vec<CheckedM
         .zip(&parsed_files)
         .map(|(m, f)| (ModuleName::new(m.name.clone()), f.clone()))
         .collect();
-    let mut checked_program = hird_check::check_program(&program);
+    let mut checked_program = timings.phase("check", || hird_check::check_program(&program));
+    timings.check = checked_program.stats();
 
     let mut errors = false;
     for module in checked_program.modules.values() {

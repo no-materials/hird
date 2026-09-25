@@ -245,6 +245,13 @@ impl EffectRow {
         self.effects.is_empty() && self.tail.is_none()
     }
 
+    /// How many effects the row holds, its tail aside; counts per head, not
+    /// per effect.
+    #[must_use]
+    pub fn effect_count(&self) -> usize {
+        self.effects.values().map(Vec::len).sum()
+    }
+
     /// Every effect, in head order then insertion order.
     pub fn effects(&self) -> impl Iterator<Item = &Effect> + '_ {
         self.effects.values().flatten()
@@ -353,6 +360,17 @@ mod tests {
             Effect::named("Log"),
         ]);
         assert_eq!(format!("{row}"), "{Log, Tool<X>}");
+    }
+
+    #[test]
+    fn effect_count_counts_every_head_and_skips_the_tail() {
+        let tool = |name| Effect::parametric("Tool", vec![Type::con(name, vec![])]);
+        let row = EffectRow::open(
+            [tool("X"), tool("Y"), tool("X"), Effect::named("Log")],
+            RowVar::new(0),
+        );
+        assert_eq!(row.effect_count(), 3);
+        assert_eq!(EffectRow::of_var(RowVar::new(0)).effect_count(), 0);
     }
 
     #[test]
