@@ -54,6 +54,11 @@ fn map(f: a → b ! {r}, xs: List<a>) → List<b> ! {r} = ...
 
 - `! {}` is the empty effect row (pure). Elided in display.
 - `! {r}` is an open row variable (effect-polymorphic).
+- In a fully annotated signature a row variable is rigid, like a type
+  variable: it stands for whatever row the caller supplies. A body that
+  fixes it to effects, or to `{}`, or merges two row variables is C0061.
+  So `! {Tool<Log>, r}` over a body that only performs `Tool<Log>` is
+  rejected; declare `! {Tool<Log>}`.
 
 ```
 fn tick(clock: Clock, pid: Pid<Msg>) → () ! {Tool<Log>, Schedule<Msg>} =

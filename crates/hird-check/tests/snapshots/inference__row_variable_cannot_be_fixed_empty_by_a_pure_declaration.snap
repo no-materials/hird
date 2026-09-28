@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn run(g: Int -> Int ! {r}) -> Int = g(0)\")"
+---
+run : ∀r. (Int → Int ! {r}) → Int
+error[C0061] 36..41: row variable `r` is polymorphic in the signature, but the body fixes it to `{}`

@@ -796,6 +796,81 @@ fn concrete_and_polymorphic_row() {
     ));
 }
 
+// ── rigid signature rows ────────────────────────────────────────
+
+/// A tool and a function performing it, prefixed to each rigid-row case.
+const SAY: &str = "tool Say : { message: String } -> ()\n\
+                   fn helper(n: Int) -> Int ! {Tool<Say>} = say({ message: \"hi\" }); n\n";
+
+/// A signature row variable stands for the caller's row: a body that performs
+/// a concrete effect under `! {r}` is rejected, or the scheme would hide it.
+#[test]
+fn row_variable_cannot_hide_a_body_effect() {
+    insta::assert_snapshot!(check_str(&format!(
+        "{SAY}fn sneaky(n: Int) -> Int ! {{r}} = helper(n)"
+    )));
+}
+
+/// The higher-order form: `r` is shared with a callback the body never calls.
+#[test]
+fn row_variable_shared_with_callback_cannot_hide_an_effect() {
+    insta::assert_snapshot!(check_str(&format!(
+        "{SAY}fn apply(f: Int -> Int ! {{r}}, x: Int) -> Int ! {{r}} = helper(x)"
+    )));
+}
+
+/// A row variable in the return type is rigid too: the returned lambda cannot
+/// fix it.
+#[test]
+fn row_variable_in_return_type_cannot_hide_a_lambda_effect() {
+    insta::assert_snapshot!(check_str(&format!(
+        "{SAY}fn wrap(n: Int) -> (Int -> Int ! {{r}}) = \\x -> helper(x)"
+    )));
+}
+
+/// A callback's row that the body performs but the signature does not name is
+/// fixed to `{}`, so a pure scheme would hide the callback's effects.
+#[test]
+fn row_variable_cannot_be_fixed_empty_by_a_pure_declaration() {
+    insta::assert_snapshot!(check_str(r"fn run(g: Int -> Int ! {r}) -> Int = g(0)"));
+}
+
+/// A named tail the body leaves empty is rejected: rows check for equality.
+#[test]
+fn row_variable_beside_an_effect_cannot_be_left_empty() {
+    insta::assert_snapshot!(check_str(&format!(
+        "{SAY}fn logged(n: Int) -> Int ! {{Tool<Say>, r}} = helper(n)"
+    )));
+}
+
+/// Two signature row variables are distinct: a body performing both cannot
+/// merge them into one tail.
+#[test]
+fn distinct_row_variables_do_not_unify() {
+    insta::assert_snapshot!(check_str(
+        r"fn both(f: Int -> Int ! {r}, g: Int -> Int ! {s}) -> Int ! {r} = f(g(0))"
+    ));
+}
+
+/// Mutual recursion can fix a row variable after its own body is checked: the
+/// inferred partner's row reaches it only when the partner's body is.
+#[test]
+fn row_variable_fixed_through_mutual_recursion() {
+    insta::assert_snapshot!(check_str(&format!(
+        "{SAY}fn sneaky(n: Int) -> Int ! {{r}} = if n == 0 then 0 else partner(n)\n\
+         fn partner(n: Int) ! {{Tool<Say>}} = let _ = sneaky(n - 1) in helper(n)"
+    )));
+}
+
+/// A row variable threaded through a row-polymorphic callee stays abstract.
+#[test]
+fn row_variable_through_polymorphic_callee_is_accepted() {
+    insta::assert_snapshot!(check_str(
+        "fn apply(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = g(x)\n\
+         fn twice(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = apply(g, apply(g, x))"
+    ));
+}
+
 /// A capability effect carries the capability parameter's type: `EtsRead<t>`
 /// elaborates to `EtsRead<Table<…>>`.
 #[test]

@@ -10,6 +10,20 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A row variable in a signature could hide effects.** In a fully
+  annotated function, type variables were rigid but row variables were
+  not, so a body could fill `! {r}` with `{Tool<X>}` while the published
+  scheme still read `∀r. … ! {r}`. Callers and the effect graph then saw a
+  pure function, and `effect-diff` could not see the effect. The same
+  hole opened through a callback's row, a returned lambda's row, a
+  mutually recursive partner, a callback row fixed to `{}` under a pure
+  declaration, and two row variables merged into one. Each is now C0061.
+  A named tail the body leaves empty (`! {Tool<X>, r}` over a body
+  performing only `Tool<X>`) is rejected too, since rows check for
+  equality.
+
 ## [0.4.0] — 2026-09-15
 
 ### Added

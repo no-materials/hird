@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r\"fn both(f: Int -> Int ! {r}, g: Int -> Int ! {s}) -> Int ! {r} = f(g(0))\")"
+---
+both : ∀r r1. (Int → Int ! {r}) → (Int → Int ! {r1}) → Int ! {r}
+error[C0061] 64..72: row variables `r` and `s` are distinct in the signature, but the body merges them

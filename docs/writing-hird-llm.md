@@ -188,6 +188,7 @@ against a draft with five typical mistakes and pins it as a test.
 |---|---|
 | Effectful body with `! {}` or no annotation | C0030 — declared row ≠ inferred row, anchored at the introducing call |
 | Declaring an effect the body never performs | C0030 (equality cuts both ways) |
+| `! {r}` over a body that performs concrete effects, or none | C0061 — a signature row variable is the caller's row; name the effects instead |
 | `f(x); g()` where `f(x)` is not `()` | C0058 — bind the value with `let`, or drop it with `let _ = f(x) in` |
 | Naming a user effect head (`Audit<t>`) in a row without declaring it | C0027 unknown effect |
 | Declaring a built-in head (`effect Tool<t>`) | C0056 redundant declaration (warning) |

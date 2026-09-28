@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn apply(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = g(x)\\n\\\n         fn twice(g: Int -> Int ! {r}, x: Int) -> Int ! {r} = apply(g, apply(g, x))\")"
+---
+apply : ∀r. (Int → Int ! {r}) → Int → Int ! {r}
+twice : ∀r. (Int → Int ! {r}) → Int → Int ! {r}

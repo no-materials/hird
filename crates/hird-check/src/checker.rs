@@ -18,7 +18,8 @@ use hird_ast::{
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
 use hird_types::{
-    Effect, EffectRow, Label, Name, Subst, Type, TypeError, builtin_effect_arity, unify, unify_row,
+    Effect, EffectRow, Label, Name, RowVar, Subst, Type, TypeError, builtin_effect_arity, unify,
+    unify_row,
 };
 
 use crate::diag::{CheckCode, CheckDiagnostic};
@@ -51,6 +52,15 @@ pub(crate) struct EffectIntro {
     /// The effect introduced (resolved when matched against an offending one).
     effect: Effect,
     /// Span of the introducing application.
+    span: Span,
+}
+
+/// The row variables a fully annotated function's signature names, held until
+/// its dependency component is checked, when each must still be abstract.
+struct SignatureRows {
+    /// Surface name and check-time variable, in name order.
+    vars: Vec<(String, RowVar)>,
+    /// The function body, where a violation is reported.
     span: Span,
 }
 
@@ -1137,17 +1147,25 @@ impl Checker {
                     placeholders.insert(i, placeholder);
                 }
             }
+            let mut signature_rows = Vec::new();
             for &i in &component {
                 if annotated[i] {
                     // A failed signature already produced its diagnostics;
                     // re-elaborating the body against it would duplicate them.
-                    if sig_ok[i] {
-                        let _ = self.check_annotated_fn(&fns[i]);
+                    if sig_ok[i]
+                        && let Ok(Some(rows)) = self.check_annotated_fn(&fns[i])
+                    {
+                        signature_rows.push(rows);
                     }
                 } else if let Some(placeholder) = placeholders.get(&i) {
                     let placeholder = placeholder.clone();
                     let _ = self.check_inferred_fn(&fns[i], &placeholder);
                 }
+            }
+            // A later body in the component can still fix a signature row
+            // variable through a shared placeholder, so the check waits for all.
+            for rows in &signature_rows {
+                self.check_signature_rows(rows);
             }
             self.subst.exit_level();
             for (&i, placeholder) in &placeholders {
@@ -1166,9 +1184,11 @@ impl Checker {
     /// Signature type variables become rigid skolem constants (lowercase
     /// constructor names, which user code cannot declare), so a body that
     /// needs them concrete fails with a mismatch naming the variable.
-    fn check_annotated_fn(&mut self, decl: &FnDecl) -> Checked<()> {
+    /// Signature row variables stay flexible and are returned for
+    /// [`Checker::check_signature_rows`]; `None` when there is no body.
+    fn check_annotated_fn(&mut self, decl: &FnDecl) -> Checked<Option<SignatureRows>> {
         let Some(body) = decl.body() else {
-            return Ok(());
+            return Ok(None);
         };
         let mut scope = Scope::new();
         let params: Vec<_> = decl.params().collect();
@@ -1188,6 +1208,10 @@ impl Checker {
         // annotation is already known valid (its scheme elaborated cleanly), so
         // this cannot add a diagnostic.
         let declared = self.declared_row(decl, &mut scope);
+        let vars = scope
+            .row_vars()
+            .map(|(name, var)| (String::from(name), var))
+            .collect();
 
         self.env.push_scope();
         for (param, ty) in params.iter().zip(&param_tys) {
@@ -1204,7 +1228,32 @@ impl Checker {
         if let Ok(declared) = declared {
             self.check_effect_row(&declared, &inferred, span);
         }
-        Ok(())
+        Ok(Some(SignatureRows { vars, span }))
+    }
+
+    /// Reports each signature row variable the body fixed to a row or merged
+    /// with another (C0061). The published scheme quantifies them, so a
+    /// caller's instantiation would stand in for effects the body performs.
+    fn check_signature_rows(&mut self, rows: &SignatureRows) {
+        let mut roots: BTreeMap<RowVar, &str> = BTreeMap::new();
+        for (name, var) in &rows.vars {
+            let resolved = self.subst.resolve_row(&EffectRow::of_var(*var));
+            let message = match resolved.tail() {
+                Some(root) if resolved.effect_count() == 0 => match roots.insert(root, name) {
+                    None => continue,
+                    Some(first) => format!(
+                        "row variables `{first}` and `{name}` are distinct in the signature, \
+                         but the body merges them"
+                    ),
+                },
+                _ => format!(
+                    "row variable `{name}` is polymorphic in the signature, \
+                     but the body fixes it to `{resolved}`"
+                ),
+            };
+            self.diags
+                .push(CheckDiagnostic::error(CheckCode::C0061, rows.span, message));
+        }
     }
 
     /// Elaborates a function's declared effect row — the `! {…}` annotation, or

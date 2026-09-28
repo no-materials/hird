@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(&format!(\"{SAY}fn apply(f: Int -> Int ! {{r}}, x: Int) -> Int ! {{r}} = helper(x)\"))"
+---
+apply : ∀r. (Int → Int ! {r}) → Int → Int ! {r}
+helper : Int → Int ! {Tool<Say>}
+say : { message: String } → () ! {Tool<Say>}
+error[C0061] 156..166: row variable `r` is polymorphic in the signature, but the body fixes it to `{Tool<Say>}`

@@ -181,6 +181,10 @@ pub enum CheckCode {
     C0059,
     /// A record update with no fields (`{ ..base }`): not a copy, an error.
     C0060,
+    /// A fully annotated function's body fixes a row variable its signature
+    /// names, or merges two of them; the variable stands for whatever row the
+    /// caller supplies, so the scheme would hide the body's effects.
+    C0061,
 }
 
 /// A secondary source location attached to a diagnostic.

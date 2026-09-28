@@ -13,8 +13,10 @@
 //! - **fresh** (inferred signatures and `let` annotations): each distinct
 //!   name maps to a fresh unification variable, implicitly quantified by the
 //!   surrounding generalisation.
-//! - **skolem** (fully annotated function bodies): each distinct name maps
-//!   to a rigid constant, so the body cannot specialise the signature.
+//! - **skolem** (fully annotated function bodies): each distinct type
+//!   variable maps to a rigid constant, so the body cannot specialise the
+//!   signature. Row variables stay flexible, and the body check rejects any
+//!   the body fixes or merges.
 //!
 //! Variable scopes are per annotation site; a flexible variable in an inner
 //! annotation unifies with anything the context demands, so the loss of
@@ -78,6 +80,11 @@ impl Scope {
     /// row) may reference an earlier capability parameter.
     pub(crate) fn insert_cap(&mut self, name: &str, ty: Type) {
         self.caps.insert(String::from(name), ty);
+    }
+
+    /// Every row variable the site named, with its surface name, in name order.
+    pub(crate) fn row_vars(&self) -> impl Iterator<Item = (&str, RowVar)> + '_ {
+        self.rows.iter().map(|(name, var)| (name.as_str(), *var))
     }
 }
 
@@ -408,8 +415,8 @@ impl Checker {
                 format!("row variable `{text}` is not declared here"),
             ));
         }
-        // Body-vs-annotation effect checking is a later pass, so a fresh row
-        // variable serves both inferred and annotated positions here.
+        // A skolem site's row variables stay flexible here; the annotated body
+        // check rejects a body that fixes or merges them afterwards.
         let var = self.subst.fresh_row();
         scope.rows.insert(String::from(text), var);
         Ok(var)
