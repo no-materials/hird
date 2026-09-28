@@ -31,3 +31,6 @@ result-*
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Beads audit log; issue history lives in Dolt (`bd history`).
+/.beads/interactions.jsonl
