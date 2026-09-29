@@ -29,6 +29,7 @@ hird_tools@() ->
     #{tools => #{
             read_repo => #{
                 name => <<"ReadRepo"/utf8>>,
+                params => 0,
                 args => {record, [{path, {adt, path, []}}]},
                 result => {adt, st, []},
                 error => dynamic}},

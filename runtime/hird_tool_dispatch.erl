@@ -2,23 +2,25 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% The tool effect dispatcher. Every tool call site in generated code emits
-%% `hird_tool_dispatch:call(ToolName, Caller, Handlers, Args)` — never a
-%% direct handler invocation — so audit capture is unconditional: a mocked
-%% call produces the same invocation record a real one does.
+%% `hird_tool_dispatch:call(ToolName, TypeArgs, Caller, Handlers, Args)` —
+%% never a direct handler invocation — so audit capture is unconditional: a
+%% mocked call produces the same invocation record a real one does.
 -module(hird_tool_dispatch).
 
--export([call/4]).
+-export([call/5]).
 
 %% Dispatches one tool call. When a replay cursor is running
 %% (hird_replay), every dispatch consults it instead of resolving a
-%% handler — see replayed/3. Otherwise the handler is `{tool, ToolName}`
+%% handler — see replayed/4. Otherwise the handler is `{tool, ToolName}`
 %% in the threaded handler map, falling back to the process-independent
 %% default registry (hird_handlers) on a miss; a miss in both raises
 %% `{unhandled_tool, ToolName}` — a crash for the supervisor, never a value
 %% Hirð code sees. Around the invocation the dispatcher captures the
-%% invocation record (tool, args, result, timestamp, caller) and sends it to
-%% the audit sink (hird_audit); the record is dropped there when no sink is
-%% running. `Caller` is the codegen-supplied caller id
+%% invocation record (tool, type arguments, args, result, timestamp,
+%% caller) and sends it to the audit sink (hird_audit); the record is
+%% dropped there when no sink is running. `TypeArgs` is the call site's
+%% instantiation of a generic tool's type parameters, one wire shape each
+%% (`[]` for any other tool), and `Caller` the codegen-supplied caller id
 %% (`<<"Module.function">>` or the actor form).
 %%
 %% A handler signals a domain failure by throwing `{hird_exn, Error}`,
@@ -27,23 +29,24 @@
 %% rethrows, so the failure propagates exactly as it would unaudited. Any
 %% other exception is a crash, not a domain error: it propagates untouched
 %% and unrecorded.
--spec call(atom(), binary(), #{term() => fun()}, term()) -> term().
-call(ToolName, Caller, Handlers, Args) ->
+-spec call(atom(), [hird_types:shape()], binary(), #{term() => fun()},
+           term()) -> term().
+call(ToolName, TypeArgs, Caller, Handlers, Args) ->
     case hird_replay:active() of
-        true -> replayed(ToolName, Caller, Args);
-        false -> live(ToolName, Caller, Handlers, Args)
+        true -> replayed(ToolName, TypeArgs, Caller, Args);
+        false -> live(ToolName, TypeArgs, Caller, Handlers, Args)
     end.
 
 %% Live dispatch: resolves and invokes the handler, auditing the outcome.
-live(ToolName, Caller, Handlers, Args) ->
+live(ToolName, TypeArgs, Caller, Handlers, Args) ->
     Handler = resolve(ToolName, Handlers),
     try Handler(Args, Handlers) of
         Result ->
-            audit(ToolName, Caller, Args, {ok, Result}),
+            audit(ToolName, TypeArgs, Caller, Args, {ok, Result}),
             Result
     catch
         throw:{hird_exn, Error}:Stacktrace ->
-            audit(ToolName, Caller, Args, {err, Error}),
+            audit(ToolName, TypeArgs, Caller, Args, {err, Error}),
             erlang:raise(throw, {hird_exn, Error}, Stacktrace)
     end.
 
@@ -53,22 +56,23 @@ live(ToolName, Caller, Handlers, Args) ->
 %% same tool/args/result stream a live one does. A logged failure replays
 %% as the `{hird_exn, Error}` throw the live handler raised; a mismatch
 %% crashes with the structured divergence, unrecorded.
-replayed(ToolName, Caller, Args) ->
-    case hird_replay:offer(ToolName, Args) of
+replayed(ToolName, TypeArgs, Caller, Args) ->
+    case hird_replay:offer(ToolName, TypeArgs, Args) of
         {ok, Result} ->
-            audit(ToolName, Caller, Args, {ok, Result}),
+            audit(ToolName, TypeArgs, Caller, Args, {ok, Result}),
             Result;
         {err, Error} ->
-            audit(ToolName, Caller, Args, {err, Error}),
+            audit(ToolName, TypeArgs, Caller, Args, {err, Error}),
             throw({hird_exn, Error});
         {diverged, Divergence} ->
             erlang:error({replay_divergence, Divergence})
     end.
 
 %% Sends one invocation record to the audit sink.
-audit(ToolName, Caller, Args, Result) ->
+audit(ToolName, TypeArgs, Caller, Args, Result) ->
     hird_audit:log(#{
         tool => ToolName,
+        type_args => TypeArgs,
         args => Args,
         result => Result,
         timestamp => erlang:system_time(millisecond),

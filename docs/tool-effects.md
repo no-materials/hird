@@ -75,16 +75,33 @@ Each declaration creates three things:
 
 ### Wire-representability
 
-Tool args and results cross the audit-log wire boundary, so the checker
-rejects tool signatures containing:
+Tool args, results, and error types (the `Exn<…>` arguments of its row)
+cross the audit-log wire boundary, so the checker rejects tool signatures
+containing, directly or nested inside a declared type's constructors
+(C0032):
 
-- **function types** — not serialisable, directly or nested inside a
-  declared type's constructors;
+- **function types** — not serialisable;
 - **opaque capability types** — a capability decoded from a log would be a
-  forged capability.
+  forged capability;
+- **process references** (`Pid<…>`, `ReplyTo<…>`) — a process has no wire
+  form.
 
-Type parameters of a generic tool are fine: each concrete invocation is
-validated value-by-value at the wire layer.
+A generic tool's records are encoded at the types each use fixes, so every
+use — a call or the tool function as a value — must fix its args, result,
+and error types to known types, and those types obey the same rules:
+
+```
+fn triage(p: Prompt, s: Schema<Ticket>) → Ticket
+  ! {Tool<LLMCall>, Exn<ParseError>} = llm_call({ prompt: p, schema: s })
+
+fn ask(p: Prompt, s: Schema<t>) → t
+  ! {Tool<LLMCall>, Exn<ParseError>} = llm_call({ prompt: p, schema: s })
+  // C0062: `t` is the caller's to choose, unknown here
+```
+
+A use at a signature's type variable, inside a let-generalised lambda, or
+at a type nothing constrains (`echo({ v: [] })`) is C0062; annotate it
+concretely. A use at a function, capability, or process type is C0032.
 
 ## Handlers and tool effects
 
@@ -280,6 +297,14 @@ with a `replay_divergence` naming the position, the recorded call, and
 the offered one; and a log the run did not read to the end, since a
 truncated replay is not a faithful one.
 
+The log loads before `main` runs: a line of another `schema_version`, or
+one naming a tool the program does not declare, fails the load, as does a
+record that does not decode against the tool's signature. A generic
+tool's record is the exception, because its shapes depend on the types
+its call fixes: it decodes when that call is offered, at those types, and
+a record that does not decode there is an `args_mismatch` — the program
+calls the tool at other types than the recorded run did.
+
 ### Recorded runs as regression evidence
 
 A checked-in recording is a behavioral test with no oracle to maintain:
@@ -388,7 +413,9 @@ Guidance:
 
 - **Let the schema fix the type.** The `Schema<t>` argument ties the
   result type to the call site through ordinary unification:
-  `llm_call({ prompt: p, schema: ticket_schema })` has type `Ticket`. Do
+  `llm_call({ prompt: p, schema: ticket_schema })` has type `Ticket`.
+  Each call must fix `t` concretely, since the call is recorded at it: a
+  helper generic in `t` that calls `llm_call` is rejected (C0062). Do
   not declare LLM tools returning raw `String` and parse downstream — that
   discards the typing story and hides the failure mode.
 - **Declare the failure mode.** A response that does not conform to the
@@ -442,3 +469,9 @@ in sight.
   rest live) and no per-tool selection.
 - The audit log has no tamper-proofing (content addressing, chaining,
   signatures); the `schema_version` field reserves the upgrade path.
+- A generic tool is recorded at the types each use fixes, so no function
+  generic in the tool's parameters can call it (C0062); there is no
+  passing of shapes through generic code.
+- Types are identified across modules by name, as the checker identifies
+  them: two modules declaring different ADTs of one name share one entry
+  in the runtime's merged signature tables.

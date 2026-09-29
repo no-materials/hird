@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"tool Pair<a, b> : { x: b, y: a } -> (a, b)\\n\\\n         tool Tag<a, b> : { v: b } -> b\")"
+---
+pair : ∀a b. { x: b, y: a } → (a, b) ! {Tool<Pair>}
+tag : ∀a b. { v: b } → b ! {Tool<Tag>}
+record PairInvocation : { args: { x: a, y: b }, caller: CallerId, result: (b, a), timestamp: Timestamp, tool: String }
+record TagInvocation : { args: { v: a }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }

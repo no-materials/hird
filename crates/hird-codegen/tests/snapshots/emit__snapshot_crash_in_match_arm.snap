@@ -4,7 +4,7 @@ expression: "emit(program(\"Boom\"), \"Boom\")"
 ---
 %% Generated from src/boom.hird by the Hirð compiler. Do not edit.
 -module(hird_boom).
--export([unwrap/1]).
+-export([unwrap/1, hird_tools@/0]).
 
 %% src/boom.hird:2
 unwrap(O) ->
@@ -14,3 +14,9 @@ unwrap(O) ->
         none ->
             erlang:error(<<"empty"/utf8>>)
     end.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            option => [{some, <<"Some"/utf8>>, [{param, 0}]},
+                {none, <<"None"/utf8>>, []}]}}.

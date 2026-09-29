@@ -821,6 +821,12 @@ pure data and the future runtime is only one of its producers.
      through nested ADT constructor fields), so every declarable tool's
      records are encodable and a decoded log can never mint a capability.
 
+     *Amended 2026-09-28*: process references (`Pid`, `ReplyTo`) are
+     rejected too, a tool's `Exn<E>` error types are checked like its
+     args and result, and each use of a generic tool must fix its types
+     to known, representable ones (ADR-022 §2, as amended), since its
+     records are encoded at them.
+
    Timestamps are RFC 3339 UTC at millisecond precision; timestamps and
    caller ids are injected, never read from an ambient clock. The caller
    id is `"Module.function"` in v0.1; an actor form
@@ -1369,6 +1375,38 @@ so that promise is currently unimplementable as stated.
    `erlang:error`). The throw tag joins the frozen contract of this
    section: a future surface form for raising domain errors must lower
    to exactly this throw.
+
+   *Amended 2026-09-28 — a call site carries a generic tool's
+   instantiation, and each module describes its own types.* Rendering a
+   generic tool's type parameters as `dynamic` made its records
+   unencodable, and so did any ADT a tool reached that the tool's own
+   module did not declare: an imported type, or the predeclared `Option`
+   and `Next`. The sink crashed on the first such record, and every
+   later record was lost. The instantiation is a call-site fact, so the
+   call site now carries it. The dispatcher signature becomes
+   `hird_tool_dispatch:call(read_repo, TypeArgs, Caller, Handlers,
+   ArgsMap)`, where `TypeArgs` holds the wire shape of each type
+   parameter in declaration order (`[]` for a tool with none), and the
+   table gives each tool its parameter count, with `{param, N}` in a
+   generic tool's shapes. The checker keeps this static: every use of a
+   generic tool must fix its args, result, and error types to known
+   (C0062) and wire-representable (C0032) types, and a tool's scheme
+   quantifies every declared parameter in declaration order, so the table
+   and the call site agree on positions. Types resolve by name through
+   the merged tables: every module declaring a tool or an ADT emits
+   `hird_tools@/0` with its own constructor shapes, startup registers all
+   of them, and the runtime knows the predeclared `Option` and `Next`,
+   which a declaration shadows, as in the checker. Replay decodes a
+   generic tool's record when its call is offered, at the offered type
+   arguments; every other record still decodes at load. Types are keyed
+   by bare name, as the checker identifies them, so two modules declaring
+   different ADTs of one name collide in the merged table. *Rejected*:
+   carrying the instantiation in the log (an envelope field a decoder must
+   understand needs a `schema_version` bump); passing shapes through
+   generic functions (a calling-convention change for every polymorphic
+   function, where a use at a signature variable is now a compile error);
+   and copying imported types into the importer's table (a private type
+   reached through a public one is invisible to the importer).
 
 3. **Unhandled tool calls fall back to the runtime registry, then crash.**
    On a map miss the dispatcher consults the process-independent default

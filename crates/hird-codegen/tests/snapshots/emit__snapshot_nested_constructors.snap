@@ -4,8 +4,14 @@ expression: "emit(program(\"Build\"), \"Build\")"
 ---
 %% Generated from src/build.hird by the Hirð compiler. Do not edit.
 -module(hird_build).
--export([build/0]).
+-export([build/0, hird_tools@/0]).
 
 %% src/build.hird:2
 build() ->
     {cons, 1, {cons, 2, nil}}.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            list2 => [{cons, <<"Cons"/utf8>>, [{param, 0}, {adt, list2, [{param, 0}]}]},
+                {nil, <<"Nil"/utf8>>, []}]}}.

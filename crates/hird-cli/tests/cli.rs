@@ -1285,3 +1285,112 @@ fn effect_diff_exact_fails_on_any_drift() {
         stdout(&exact)
     );
 }
+
+/// Types a tool module imports: a public one carrying a private one.
+const SHAPES: &str = "module Shapes\n\
+     type Item = Item(String)\n\
+     pub type Order = Order(Item, Int)\n\
+     pub fn mk(s: String, n: Int) -> Order = Order(Item(s), n)";
+
+/// A generic tool called at three types, one of them imported; a tool
+/// over the imported type; and one returning the predeclared `Option`.
+const SHOP: &str = "module Shop\n\
+     use Shapes.{Order, mk}\n\
+     tool Echo<t> : { v: t } -> t\n\
+     tool Place : { order: Order } -> Int\n\
+     tool Look : { k: String } -> Option<Int>\n\
+     fn echo_impl(args: { v: a }) -> a = args.v\n\
+     fn place_impl(args: { order: Order }) -> Int = match args.order { Order(_, n) -> n }\n\
+     fn look_impl(args: { k: String }) -> Option<Int> = Some(7)\n\
+     fn main() -> () ! {} =\n\
+       handle { Tool<Echo> -> echo_impl, Tool<Place> -> place_impl, Tool<Look> -> look_impl, } in\n\
+       let a = echo({ v: 1 }) in\n\
+       let b = echo({ v: \"two\" }) in\n\
+       let c = echo({ v: mk(\"x\", 3) }) in\n\
+       let d = place({ order: mk(\"y\", 4) }) in\n\
+       match look({ k: \"k\" }) {\n\
+         Some(n) -> if a + d + n == 12 then () else crash!(\"bad sum\"),\n\
+         None -> crash!(\"no answer\"),\n\
+       }";
+
+/// Every call of a generic tool, of a tool over an imported type, and of
+/// one returning `Option` reaches the audit file at its concrete types; the
+/// log replays to the same stream, and a generic record replayed at a type
+/// the program does not call it at diverges.
+#[test]
+fn run_records_and_replays_generic_and_imported_tool_shapes() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_generic_shapes");
+    let src = dir.join("src");
+    fs::create_dir_all(&src).expect("create the source dir");
+    write(&src, "shapes.hird", SHAPES);
+    write(&src, "shop.hird", SHOP);
+    let src = src.display().to_string();
+
+    let recorded = dir.join("recorded.jsonl");
+    let record = hird(&[
+        "run",
+        &src,
+        "-o",
+        &dir.join("out_record").display().to_string(),
+        "--audit-file",
+        &recorded.display().to_string(),
+    ]);
+    assert!(record.status.success(), "stderr: {}", stderr(&record));
+    let log = fs::read_to_string(&recorded).expect("read the recorded log");
+    let lines: Vec<&str> = log.lines().collect();
+    assert_eq!(lines.len(), 5, "every call must be recorded:\n{log}");
+    for (line, fragment) in lines.iter().zip([
+        "\"tool\":\"Echo\",\"args\":{\"v\":1},\"result\":{\"ok\":1}",
+        "\"tool\":\"Echo\",\"args\":{\"v\":\"two\"},\"result\":{\"ok\":\"two\"}",
+        "\"tool\":\"Echo\",\"args\":{\"v\":{\"ctor\":\"Order\",\"args\":[{\"ctor\":\"Item\",\"args\":[\"x\"]},3]}}",
+        "\"tool\":\"Place\",\"args\":{\"order\":{\"ctor\":\"Order\",\"args\":[{\"ctor\":\"Item\",\"args\":[\"y\"]},4]}},\"result\":{\"ok\":4}",
+        "\"tool\":\"Look\",\"args\":{\"k\":\"k\"},\"result\":{\"ok\":{\"ctor\":\"Some\",\"args\":[7]}}",
+    ]) {
+        assert!(line.contains(fragment), "`{fragment}` missing from {line}");
+    }
+
+    let replayed = dir.join("replayed.jsonl");
+    let replay = hird(&[
+        "run",
+        &src,
+        "-o",
+        &dir.join("out_replay").display().to_string(),
+        "--replay",
+        &recorded.display().to_string(),
+        "--audit-file",
+        &replayed.display().to_string(),
+    ]);
+    assert!(replay.status.success(), "stderr: {}", stderr(&replay));
+    let replayed_log = fs::read_to_string(&replayed).expect("read the replayed log");
+    assert_eq!(strip_timestamps(&replayed_log), strip_timestamps(&log));
+
+    // The second record rewritten as a call at `Int`: the program calls
+    // `echo` at `String` there, so the record does not decode under it.
+    let retyped = log.replacen(
+        "\"v\":\"two\"},\"result\":{\"ok\":\"two\"}",
+        "\"v\":2},\"result\":{\"ok\":2}",
+        1,
+    );
+    assert_ne!(retyped, log, "the rewrite must change the second record");
+    fs::write(&recorded, retyped).expect("write the retyped log");
+    let diverged = hird(&[
+        "run",
+        &src,
+        "-o",
+        &dir.join("out_diverged").display().to_string(),
+        "--replay",
+        &recorded.display().to_string(),
+    ]);
+    assert!(
+        !diverged.status.success(),
+        "a retyped log must fail the run"
+    );
+    let err = stderr(&diverged);
+    assert!(err.contains("replay_divergence"), "stderr: {err}");
+    assert!(err.contains("args_mismatch"), "stderr: {err}");
+    assert!(err.contains("position => 1"), "stderr: {err}");
+}

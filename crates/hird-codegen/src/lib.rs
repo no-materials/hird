@@ -11,6 +11,9 @@
 //! supervisor declaration. The hand-written runtime modules
 //! (`hird_tool_dispatch`, …) are only referenced, never generated.
 //!
+//! [`has_signature_table`] says whether a module's base module exports the
+//! `hird_tools@/0` signature table startup must register.
+//!
 //! [`erlang_module_name`] is the module-file naming rule (`Planner` →
 //! `hird_planner`), shared with callers that need to place or reference the
 //! generated files.
@@ -22,5 +25,5 @@ extern crate alloc;
 mod emit;
 mod names;
 
-pub use emit::{EmittedModule, emit_modules};
+pub use emit::{EmittedModule, emit_modules, has_signature_table};
 pub use names::erlang_module_name;

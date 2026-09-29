@@ -28,8 +28,10 @@
 //! resolves as an ordinary parametric effect argument), a function
 //! `(input) → output ! ({Tool<Name>} ∪ declared_row)` bound like an ADT
 //! constructor, and a derived invocation record kept in
-//! [`CheckedFile::invocation_records`]. Tool args and results must be
-//! wire-representable (no function types, no opaque capabilities); the
+//! [`CheckedFile::invocation_records`]. Tool args, results, and error types
+//! must be wire-representable (no function types, opaque capabilities, or
+//! process references), and each use of a generic tool must fix them to
+//! known, representable types, since its records are encoded at them; the
 //! [`wire`] module is the reference implementation of the audit-log wire
 //! format those records serialise to, and of replay over a recorded log,
 //! and the [`replay`] module layers the log-file loader and the run

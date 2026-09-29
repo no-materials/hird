@@ -2,14 +2,17 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% Canonical wire encoding and decoding of tool-invocation records
-%% (audit-log v1), type-directed against the signature table the compiler
-%% emits into each base module (`hird_tools@/0`). The encoder's output
-%% reproduces the golden files under conformance/v1 byte for byte, and the
-%% decoder accepts exactly what the format specifies; the format lives in
-%% docs/tool-effects.md.
+%% (audit-log v1), type-directed against the signature tables the compiler
+%% emits into each base module (`hird_tools@/0`). A generic tool's shapes
+%% carry `{param, N}` for its type parameters, and each record supplies the
+%% instantiation its call site fixed (`type_args`). An ADT absent from every
+%% table is looked up among the predeclared ones (`Option`, `Next`). The
+%% encoder's output reproduces the golden files under conformance/v1 byte
+%% for byte, and the decoder accepts exactly what the format specifies; the
+%% format lives in docs/tool-effects.md.
 -module(hird_types).
 
--export([encode_invocation/2, decode_invocation/2]).
+-export([encode_invocation/2, decode_invocation/3, decode_tool/2]).
 
 -type shape() ::
     unit | int | float | string | bool
@@ -20,6 +23,7 @@
     | dynamic.
 -type table() :: #{
     tools := #{atom() := #{name := binary(),
+                           params := non_neg_integer(),
                            args := shape(),
                            result := shape(),
                            error := shape()}},
@@ -27,6 +31,7 @@
 }.
 -type record_in() :: #{
     tool := atom(),
+    type_args := [shape()],
     args := term(),
     result := {ok, term()} | {err, term()},
     timestamp := integer(),
@@ -47,15 +52,18 @@
 %% One record as a canonical JSON line (no trailing newline): envelope
 %% fields in fixed order, no whitespace, sorted record labels and meta keys.
 %% The timestamp is a millisecond system time. Fails with
-%% {unknown_tool, Tool} for a tool absent from the table and
-%% {unencodable, Shape, Value} on any shape/value mismatch.
+%% {unknown_tool, Tool} for a tool absent from the table,
+%% {type_args, Tool, TypeArgs} when the record's `type_args` is not one
+%% shape per type parameter, {unknown_type, Name} for an ADT no table or
+%% predeclaration defines, and {unencodable, Shape, Value} on any
+%% shape/value mismatch.
 -spec encode_invocation(record_in(), table()) -> binary().
 encode_invocation(Record, #{tools := Tools, types := Types}) ->
-    #{tool := Tool, args := Args, result := Result,
+    #{tool := Tool, type_args := TypeArgs, args := Args, result := Result,
       timestamp := Ts, caller := Caller} = Record,
     is_map_key(Tool, Tools) orelse erlang:error({unknown_tool, Tool}),
-    #{name := Name, args := AShape, result := RShape, error := EShape} =
-        maps:get(Tool, Tools),
+    #{name := Name} = Sig = maps:get(Tool, Tools),
+    {AShape, RShape, EShape} = instantiate(Tool, Sig, TypeArgs),
     Tagged = case Result of
         {ok, Value} -> [<<"{\"ok\":">>, value(RShape, Types, Value), $}];
         {err, Value} -> [<<"{\"err\":">>, value(EShape, Types, Value), $}]
@@ -72,6 +80,30 @@ encode_invocation(Record, #{tools := Tools, types := Types}) ->
         <<",\"caller\":">>, string(Caller),
         Meta, $}
     ]).
+
+%% A tool's args, result, and error shapes with its type parameters
+%% instantiated at `TypeArgs`, one shape per parameter.
+instantiate(Tool, #{params := N, args := A, result := R, error := E},
+            TypeArgs) ->
+    length(TypeArgs) =:= N orelse
+        erlang:error({type_args, Tool, TypeArgs}),
+    {subst(A, TypeArgs), subst(R, TypeArgs), subst(E, TypeArgs)}.
+
+%% The constructors of the ADT `Name`: a table's declaration first (a user
+%% declaration shadows a predeclared type, as in the checker), else the
+%% predeclared `Option` and `Next`.
+ctors(Name, Types) ->
+    case maps:find(Name, Types) of
+        {ok, Ctors} -> {ok, Ctors};
+        error -> maps:find(Name, predeclared())
+    end.
+
+%% The predeclared sums, `Option<a> = Some(a) | None` and
+%% `Next<a> = Continue(a) | Stop`. `Bool` has a shape of its own.
+predeclared() ->
+    #{option => [{some, <<"Some">>, [{param, 0}]}, {none, <<"None">>, []}],
+      next => [{continue, <<"Continue">>, [{param, 0}]},
+               {stop, <<"Stop">>, []}]}.
 
 %% One value against its shape.
 -spec value(shape(), map(), term()) -> iodata().
@@ -98,7 +130,10 @@ value({record, Fields}, Types, Map) when is_map(Map) ->
                || {Label, Shape} <- Fields],
     [${, join(Encoded), $}];
 value({adt, Name, Params}, Types, V) ->
-    Ctors = maps:get(Name, Types),
+    Ctors = case ctors(Name, Types) of
+        {ok, Cs} -> Cs;
+        error -> erlang:error({unknown_type, Name})
+    end,
     {Tag, Fields} = case V of
         Atom when is_atom(Atom) -> {Atom, []};
         Tuple when is_tuple(Tuple), tuple_size(Tuple) > 1 ->
@@ -120,7 +155,7 @@ value(Shape, _Types, V) ->
 zip([], [], _Types) -> [];
 zip([S | Ss], [V | Vs], Types) -> [value(S, Types, V) | zip(Ss, Vs, Types)].
 
-%% A constructor field shape with the ADT's parameters instantiated.
+%% A shape with the parameters of its ADT or generic tool instantiated.
 subst({param, N}, Params) -> lists:nth(N + 1, Params);
 subst({list, S}, Params) -> {list, subst(S, Params)};
 subst({tuple, Ss}, Params) -> {tuple, [subst(S, Params) || S <- Ss]};
@@ -215,17 +250,15 @@ join(Items) -> lists:join($,, Items).
 %% Every parser takes a binary and returns {Value, Rest} (or just Rest);
 %% any flaw fails with `{decode_error, Detail}`.
 
-%% One audit-log line decoded to runtime terms. The tool is resolved by
-%% wire name through the table; the timestamp stays an RFC 3339 binary.
--spec decode_invocation(binary(), table()) -> decoded().
-decode_invocation(Line, #{tools := Tools, types := Types}) ->
-    R1 = dkey(<<"schema_version">>, dtok(${, Line)),
-    {Version, R2} = dinteger(R1),
-    Version =:= 1 orelse
-        erlang:error({decode_error, {unsupported_schema_version, Version}}),
-    {WireName, R3} = dstring(dkey(<<"tool">>, dtok($,, R2))),
-    {Tool, #{args := AShape, result := RShape, error := EShape}} =
-        tool_by_name(WireName, Tools),
+%% One audit-log line decoded to runtime terms, a generic tool's shapes
+%% instantiated at `TypeArgs` (`[]` for any other tool). The tool is
+%% resolved by wire name through the table; the timestamp stays an
+%% RFC 3339 binary. A `TypeArgs` list that is not one shape per type
+%% parameter fails with {type_args, Tool, TypeArgs}.
+-spec decode_invocation(binary(), [shape()], table()) -> decoded().
+decode_invocation(Line, TypeArgs, #{tools := Tools, types := Types}) ->
+    {Tool, Sig, R3} = denvelope(Line, Tools),
+    {AShape, RShape, EShape} = instantiate(Tool, Sig, TypeArgs),
     {Args, R4} = dvalue(AShape, Types, dkey(<<"args">>, dtok($,, R3))),
     {Result, R5} =
         dresult(RShape, EShape, Types, dkey(<<"result">>, dtok($,, R4))),
@@ -246,6 +279,25 @@ decode_invocation(Line, #{tools := Tools, types := Types}) ->
         <<>> -> Record;
         _ -> erlang:error({decode_error, trailing_input})
     end.
+
+%% The tool an audit-log line records, read from its envelope prefix
+%% alone (schema version and wire name validated) — enough to know which
+%% signature, and so which type arguments, a full decode needs.
+-spec decode_tool(binary(), table()) -> atom().
+decode_tool(Line, #{tools := Tools}) ->
+    {Tool, _Sig, _Rest} = denvelope(Line, Tools),
+    Tool.
+
+%% The `{"schema_version":1,"tool":Name` prefix: the tool atom, its
+%% signature, and the rest of the line.
+denvelope(Line, Tools) ->
+    R1 = dkey(<<"schema_version">>, dtok(${, Line)),
+    {Version, R2} = dinteger(R1),
+    Version =:= 1 orelse
+        erlang:error({decode_error, {unsupported_schema_version, Version}}),
+    {WireName, R3} = dstring(dkey(<<"tool">>, dtok($,, R2))),
+    {Tool, Sig} = tool_by_name(WireName, Tools),
+    {Tool, Sig, R3}.
 
 %% The tool atom and signature for a wire name.
 tool_by_name(Name, Tools) ->
@@ -441,7 +493,7 @@ dvalue({record, Fields}, Types, Bin) ->
     {Pairs, R2} = drecord(Fields, Types, R1, true),
     {maps:from_list(Pairs), dtok($}, R2)};
 dvalue({adt, Name, Params}, Types, Bin) ->
-    Ctors = case maps:find(Name, Types) of
+    Ctors = case ctors(Name, Types) of
         {ok, Cs} -> Cs;
         error -> erlang:error({decode_error, {unknown_type, Name}})
     end,

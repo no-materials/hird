@@ -4,7 +4,7 @@ expression: "emit(program(\"Opt\"), \"Opt\")"
 ---
 %% Generated from src/opt.hird by the Hirð compiler. Do not edit.
 -module(hird_opt).
--export([unwrap/1]).
+-export([unwrap/1, hird_tools@/0]).
 
 %% src/opt.hird:2
 unwrap(Opt) ->
@@ -14,3 +14,9 @@ unwrap(Opt) ->
         none ->
             0
     end.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            option => [{some, <<"Some"/utf8>>, [{param, 0}]},
+                {none, <<"None"/utf8>>, []}]}}.

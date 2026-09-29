@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"tool Echo<t> : { v: t } -> t\\n\\\n         fn nums() -> Int ! {Tool<Echo>} = echo({ v: 1 })\\n\\\n         fn maybe() -> Option<String> ! {Tool<Echo>} = echo({ v: Some(\\\"x\\\") })\\n\\\n         fn as_value() -> ({ v: List<Int> }) -> List<Int> ! {Tool<Echo>} = echo\")"
+---
+as_value : () → ({ v: List<Int> } → List<Int> ! {Tool<Echo>})
+echo : ∀a. { v: a } → a ! {Tool<Echo>}
+maybe : () → Option<String> ! {Tool<Echo>}
+nums : () → Int ! {Tool<Echo>}
+record EchoInvocation : { args: { v: a }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }

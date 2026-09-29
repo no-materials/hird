@@ -22,8 +22,8 @@ use hird_types::{
     unify_row,
 };
 
-use crate::diag::{CheckCode, CheckDiagnostic};
-use crate::elaborate::Scope;
+use crate::diag::{CheckCode, CheckDiagnostic, Severity};
+use crate::elaborate::{Scope, is_var_name};
 use crate::env::Env;
 use crate::program::{ExportedType, ModuleInterface};
 use crate::registry::{CtorInfo, Registry};
@@ -61,6 +61,17 @@ struct SignatureRows {
     /// Surface name and check-time variable, in name order.
     vars: Vec<(String, RowVar)>,
     /// The function body, where a violation is reported.
+    span: Span,
+}
+
+/// One use of a generic tool's function, held until inference is done, when
+/// its instantiated wire types must be known and representable.
+struct ToolUse {
+    /// The tool's marker name.
+    tool: Name,
+    /// The use's instantiated function type (resolved when checked).
+    ty: Type,
+    /// The name at the use site.
     span: Span,
 }
 
@@ -122,7 +133,13 @@ pub(crate) struct Checker {
     imported_tool_signatures: BTreeMap<Name, Type>,
     /// Tools other modules declare that this module can call, keyed by the
     /// qualified spelling lowering gives each call.
-    imported_tools: BTreeMap<String, ImportedTool>,
+    pub(crate) imported_tools: BTreeMap<String, ImportedTool>,
+    /// Unqualified tool function name (`read_repo`) → tool marker, for
+    /// declared and selectively imported tools.
+    pub(crate) tool_fns: BTreeMap<String, Name>,
+    /// Uses of generic tools, checked for known wire types once inference
+    /// is done.
+    tool_uses: Vec<ToolUse>,
     /// Declared actors by name — the actor namespace. `spawn` resolves its
     /// actor argument here; actor names are not values.
     pub(crate) actors: BTreeMap<String, crate::actors::ActorInfo>,
@@ -235,6 +252,8 @@ impl Checker {
             tool_signatures: BTreeMap::new(),
             imported_tool_signatures: BTreeMap::new(),
             imported_tools: BTreeMap::new(),
+            tool_fns: BTreeMap::new(),
+            tool_uses: Vec::new(),
             actors: BTreeMap::new(),
             supervisors: BTreeMap::new(),
             current_actor: None,
@@ -380,6 +399,7 @@ impl Checker {
         for decl in &supervisor_decls {
             self.check_supervisor(decl);
         }
+        self.check_tool_uses();
         self.finish_with_interface()
     }
 
@@ -434,6 +454,7 @@ impl Checker {
         self.imported_tool_signatures
             .insert(marker.clone(), scheme.clone());
         let fn_name = tool_fn_name(marker.as_str());
+        self.tool_fns.insert(fn_name.clone(), marker.clone());
         self.imported_tools.insert(
             format!("{from}.{fn_name}"),
             ImportedTool {
@@ -944,13 +965,16 @@ impl Checker {
         let mut scope = Scope::new();
         self.subst.enter_level();
         let mut seen: Vec<&str> = Vec::new();
+        let mut param_vars = Vec::new();
         for param in &params {
             // First occurrence wins, consistent with ADT headers.
             if seen.contains(param) {
                 continue;
             }
             seen.push(param);
-            scope.insert_type(String::from(*param), self.subst.fresh_type());
+            let var = self.subst.fresh();
+            param_vars.push(var);
+            scope.insert_type(String::from(*param), Type::var(var));
         }
         // Collect without `?` so `exit_level` runs on the error paths too.
         let input_ty = self.elaborate_closed(&input, &mut scope);
@@ -968,23 +992,18 @@ impl Checker {
         let output_ty = output_ty?;
         let mut row = row?;
 
-        // Tool args and results cross the audit-log wire boundary, so both
-        // sides must be wire-representable.
-        for (side, ty) in [("args", &input_ty), ("result", &output_ty)] {
+        // Tool args, results, and errors cross the audit-log wire boundary,
+        // so every side must be wire-representable.
+        for (side, ty) in wire_sides(&input_ty, &output_ty, &row) {
             if let Some(violation) = wire_violation(&self.registry, ty, &mut BTreeSet::new()) {
                 let span = name_token_span(decl.syntax(), self.source_id);
-                let detail = match violation {
-                    WireViolation::Function(ty) => {
-                        format!("function type `{ty}` cannot be serialised")
-                    }
-                    WireViolation::Capability(name) => {
-                        format!("`{name}` is an opaque capability")
-                    }
-                };
                 return Err(self.error(
                     CheckCode::C0032,
                     span,
-                    format!("tool `{name}` {side} are not wire-representable: {detail}"),
+                    format!(
+                        "tool `{name}` {side} are not wire-representable: {}",
+                        violation.detail()
+                    ),
                 ));
             }
         }
@@ -993,9 +1012,21 @@ impl Checker {
             "Tool",
             Vec::from([Type::con(name, Vec::new())]),
         ));
-        let fn_ty = Type::func_eff(Vec::from([input_ty.clone()]), output_ty.clone(), row);
-        let scheme = self.subst.generalize(&fn_ty);
+        let fn_ty = self.subst.resolve(&Type::func_eff(
+            Vec::from([input_ty.clone()]),
+            output_ty.clone(),
+            row,
+        ));
+        // Every declared parameter is quantified, in declaration order, used
+        // or not: a use's type arguments are then positional in the
+        // declaration, which the signature table and call sites rely on.
+        let scheme = if param_vars.is_empty() {
+            fn_ty
+        } else {
+            Type::TyForall(param_vars, Vec::new(), Box::new(fn_ty))
+        };
         let fn_name = tool_fn_name(name);
+        self.tool_fns.insert(fn_name.clone(), Name::new(name));
         self.tool_signatures.insert(Name::new(name), scheme.clone());
         self.env.insert_root(&fn_name, scheme.clone());
         self.types
@@ -1012,6 +1043,70 @@ impl Checker {
         self.invocation_records
             .push((Name::new(format!("{name}Invocation")), record));
         Ok(())
+    }
+
+    /// Records a use of tool `tool` at `span` for
+    /// [`Checker::check_tool_uses`] when its `scheme` is generic; `instance`
+    /// is the use's instantiation of it.
+    pub(crate) fn note_tool_use(
+        &mut self,
+        tool: &Name,
+        scheme: &Type,
+        instance: &Type,
+        span: Span,
+    ) {
+        if matches!(scheme, Type::TyForall(tvars, _, _) if !tvars.is_empty()) {
+            self.tool_uses.push(ToolUse {
+                tool: tool.clone(),
+                ty: instance.clone(),
+                span,
+            });
+        }
+    }
+
+    /// Reports each generic tool use whose instantiated wire types are not
+    /// wire-representable (C0032) or not known at compile time (C0062): its
+    /// invocation records are encoded at exactly those types. Skipped once
+    /// the module has errors, since an aborted body leaves its uses unsolved.
+    fn check_tool_uses(&mut self) {
+        if self.diags.iter().any(|d| d.severity == Severity::Error) {
+            return;
+        }
+        for tool_use in mem::take(&mut self.tool_uses) {
+            let Type::TyFn(params, ret, row) = self.subst.resolve(&tool_use.ty) else {
+                continue;
+            };
+            let Some(args) = params.first() else {
+                continue;
+            };
+            let tool = &tool_use.tool;
+            let problem = wire_sides(args, &ret, &row).find_map(|(side, ty)| {
+                let at = format!("this use of tool `{tool}` instantiates its {side} at `{ty}`");
+                if let Some(violation) = wire_violation(&self.registry, ty, &mut BTreeSet::new()) {
+                    Some((
+                        CheckCode::C0032,
+                        format!(
+                            "{at}, which is not wire-representable: {}",
+                            violation.detail()
+                        ),
+                    ))
+                } else if !is_ground(ty) {
+                    Some((
+                        CheckCode::C0062,
+                        format!(
+                            "{at}, which is not known at compile time; a generic tool's \
+                             invocations are recorded at the concrete types each use fixes"
+                        ),
+                    ))
+                } else {
+                    None
+                }
+            });
+            if let Some((code, message)) = problem {
+                self.diags
+                    .push(CheckDiagnostic::error(code, tool_use.span, message));
+            }
+        }
     }
 
     // ── externs ─────────────────────────────────────────────────
@@ -1672,6 +1767,35 @@ enum WireViolation {
     Function(Type),
     /// An opaque capability type: minting one from a log would forge it.
     Capability(Name),
+    /// A `Pid` or `ReplyTo`: a process reference has no wire form.
+    Process(Type),
+}
+
+impl WireViolation {
+    /// The reason clause of the C0032 message.
+    fn detail(&self) -> String {
+        match self {
+            Self::Function(ty) => format!("function type `{ty}` cannot be serialised"),
+            Self::Capability(name) => format!("`{name}` is an opaque capability"),
+            Self::Process(ty) => format!("`{ty}` is a process reference"),
+        }
+    }
+}
+
+/// A tool function type's wire sides: `args`, `result`, and each `Exn<E>`
+/// error type in `row`.
+fn wire_sides<'a>(
+    args: &'a Type,
+    result: &'a Type,
+    row: &'a EffectRow,
+) -> impl Iterator<Item = (&'static str, &'a Type)> {
+    let errors = row
+        .effects()
+        .filter(|e| e.head().as_str() == "Exn")
+        .flat_map(|e| e.args().iter().map(|ty| ("errors", ty)));
+    [("args", args), ("result", result)]
+        .into_iter()
+        .chain(errors)
 }
 
 /// Seeds a built-in sum of the shape `type T<a> = Wrap(a) | Empty`, as if it
@@ -1724,7 +1848,7 @@ fn seed_unary_sum(
 /// function or capability past the check. `visited` breaks recursive types
 /// (by ADT name, an approximation that is sound because arguments are walked
 /// at every application site). Type variables pass: a generic tool's
-/// instantiations are validated at the wire layer, value by value.
+/// instantiations are checked at each use ([`Checker::check_tool_uses`]).
 fn wire_violation(
     registry: &Registry,
     ty: &Type,
@@ -1743,6 +1867,11 @@ fn wire_violation(
         Type::TyCon(name, args) => {
             if registry.adt_is_opaque(name.as_str()) {
                 return Some(WireViolation::Capability(name.clone()));
+            }
+            if matches!(name.as_str(), "Pid" | "ReplyTo")
+                && registry.adt_constructors(name.as_str()).is_none()
+            {
+                return Some(WireViolation::Process(ty.clone()));
             }
             if let Some(v) = args
                 .iter()
@@ -1765,6 +1894,22 @@ fn wire_violation(
                 }
             }
             None
+        }
+    }
+}
+
+/// Whether resolved `ty` is fully known: no unsolved variable, and no rigid
+/// signature variable (a lowercase constructor).
+fn is_ground(ty: &Type) -> bool {
+    match ty {
+        Type::TyVar(_) | Type::TyForall(..) => false,
+        Type::TyCon(name, args) => !is_var_name(name.as_str()) && args.iter().all(is_ground),
+        Type::TyTuple(elems) => elems.iter().all(is_ground),
+        Type::TyRecord(fields) => fields.values().all(is_ground),
+        Type::TyFn(params, ret, row) => {
+            params.iter().all(is_ground)
+                && is_ground(ret)
+                && row.effects().all(|e| e.args().iter().all(is_ground))
         }
     }
 }

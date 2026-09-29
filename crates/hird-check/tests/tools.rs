@@ -358,3 +358,88 @@ fn tool_recursive_adt_is_accepted() {
          tool Sum : { tree: Tree } -> Int"
     ));
 }
+
+/// A process reference has no wire form: `Pid` and `ReplyTo` are rejected
+/// like capabilities.
+#[test]
+fn tool_process_reference_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "type Msg = Ping\n\
+         tool Notify : { to: Pid<Msg> } -> ()"
+    ));
+}
+
+/// A tool's error types cross the wire in `err` records, so they are
+/// checked like its args and result.
+#[test]
+fn tool_error_type_is_checked() {
+    insta::assert_snapshot!(check_str(
+        "type Msg = Ping\n\
+         tool Fail : { n: Int } -> () ! {Exn<ReplyTo<Msg>>}"
+    ));
+}
+
+// ── generic tool uses ───────────────────────────────────────────
+
+/// Every declared parameter is quantified in declaration order, one the
+/// signature never mentions included, so a use's type arguments are
+/// positional in the declaration.
+#[test]
+fn generic_tool_quantifies_every_parameter_in_order() {
+    insta::assert_snapshot!(check_str(
+        "tool Pair<a, b> : { x: b, y: a } -> (a, b)\n\
+         tool Tag<a, b> : { v: b } -> b"
+    ));
+}
+
+/// Uses at concrete, representable types check: each is recorded at them.
+#[test]
+fn generic_tool_uses_at_known_types_are_accepted() {
+    insta::assert_snapshot!(check_str(
+        "tool Echo<t> : { v: t } -> t\n\
+         fn nums() -> Int ! {Tool<Echo>} = echo({ v: 1 })\n\
+         fn maybe() -> Option<String> ! {Tool<Echo>} = echo({ v: Some(\"x\") })\n\
+         fn as_value() -> ({ v: List<Int> }) -> List<Int> ! {Tool<Echo>} = echo"
+    ));
+}
+
+/// A use at a signature's type variable has no wire shape at compile
+/// time (C0062): its records could not be encoded.
+#[test]
+fn generic_tool_use_at_a_signature_variable_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "tool Echo<t> : { v: t } -> t\n\
+         fn wrap(x: a) -> a ! {Tool<Echo>} = echo({ v: x })"
+    ));
+}
+
+/// Nor has a use inside a let-generalised lambda, whose instantiation is
+/// a fresh variable per call of the lambda (C0062).
+#[test]
+fn generic_tool_use_in_a_generalised_lambda_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "tool Echo<t> : { v: t } -> t\n\
+         fn twice() -> Int ! {Tool<Echo>} =\n\
+           let f = \\x -> echo({ v: x }) in f(1) + f(2)"
+    ));
+}
+
+/// An element type nothing fixes is unknown too: annotate the value.
+#[test]
+fn generic_tool_use_at_an_unconstrained_type_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "tool Echo<t> : { v: t } -> t\n\
+         fn empty() -> () ! {Tool<Echo>} = let xs = echo({ v: [] }) in ()"
+    ));
+}
+
+/// A use instantiating a parameter at a function or capability type is
+/// not wire-representable (C0032), like a declaration spelling it out.
+#[test]
+fn generic_tool_use_at_an_unrepresentable_type_is_rejected() {
+    insta::assert_snapshot!(check_str(
+        "tool Echo<t> : { v: t } -> t\n\
+         fn fun() -> () ! {Tool<Echo>} = let g = echo({ v: \\n -> n + 1 }) in ()\n\
+         fn cap() -> () ! {Tool<Echo>, Clock} = let c = echo({ v: clock() }) in ()"
+    ));
+}

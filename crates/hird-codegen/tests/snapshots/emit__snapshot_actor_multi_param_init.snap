@@ -5,12 +5,18 @@ expression: "emit_joined(program(\"Duo\"), \"Duo\")"
 %%%% hird_duo.erl
 %% Generated from src/duo.hird by the Hirð compiler. Do not edit.
 -module(hird_duo).
--export([boot/1]).
+-export([boot/1, hird_tools@/0]).
 
 %% src/duo.hird:8
 boot(_Handlers@) ->
     {ok, Pid@1} = hird_pair:start_link(1, 2),
     Pid@1.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            msg => [{nop, <<"Nop"/utf8>>, []}],
+            st => [{st, <<"St"/utf8>>, [int]}]}}.
 
 %%%% hird_pair.erl
 %% Generated from src/duo.hird by the Hirð compiler. Do not edit.

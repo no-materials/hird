@@ -8,22 +8,25 @@ expression: "emit(program(\"Wire\"), \"Wire\")"
 
 %% src/wire.hird:7
 file(T, Handlers@) ->
-    hird_tool_dispatch:call(create_ticket, <<"Wire.file"/utf8>>, Handlers@, #{title => T, body => <<"filed"/utf8>>}).
+    hird_tool_dispatch:call(create_ticket, [], <<"Wire.file"/utf8>>, Handlers@, #{title => T, body => <<"filed"/utf8>>}).
 
 hird_tools@() ->
     #{tools => #{
             create_ticket => #{
                 name => <<"CreateTicket"/utf8>>,
+                params => 0,
                 args => {record, [{body, string}, {title, string}]},
                 result => {adt, ticket_id, []},
                 error => dynamic},
             http_get => #{
                 name => <<"HttpGet"/utf8>>,
+                params => 0,
                 args => {record, [{url, string}]},
                 result => {adt, option, [int]},
                 error => {adt, http_error, []}},
             snapshot => #{
                 name => <<"Snapshot"/utf8>>,
+                params => 0,
                 args => {record, [{pair, {tuple, [int, bool]}}, {tags, {list, string}}]},
                 result => float,
                 error => dynamic}},

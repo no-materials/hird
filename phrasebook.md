@@ -199,6 +199,10 @@ fn triage(p: Prompt, s: Schema<Ticket>) → Ticket
   ! {Tool<LLMCall>, Exn<ParseError>} = llm_call({ prompt: p, schema: s })
 ```
 
+A generic tool is recorded at the types each use fixes: every call (or
+use as a value) must fix its type parameters to concrete types, so a
+function generic in `t` cannot call `llm_call` (C0062).
+
 ---
 
 ## Actor Declarations
@@ -441,7 +445,12 @@ others are the shape the discipline takes for user-declared capabilities.
   handler must match the tool's operation signature (C0034); `install`
   handlers must be pure — closed empty row (C0051).
 - **Tool signatures must be wire-representable** (C0032): no function
-  types, no opaque capability types in args or result.
+  types, no opaque capability types, no process references (`Pid`,
+  `ReplyTo`) in args, result, or error types.
+- **Generic tool uses need concrete types** (C0062): `llm_call` inside
+  `fn ask(s: Schema<t>) → t` leaves `t` unknown, and `echo({ v: [] })`
+  leaves the element type unknown; fix the types (annotate a `let`). Fixed
+  to a function, capability, or process type, the use is C0032.
 - **Record arguments need parens**: `f({ title: t })`, never `f { title: t }`
   (a `{` never starts an application argument).
 - **Relational operators do not chain**: `a == b == c` is a parse error

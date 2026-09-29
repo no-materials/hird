@@ -17,17 +17,21 @@ An audit trail bolted onto a runtime is only as complete as the call sites
 that remembered to use it. Hirð's is a property of the language instead:
 
 - **One call path.** Every tool call site in generated Erlang emits
-  `hird_tool_dispatch:call/4`, never a direct handler invocation, and the
+  `hird_tool_dispatch:call/5`, never a direct handler invocation, and the
   dispatcher captures the record around the invocation. There is no flag
   that disables it and no route around it: a mocked call, a live call and a
   replayed call produce the same record.
 - **Compiler-derived records.** The record's shape comes from the `tool`
   declaration — name, arguments, result, timestamp, caller — not from
   author-written logging, so it cannot drift from what the program does.
-- **Encodability is checked.** A tool whose arguments or result contain a
-  function type or an opaque capability is a compile error (`C0032`),
-  walking through nested constructor fields. Every declarable tool's
-  records encode, and a decoded log can never mint a capability.
+- **Encodability is checked.** A tool whose arguments, result, or error
+  types contain a function type, an opaque capability, or a process
+  reference is a compile error (`C0032`), walking through nested
+  constructor fields. A generic tool is recorded at the types each use
+  fixes, so a use must fix them to known (`C0062`) and representable
+  (`C0032`) types, and the call site hands them to the dispatcher. Every
+  call a checked program makes encodes, and a decoded log can never mint
+  a capability.
 - **Configured at the boundary.** Where records go is decided once, where
   the program is started: the generated boot module opens the sink before
   `main` and flushes it after, at stdout by default and at a file with
@@ -132,10 +136,12 @@ the same workflow read as an evidence chain.
    it one: a stable byte sequence to checksum, sign or ship. The format
    gives you something worth attesting; the attestation is yours to apply.
 3. **Replay.** `hird run prog.hird --replay run.jsonl` serves every tool
-   call from the log. The log is decoded up front against the program's own
+   call from the log. The log is loaded up front against the program's own
    tool signature tables, so a log naming a tool the program does not
    declare, or holding a record of another `schema_version`, fails to load
-   rather than half-replaying. During the run the cursor outranks every
+   rather than half-replaying. Records decode then too, except a generic
+   tool's, which decode when their call is offered, at the types that call
+   fixes. During the run the cursor outranks every
    `handle` and `install` block: no tool runs and no service is contacted.
 4. **Compare.** A replayed run audits the stream it consumed, with fresh
    timestamps, so `--replay` and `--audit-file` together are a round trip.

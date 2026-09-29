@@ -101,7 +101,14 @@ impl Checker {
                     self.import_origins
                         .insert(NodeKey::of_expr(expr), from.clone());
                 }
-                Ok(self.subst.instantiate(&scheme))
+                let instance = self.subst.instantiate(&scheme);
+                if let Some(tool) = self.tool_fns.get(text).cloned()
+                    && self.env.resolves_to_root(text)
+                {
+                    let span = token_span(name.syntax(), self.source_id);
+                    self.note_tool_use(&tool, &scheme, &instance, span);
+                }
+                Ok(instance)
             }
             Expr::Let(le) => self.infer_let(le),
             Expr::Seq(seq) => self.infer_seq(seq),
@@ -1132,7 +1139,15 @@ impl Checker {
             // The receiver is a module qualifier: resolve against its exports
             // without ever typing the receiver as a value.
             return match member {
-                Some(scheme) => Ok(self.subst.instantiate(&scheme)),
+                Some(scheme) => {
+                    let instance = self.subst.instantiate(&scheme);
+                    let qualified = format!("{}.{name}", recv.text());
+                    if let Some(tool) = self.imported_tools.get(&qualified).map(|t| t.name.clone())
+                    {
+                        self.note_tool_use(&tool, &scheme, &instance, span);
+                    }
+                    Ok(instance)
+                }
                 None => Err(self.error(
                     CheckCode::C0024,
                     span,

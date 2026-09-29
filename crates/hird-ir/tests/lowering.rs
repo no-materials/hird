@@ -551,6 +551,32 @@ fn tool_decl_lowers_to_tool_node() {
     assert_eq!(format!("{}", tool.effect_row), "{Exn<ParseError>}");
 }
 
+/// Parameters keep their declared names wherever the signature first
+/// mentions them, and one it never mentions shifts no other.
+#[test]
+fn tool_params_keep_their_names_out_of_order_or_unused() {
+    let module = lower(
+        "tool Pair<a, b> : { x: b, y: a } -> (a, b)\n\
+         tool Tag<a, b> : { v: b } -> b",
+        "Tools",
+    );
+    let sigs: Vec<(String, String)> = module
+        .declarations
+        .iter()
+        .filter_map(|d| match d {
+            IrDecl::Tool(t) => Some((ty_str(&t.input), ty_str(&t.output))),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        sigs,
+        [
+            (String::from("{ x: b, y: a }"), String::from("(a, b)")),
+            (String::from("{ v: b }"), String::from("b")),
+        ]
+    );
+}
+
 // ── actor declarations ───────────────────────────────────────────
 
 /// The counter actor plus a spawner, shared by the actor lowering tests.

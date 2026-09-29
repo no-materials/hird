@@ -193,7 +193,9 @@ tool LLMCall<t> : { prompt: Prompt, schema: Schema<t> } → t ! {Exn<ParseError>
 Each declaration yields an effect (`Tool<ReadRepo>`), a callable
 function (`read_repo`), and a compiler-derived invocation record that
 the audit stream serialises. Tool signatures must be
-wire-representable: no function types, no opaque capabilities.
+wire-representable: no function types, no opaque capabilities, no
+process references. A generic tool like `LLMCall` is recorded at the
+types each call fixes, so every call must fix `t` to a concrete type.
 
 Tools have no "real" implementation in the language — implementations
 are always supplied by handlers, which makes mocking, dry-running,

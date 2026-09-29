@@ -11,23 +11,23 @@
 threaded_map_entry_wins_test() ->
     Handlers = #{{tool, echo} => fun(Args, _Handlers) -> {echoed, Args} end},
     ?assertEqual({echoed, 7},
-                 hird_tool_dispatch:call(echo, <<"M.f">>, Handlers, 7)).
+                 hird_tool_dispatch:call(echo, [], <<"M.f">>, Handlers, 7)).
 
 handler_receives_the_threaded_map_test() ->
     Handlers = #{{tool, spy} => fun(_Args, Map) -> maps:size(Map) end},
-    ?assertEqual(1, hird_tool_dispatch:call(spy, <<"M.f">>, Handlers, ok)).
+    ?assertEqual(1, hird_tool_dispatch:call(spy, [], <<"M.f">>, Handlers, ok)).
 
 registry_fallback_on_map_miss_test() ->
     hird_handlers:with_handlers(
         [{{tool, fallback}, fun(Args, _Handlers) -> Args + 1 end}],
         fun() ->
             ?assertEqual(42,
-                         hird_tool_dispatch:call(fallback, <<"M.f">>, #{}, 41))
+                         hird_tool_dispatch:call(fallback, [], <<"M.f">>, #{}, 41))
         end).
 
 unhandled_tool_crashes_test() ->
     ?assertError({unhandled_tool, ghost},
-                 hird_tool_dispatch:call(ghost, <<"M.f">>, #{}, ok)).
+                 hird_tool_dispatch:call(ghost, [], <<"M.f">>, #{}, ok)).
 
 %% A domain failure — `throw({hird_exn, Error})` — is rethrown to the
 %% caller unchanged; audit capture is observational.
@@ -35,12 +35,12 @@ exn_throw_propagates_to_the_caller_test() ->
     Handlers = #{{tool, failing} =>
                      fun(_Args, _Handlers) -> throw({hird_exn, bad_input}) end},
     ?assertThrow({hird_exn, bad_input},
-                 hird_tool_dispatch:call(failing, <<"M.f">>, Handlers, ok)).
+                 hird_tool_dispatch:call(failing, [], <<"M.f">>, Handlers, ok)).
 
 dispatch_works_without_an_audit_sink_test() ->
     ?assertEqual(undefined, whereis(hird_audit)),
     Handlers = #{{tool, quiet} => fun(_Args, _Handlers) -> ok end},
-    ?assertEqual(ok, hird_tool_dispatch:call(quiet, <<"M.f">>, Handlers, ok)).
+    ?assertEqual(ok, hird_tool_dispatch:call(quiet, [], <<"M.f">>, Handlers, ok)).
 
 %% A mocked call produces a full invocation record at the sink: right tool
 %% wire name, args, result, and the codegen-supplied caller.
@@ -48,13 +48,15 @@ audit_captures_mocked_invocations_test() ->
     Path = filename:join("_build", "dispatch_audit.jsonl"),
     _ = file:delete(Path),
     Table = #{tools => #{probe => #{name => <<"Probe">>,
+                                    params => 0,
                                     args => {record, [{n, int}]},
                                     result => int,
                                     error => dynamic}},
               types => #{}},
     {ok, Sink} = hird_audit:start_link([{sink, {file, Path}}, {tools, Table}]),
     Handlers = #{{tool, probe} => fun(#{n := N}, _Handlers) -> N * 2 end},
-    ?assertEqual(6, hird_tool_dispatch:call(probe, <<"M.f">>, Handlers, #{n => 3})),
+    ?assertEqual(6, hird_tool_dispatch:call(probe, [], <<"M.f">>, Handlers,
+                                            #{n => 3})),
     ok = hird_audit:sync(),
     gen_server:stop(Sink),
     {ok, Bytes} = file:read_file(Path),
@@ -75,6 +77,7 @@ audit_captures_err_results_test() ->
     Path = filename:join("_build", "dispatch_audit_err.jsonl"),
     _ = file:delete(Path),
     Table = #{tools => #{http_get => #{name => <<"HttpGet">>,
+                                       params => 0,
                                        args => {record, [{url, string}]},
                                        result => {record, [{status, int}]},
                                        error => {adt, http_error, []}}},
@@ -86,7 +89,7 @@ audit_captures_err_results_test() ->
     Handlers = #{{tool, http_get} =>
                      fun(_Args, _Handlers) -> throw({hird_exn, Error}) end},
     ?assertThrow({hird_exn, Error},
-                 hird_tool_dispatch:call(http_get, <<"Planner.check_ci">>,
+                 hird_tool_dispatch:call(http_get, [], <<"Planner.check_ci">>,
                                          Handlers, Args)),
     ok = hird_audit:sync(),
     gen_server:stop(Sink),
@@ -97,16 +100,45 @@ audit_captures_err_results_test() ->
     Ts = calendar:rfc3339_to_system_time(binary_to_list(Rfc3339),
                                          [{unit, millisecond}]),
     Expected = hird_types:encode_invocation(
-        #{tool => http_get, args => Args, result => {err, Error},
+        #{tool => http_get, type_args => [], args => Args, result => {err, Error},
           timestamp => Ts, caller => <<"Planner.check_ci">>},
         Table),
     ?assertEqual(Expected, Line).
+
+%% A generic tool's call is audited at the type arguments its call site
+%% passes: the same `Echo` records `Int` args, then `String` ones.
+audit_encodes_generic_calls_at_their_type_arguments_test() ->
+    Path = filename:join("_build", "dispatch_audit_generic.jsonl"),
+    _ = file:delete(Path),
+    Table = #{tools => #{echo => #{name => <<"Echo">>, params => 1,
+                                   args => {record, [{v, {param, 0}}]},
+                                   result => {param, 0},
+                                   error => dynamic}},
+              types => #{}},
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}}, {tools, Table}]),
+    Handlers = #{{tool, echo} => fun(#{v := V}, _Handlers) -> V end},
+    ?assertEqual(1, hird_tool_dispatch:call(echo, [int], <<"M.f">>, Handlers,
+                                            #{v => 1})),
+    ?assertEqual(<<"a">>,
+                 hird_tool_dispatch:call(echo, [string], <<"M.f">>, Handlers,
+                                         #{v => <<"a">>})),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    {ok, Bytes} = file:read_file(Path),
+    [First, Second, <<>>] = binary:split(Bytes, <<"\n">>, [global]),
+    ?assertMatch({match, _},
+                 re:run(First, <<"\"args\":\\{\"v\":1\\},"
+                                 "\"result\":\\{\"ok\":1\\}">>)),
+    ?assertMatch({match, _},
+                 re:run(Second, <<"\"args\":\\{\"v\":\"a\"\\},"
+                                  "\"result\":\\{\"ok\":\"a\"\\}">>)).
 
 %% Replay ------------------------------------------------------------------
 
 %% The `Probe : { n: Int } → Int` signature table.
 probe_table() ->
     #{tools => #{probe => #{name => <<"Probe">>,
+                            params => 0,
                             args => {record, [{n, int}]},
                             result => int,
                             error => {adt, probe_error, []}}},
@@ -117,7 +149,8 @@ probe_table() ->
 with_replay(Name, Records, Fun) ->
     Path = filename:join("_build", Name),
     Lines = [hird_types:encode_invocation(
-                 #{tool => probe, args => #{n => N}, result => Result,
+                 #{tool => probe, type_args => [], args => #{n => N},
+                   result => Result,
                    timestamp => 0, caller => <<"M.f">>},
                  probe_table())
              || {N, Result} <- Records],
@@ -136,7 +169,7 @@ replay_ignores_threaded_handlers_test() ->
     Handlers = #{{tool, probe} => fun(_Args, _Handlers) -> shadowed end},
     with_replay("dispatch_replay_shadow.jsonl", [{3, {ok, 99}}], fun() ->
         ?assertEqual(99,
-                     hird_tool_dispatch:call(probe, <<"M.f">>, Handlers,
+                     hird_tool_dispatch:call(probe, [], <<"M.f">>, Handlers,
                                              #{n => 3}))
     end).
 
@@ -149,7 +182,7 @@ replay_ignores_registry_handlers_test() ->
                         fun() ->
                             ?assertEqual(99,
                                          hird_tool_dispatch:call(
-                                             probe, <<"M.f">>, #{}, #{n => 3}))
+                                             probe, [], <<"M.f">>, #{}, #{n => 3}))
                         end)
         end).
 
@@ -159,7 +192,7 @@ replay_rethrows_logged_failures_test() ->
     Error = {probe_error, <<"down">>},
     with_replay("dispatch_replay_err.jsonl", [{3, {err, Error}}], fun() ->
         ?assertThrow({hird_exn, Error},
-                     hird_tool_dispatch:call(probe, <<"M.f">>, #{}, #{n => 3}))
+                     hird_tool_dispatch:call(probe, [], <<"M.f">>, #{}, #{n => 3}))
     end).
 
 %% A mismatching dispatch crashes with the structured divergence.
@@ -167,7 +200,7 @@ replay_divergence_crashes_test() ->
     with_replay("dispatch_replay_diverge.jsonl", [{3, {ok, 99}}], fun() ->
         ?assertError({replay_divergence, #{kind := args_mismatch,
                                            position := 0}},
-                     hird_tool_dispatch:call(probe, <<"M.f">>, #{}, #{n => 4}))
+                     hird_tool_dispatch:call(probe, [], <<"M.f">>, #{}, #{n => 4}))
     end).
 
 %% Replayed dispatches audit exactly like live ones: same tool, args,
@@ -182,10 +215,10 @@ replay_still_audits_test() ->
                 [{3, {ok, 99}}, {4, {err, Error}}],
                 fun() ->
                     ?assertEqual(99,
-                                 hird_tool_dispatch:call(probe, <<"M.f">>, #{},
+                                 hird_tool_dispatch:call(probe, [], <<"M.f">>, #{},
                                                          #{n => 3})),
                     ?assertThrow({hird_exn, Error},
-                                 hird_tool_dispatch:call(probe, <<"M.f">>, #{},
+                                 hird_tool_dispatch:call(probe, [], <<"M.f">>, #{},
                                                          #{n => 4}))
                 end),
     ok = hird_audit:sync(),
@@ -210,7 +243,7 @@ crashes_propagate_unrecorded_test() ->
     Handlers = #{{tool, exploder} =>
                      fun(_Args, _Handlers) -> erlang:error(boom) end},
     ?assertError(boom,
-                 hird_tool_dispatch:call(exploder, <<"M.f">>, Handlers, ok)),
+                 hird_tool_dispatch:call(exploder, [], <<"M.f">>, Handlers, ok)),
     ok = hird_audit:sync(),
     gen_server:stop(Sink),
     ?assertEqual({ok, <<>>}, file:read_file(Path)).

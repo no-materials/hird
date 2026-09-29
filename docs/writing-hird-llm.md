@@ -78,8 +78,9 @@ actor state read as `st.field` and rebuilt as
 
 **Tools are the only I/O boundary.** `tool Name : {args} → result`
 creates the `Tool<Name>` effect and a callable `name` function. Tool
-signatures must be wire-representable (no function types, no opaque
-capabilities). Implementations come from `handle` blocks (lexical,
+signatures must be wire-representable (no function types, opaque
+capabilities, or process references), and each call of a generic tool
+must fix its type parameters to concrete types. Implementations come from `handle` blocks (lexical,
 discharges the effect) or `install` blocks (runtime registry, for
 spawned/supervised actors; handlers must be pure; does not discharge
 the body's row). Handler maps never cross a process boundary: a
@@ -201,7 +202,8 @@ against a draft with five typical mistakes and pins it as a test.
 | `stand()` inside an actor's `init` or handler | C0054 — it would park the actor's process; stand from `main` |
 | `self()` outside an actor's `init` or handler | C0055 — only an actor has an own pid |
 | Effectful `start_args` other than `clock()` | C0049 — start arguments run in the supervisor; acquiring the clock is the one exception |
-| Function or capability types in a tool signature | C0032 — not wire-representable |
+| Function, capability, `Pid`, or `ReplyTo` types in a tool signature, or a generic tool used at one | C0032 — not wire-representable |
+| A generic tool called at a type variable (`llm_call` inside a function generic in `t`), or at a type nothing fixes | C0062 — each use is recorded at concrete types; fix them |
 | Recursive `type alias` (`type alias L = List<L>`) | C0059 — recursion is for ADTs; declare a `type` |
 | `pub opaque type alias` | P0007 — an alias has no constructors to hide; use `pub type alias` |
 | `{ ..st }` as a copy | C0060 — use `st` itself; an update lists at least one field |

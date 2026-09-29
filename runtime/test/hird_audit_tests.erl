@@ -8,12 +8,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 table() ->
-    #{tools => #{ping => #{name => <<"Ping">>, args => int,
+    #{tools => #{ping => #{name => <<"Ping">>, params => 0, args => int,
                            result => int, error => dynamic}},
       types => #{}}.
 
 record_at(N) ->
-    #{tool => ping, args => N, result => {ok, N},
+    #{tool => ping, type_args => [], args => N, result => {ok, N},
       timestamp => 1000 * N, caller => <<"M.f">>}.
 
 fresh(Name) ->

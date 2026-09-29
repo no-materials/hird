@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"type Msg = Ping\\n\\\n         tool Notify : { to: Pid<Msg> } -> ()\")"
+---
+Ping : Msg
+error[C0032] 21..27: tool `Notify` args are not wire-representable: `Pid<Msg>` is a process reference

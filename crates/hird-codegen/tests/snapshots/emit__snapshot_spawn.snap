@@ -4,9 +4,15 @@ expression: "emit(program(\"Boot\"), \"Boot\")"
 ---
 %% Generated from src/boot.hird by the Hirð compiler. Do not edit.
 -module(hird_boot).
--export([boot/2]).
+-export([boot/2, hird_tools@/0]).
 
 %% src/boot.hird:8
 boot(S, _Handlers@) ->
     {ok, Pid@1} = hird_counter:start_link(S),
     Pid@1.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            msg => [{inc, <<"Inc"/utf8>>, []}],
+            st => [{st, <<"St"/utf8>>, [int]}]}}.

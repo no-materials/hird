@@ -6,7 +6,7 @@ expression: counters(&run)
   "cst_nodes": 98,
   "effect_row_merges": 11,
   "emulator_boots": 2,
-  "erl_bytes": 2238,
+  "erl_bytes": 2528,
   "exhaustiveness_rows": 3,
   "exhaustiveness_witnesses": 0,
   "modules": 1,

@@ -153,15 +153,15 @@ pub(crate) fn build(
             erl_files.push(write_erl(out_dir, name, source)?);
         }
         if let Some(entry) = &entry {
-            let tool_modules: Vec<String> = modules
+            let table_modules: Vec<String> = modules
                 .iter()
-                .filter(|(_, m)| m.declarations.iter().any(|d| matches!(d, IrDecl::Tool(_))))
+                .filter(|(_, m)| hird_codegen::has_signature_table(m))
                 .map(|(_, m)| erlang_module_name(&m.name))
                 .collect();
             erl_files.push(write_erl(
                 out_dir,
                 BOOT_MODULE,
-                &boot_module(entry, &tool_modules, audit_file, replay),
+                &boot_module(entry, &table_modules, audit_file, replay),
             )?);
         }
         Ok(erl_files)
@@ -352,15 +352,15 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 }
 
 /// Renders the boot module: starts the audit sink (appending to
-/// `audit_file` when given, stdout otherwise), registers each
-/// tool-declaring module's signature table, and calls `main` with an empty
+/// `audit_file` when given, stdout otherwise), registers every signature
+/// table in `table_modules`, and calls `main` with an empty
 /// handler map. With `replay` it also starts the replay cursor over that
 /// log before `main` and requires the log fully consumed after. Kept as
 /// generated source so the build output runs on plain `erl` without the
 /// CLI.
 fn boot_module(
     entry: &EntryPoint,
-    tool_modules: &[String],
+    table_modules: &[String],
     audit_file: Option<&str>,
     replay: Option<&str>,
 ) -> String {
@@ -383,14 +383,14 @@ fn boot_module(
         out,
         "    {{ok, _}} = hird_audit:start_link([{{sink, {sink}}}]),"
     );
-    for module in tool_modules {
+    for module in table_modules {
         let _ = writeln!(
             out,
             "    ok = hird_audit:register_tools({module}:hird_tools@()),"
         );
     }
     if let Some(log) = replay {
-        let tables = tool_modules
+        let tables = table_modules
             .iter()
             .map(|module| format!("{module}:hird_tools@()"))
             .collect::<Vec<_>>()

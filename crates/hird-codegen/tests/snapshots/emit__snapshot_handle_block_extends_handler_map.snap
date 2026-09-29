@@ -17,6 +17,7 @@ hird_tools@() ->
     #{tools => #{
             repo => #{
                 name => <<"Repo"/utf8>>,
+                params => 0,
                 args => {record, [{x, int}]},
                 result => int,
                 error => dynamic}},

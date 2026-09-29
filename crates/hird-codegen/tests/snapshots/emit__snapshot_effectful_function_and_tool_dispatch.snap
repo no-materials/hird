@@ -8,12 +8,13 @@ expression: "emit(program(\"Repo\"), \"Repo\")"
 
 %% src/repo.hird:4
 scan(P, Handlers@) ->
-    hird_tool_dispatch:call(read_repo, <<"Repo.scan"/utf8>>, Handlers@, #{path => P}).
+    hird_tool_dispatch:call(read_repo, [], <<"Repo.scan"/utf8>>, Handlers@, #{path => P}).
 
 hird_tools@() ->
     #{tools => #{
             read_repo => #{
                 name => <<"ReadRepo"/utf8>>,
+                params => 0,
                 args => {record, [{path, {adt, path, []}}]},
                 result => {adt, st, []},
                 error => dynamic}},

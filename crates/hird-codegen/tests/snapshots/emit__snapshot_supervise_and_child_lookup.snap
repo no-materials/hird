@@ -4,7 +4,7 @@ expression: "emit(program(\"Tree\"), \"Tree\")"
 ---
 %% Generated from src/tree.hird by the Hirð compiler. Do not edit.
 -module(hird_tree).
--export([default_config/0, boot/1, serve/1]).
+-export([default_config/0, boot/1, serve/1, hird_tools@/0]).
 
 %% src/tree.hird:2
 default_config() ->
@@ -29,3 +29,9 @@ serve(_Handlers@) ->
     end,
     ok = hird_stand:await(),
     ok.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            planner_msg => [{nop, <<"Nop"/utf8>>, []}],
+            st => [{st, <<"St"/utf8>>, [int]}]}}.

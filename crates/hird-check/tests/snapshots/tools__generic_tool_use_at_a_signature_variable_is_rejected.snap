@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"tool Echo<t> : { v: t } -> t\\n\\\n         fn wrap(x: a) -> a ! {Tool<Echo>} = echo({ v: x })\")"
+---
+echo : ∀a. { v: a } → a ! {Tool<Echo>}
+wrap : ∀a. a → a ! {Tool<Echo>}
+record EchoInvocation : { args: { v: a }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }
+error[C0062] 65..69: this use of tool `Echo` instantiates its args at `{ v: a }`, which is not known at compile time; a generic tool's invocations are recorded at the concrete types each use fixes

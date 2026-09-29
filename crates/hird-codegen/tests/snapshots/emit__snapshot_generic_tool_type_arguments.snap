@@ -1,0 +1,49 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Generic\"), \"Generic\")"
+---
+%% Generated from src/generic.hird by the Hirð compiler. Do not edit.
+-module(hird_generic).
+-export([nums/1, 'maybe'/1, swapped/1, tagged/1, as_value/0, hird_tools@/0]).
+
+%% src/generic.hird:4
+nums(Handlers@) ->
+    hird_tool_dispatch:call(echo, [int], <<"Generic.nums"/utf8>>, Handlers@, #{v => 1}).
+
+%% src/generic.hird:5
+'maybe'(Handlers@) ->
+    hird_tool_dispatch:call(echo, [{adt, option, [string]}], <<"Generic.maybe"/utf8>>, Handlers@, #{v => {some, <<"x"/utf8>>}}).
+
+%% src/generic.hird:6
+swapped(Handlers@) ->
+    hird_tool_dispatch:call(pair, [int, string], <<"Generic.swapped"/utf8>>, Handlers@, #{x => <<"b"/utf8>>, y => 1}).
+
+%% src/generic.hird:7
+tagged(Handlers@) ->
+    hird_tool_dispatch:call(tag, [unit, int], <<"Generic.tagged"/utf8>>, Handlers@, #{v => 2}).
+
+%% src/generic.hird:8
+as_value() ->
+    fun(Args@1, Handlers@2) -> hird_tool_dispatch:call(echo, [{list, int}], <<"Generic.as_value"/utf8>>, Handlers@2, Args@1) end.
+
+hird_tools@() ->
+    #{tools => #{
+            echo => #{
+                name => <<"Echo"/utf8>>,
+                params => 1,
+                args => {record, [{v, {param, 0}}]},
+                result => {param, 0},
+                error => dynamic},
+            pair => #{
+                name => <<"Pair"/utf8>>,
+                params => 2,
+                args => {record, [{x, {param, 1}}, {y, {param, 0}}]},
+                result => {tuple, [{param, 0}, {param, 1}]},
+                error => dynamic},
+            tag => #{
+                name => <<"Tag"/utf8>>,
+                params => 2,
+                args => {record, [{v, {param, 1}}]},
+                result => {param, 1},
+                error => dynamic}},
+        types => #{}}.

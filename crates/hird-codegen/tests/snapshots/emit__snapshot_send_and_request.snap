@@ -4,7 +4,7 @@ expression: "emit(program(\"Msg\"), \"Msg\")"
 ---
 %% Generated from src/msg.hird by the Hirð compiler. Do not edit.
 -module(hird_msg).
--export([poke/2, query/2]).
+-export([poke/2, query/2, hird_tools@/0]).
 
 %% src/msg.hird:10
 poke(P, _Handlers@) ->
@@ -13,3 +13,11 @@ poke(P, _Handlers@) ->
 %% src/msg.hird:11
 query(P, _Handlers@) ->
     gen_server:call(P, get, 5000).
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            msg => [{inc, <<"Inc"/utf8>>, []},
+                {get, <<"Get"/utf8>>, [dynamic]}],
+            st => [{st, <<"St"/utf8>>, [int]}],
+            status => [{status, <<"Status"/utf8>>, [int]}]}}.

@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"type Msg = Ping\\n\\\n         tool Fail : { n: Int } -> () ! {Exn<ReplyTo<Msg>>}\")"
+---
+Ping : Msg
+error[C0032] 21..25: tool `Fail` errors are not wire-representable: `ReplyTo<Msg>` is a process reference

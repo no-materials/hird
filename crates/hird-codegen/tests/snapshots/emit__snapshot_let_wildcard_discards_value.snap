@@ -8,14 +8,15 @@ expression: "emit(\"tool Ping : { msg: String } -> String\\n\\\n         fn twic
 
 %% src/discard.hird:2
 twice(Handlers@) ->
-    _ = hird_tool_dispatch:call(ping, <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"a"/utf8>>}),
-    Answer = hird_tool_dispatch:call(ping, <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"b"/utf8>>}),
+    _ = hird_tool_dispatch:call(ping, [], <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"a"/utf8>>}),
+    Answer = hird_tool_dispatch:call(ping, [], <<"Discard.twice"/utf8>>, Handlers@, #{msg => <<"b"/utf8>>}),
     Answer.
 
 hird_tools@() ->
     #{tools => #{
             ping => #{
                 name => <<"Ping"/utf8>>,
+                params => 0,
                 args => {record, [{msg, string}]},
                 result => string,
                 error => dynamic}},

@@ -4,7 +4,7 @@ expression: "emit(program(\"Reserved\"), \"Reserved\")"
 ---
 %% Generated from src/reserved.hird by the Hirð compiler. Do not edit.
 -module(hird_reserved).
--export(['rem'/1]).
+-export(['rem'/1, hird_tools@/0]).
 
 %% src/reserved.hird:2
 'rem'(M) ->
@@ -14,3 +14,9 @@ expression: "emit(program(\"Reserved\"), \"Reserved\")"
         query ->
             'end'
     end.
+
+hird_tools@() ->
+    #{tools => #{},
+        types => #{
+            marker => [{'end', <<"End"/utf8>>, []},
+                {query, <<"Query"/utf8>>, []}]}}.

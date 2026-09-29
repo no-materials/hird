@@ -12,6 +12,23 @@ schedule and is not covered by these entries.
 
 ### Fixed
 
+- **Generic tools and imported types crashed the audit sink.** Codegen
+  recorded a generic tool's type parameters, and any type the tool's own
+  module did not declare (an imported ADT, or the predeclared `Option`
+  and `Next`), as `dynamic`, which the runtime cannot encode. The sink
+  died on the first such record, `main` kept running, and every later
+  record was dropped, so the standard `llm_call<t>` shape and any
+  multi-module program with typed tool arguments could not be audited or
+  replayed. Each call site now passes the types it fixes to the
+  dispatcher (`hird_tool_dispatch:call/5`), every module declaring a tool
+  or an ADT publishes its types in its signature table, and startup
+  registers them all; replay decodes a generic tool's record when its
+  call is offered. What still has no wire shape is now a compile error: a
+  use of a generic tool at a type not known at compile time, such as a
+  signature's type variable, is C0062, and C0032 also rejects `Pid` and
+  `ReplyTo`, covers a tool's error types, and applies at each generic
+  use.
+
 - **A row variable in a signature could hide effects.** In a fully
   annotated function, type variables were rigid but row variables were
   not, so a body could fill `! {r}` with `{Tool<X>}` while the published

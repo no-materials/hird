@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/tools.rs
+expression: "check_str(\"tool Echo<t> : { v: t } -> t\\n\\\n         fn fun() -> () ! {Tool<Echo>} = let g = echo({ v: \\\\n -> n + 1 }) in ()\\n\\\n         fn cap() -> () ! {Tool<Echo>, Clock} = let c = echo({ v: clock() }) in ()\")"
+---
+cap : () → () ! {Clock, Tool<Echo>}
+echo : ∀a. { v: a } → a ! {Tool<Echo>}
+fun : () → () ! {Tool<Echo>}
+record EchoInvocation : { args: { v: a }, caller: CallerId, result: a, timestamp: Timestamp, tool: String }
+error[C0032] 69..73: this use of tool `Echo` instantiates its args at `{ v: Int → Int }`, which is not wire-representable: function type `Int → Int` cannot be serialised
+error[C0032] 147..151: this use of tool `Echo` instantiates its args at `{ v: Clock }`, which is not wire-representable: `Clock` is an opaque capability

@@ -95,8 +95,9 @@ pub enum CheckCode {
     C0030,
     /// A `handle` arm's handler expression does not have a function type.
     C0031,
-    /// A tool signature contains a type that is not wire-representable: a
-    /// function type or an opaque capability.
+    /// A tool signature, or a use of a generic tool, reaches a type that is
+    /// not wire-representable: a function type, an opaque capability, or a
+    /// process reference.
     C0032,
     /// A `handle` arm handles `Tool<X>` where `X` is not a declared tool.
     C0033,
@@ -185,6 +186,9 @@ pub enum CheckCode {
     /// names, or merges two of them; the variable stands for whatever row the
     /// caller supplies, so the scheme would hide the body's effects.
     C0061,
+    /// A use of a generic tool leaves its args, result, or error type
+    /// unknown at compile time, so its invocation records have no wire shape.
+    C0062,
 }
 
 /// A secondary source location attached to a diagnostic.

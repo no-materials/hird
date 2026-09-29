@@ -25,15 +25,20 @@
 //!   uniformly. Map keys are `{tool, name}` for `Tool<Name>` effects and the
 //!   snake-cased head atom for bare effects.
 //! - A tool call site always emits
-//!   `hird_tool_dispatch:call(tool_name, Caller, Handlers, Args)` — never a
-//!   direct handler invocation — so audit capture is unconditional. `Caller`
-//!   is a binary literal naming the enclosing form (`"Module.function"`,
-//!   `"Actor.init"`, or `"Actor.handle_msg/Ctor"`), statically known at
-//!   every dispatch site.
-//! - A module declaring tools also emits a `hird_tools@/0` signature table —
-//!   wire names and value shapes for every tool and declared ADT — which the
-//!   audit sink's type-directed record encoder consumes. The `@` keeps the
-//!   name outside the image of the Hirð renaming.
+//!   `hird_tool_dispatch:call(tool_name, TypeArgs, Caller, Handlers, Args)`
+//!   — never a direct handler invocation — so audit capture is
+//!   unconditional. `TypeArgs` lists the wire shape the use fixes for each
+//!   of a generic tool's type parameters (`[]` for any other tool), matched
+//!   out of the use's instantiated type. `Caller` is a binary literal naming
+//!   the enclosing form (`"Module.function"`, `"Actor.init"`, or
+//!   `"Actor.handle_msg/Ctor"`), statically known at every dispatch site.
+//! - A module declaring a tool or an ADT also emits a `hird_tools@/0`
+//!   signature table — wire names, type-parameter counts, and value shapes
+//!   for its tools (a generic tool's parameters as `{param, N}`), and
+//!   constructor shapes for its ADTs — which the audit sink's type-directed
+//!   record encoder consumes. Startup registers every module's table, so a
+//!   tool's shapes name any type by atom and its declaring module describes
+//!   it. The `@` keeps the name outside the image of the Hirð renaming.
 //!
 //! # Value mapping
 //!
@@ -133,12 +138,37 @@ pub fn emit_modules(module: &IrModule, source_path: &str) -> Vec<EmittedModule> 
     out
 }
 
+/// Whether `module`'s base module exports a `hird_tools@/0` signature table:
+/// it declares a tool or an ADT (an actor's message type included). Startup
+/// registers every such table, so a type's constructors resolve wherever a
+/// tool's shapes reach it.
+#[must_use]
+pub fn has_signature_table(module: &IrModule) -> bool {
+    module
+        .declarations
+        .iter()
+        .any(|d| matches!(d, IrDecl::Tool(_) | IrDecl::Type(_) | IrDecl::Actor(_)))
+}
+
 /// The indentation unit (four spaces).
 const INDENT: &str = "    ";
 
 /// `level` indentation units.
 fn ind(level: usize) -> String {
     INDENT.repeat(level)
+}
+
+/// A signature-table map from rendered `key => value` entries, one per line.
+fn table_map(entries: &[String]) -> String {
+    if entries.is_empty() {
+        String::from("#{}")
+    } else {
+        format!(
+            "#{{\n{}{}}}",
+            ind(3),
+            entries.join(&format!(",\n{}", ind(3)))
+        )
+    }
 }
 
 /// Whether a function of this row takes the trailing handler-map parameter:
@@ -249,13 +279,50 @@ impl FnCx {
     }
 }
 
+/// A tool as its call sites see it.
+struct ToolSig {
+    /// The tool function's type, the implicit `Tool<Marker>` effect included
+    /// in its row.
+    ty: Type,
+    /// Each declared type parameter as it stands in `ty`, in declaration
+    /// order.
+    params: Vec<Type>,
+}
+
+impl ToolSig {
+    /// A declared tool's signature, its parameters named in `ty`.
+    fn declared(ty: Type, params: &[String]) -> Self {
+        Self {
+            ty,
+            params: params
+                .iter()
+                .map(|p| Type::con(p.as_str(), Vec::new()))
+                .collect(),
+        }
+    }
+
+    /// An imported tool's signature from its scheme, whose quantified
+    /// variables in ascending id order are the declared parameters.
+    fn imported(scheme: &Type) -> Self {
+        let mut ids = match scheme {
+            Type::TyForall(tvars, _, _) => tvars.clone(),
+            _ => Vec::new(),
+        };
+        ids.sort_unstable();
+        Self {
+            ty: unquantified(scheme).clone(),
+            params: ids.into_iter().map(Type::TyVar).collect(),
+        }
+    }
+}
+
 /// The per-module emitter: tool and function tables shared by every form.
 struct Emitter<'a> {
     /// The module being emitted.
     module: &'a IrModule,
-    /// Tool function name (`read_repo`) → the tool function's type, with the
-    /// implicit `Tool<Marker>` effect included in its row.
-    tools: BTreeMap<String, Type>,
+    /// Tool function name (`read_repo`, or `Util.read_repo` for an imported
+    /// tool) → its call-site signature.
+    tools: BTreeMap<String, ToolSig>,
     /// The tool declarations, in source order (the signature table's rows).
     tool_defs: Vec<&'a IrToolDef>,
     /// Declared ADT name → its definition (module types and actor message
@@ -295,7 +362,7 @@ impl<'a> Emitter<'a> {
                         Box::new(t.output.clone()),
                         row,
                     );
-                    tools.insert(snake_case(&t.name), ty);
+                    tools.insert(snake_case(&t.name), ToolSig::declared(ty, &t.params));
                     tool_defs.push(t);
                 }
                 IrDecl::Type(t) => {
@@ -310,7 +377,7 @@ impl<'a> Emitter<'a> {
         // Another module's tools, under the qualified spelling their calls
         // carry: dispatched like this module's own rather than remote-called.
         for tool in &module.imported_tools {
-            tools.insert(tool.name.clone(), unquantified(&tool.ty).clone());
+            tools.insert(tool.name.clone(), ToolSig::imported(&tool.ty));
         }
         Self {
             module,
@@ -355,7 +422,7 @@ impl<'a> Emitter<'a> {
                 IrDecl::Type(_) | IrDecl::Tool(_) | IrDecl::Actor(_) | IrDecl::Supervisor(_) => {}
             }
         }
-        if !self.tool_defs.is_empty() {
+        if has_signature_table(self.module) {
             out.push('\n');
             self.tool_table_form(&mut out);
         }
@@ -379,7 +446,7 @@ impl<'a> Emitter<'a> {
                 Some(format!("{}/{}", atom(name), emitted_arity(ty)))
             })
             .collect();
-        if !self.tool_defs.is_empty() {
+        if has_signature_table(self.module) {
             out.push(String::from("hird_tools@/0"));
         }
         out
@@ -447,20 +514,21 @@ impl<'a> Emitter<'a> {
 
     // ── tool signature table ─────────────────────────────────────
 
-    /// The `hird_tools@/0` form: per-tool wire names and value shapes plus
-    /// the declared ADTs' constructor shapes, consumed by the audit sink's
-    /// type-directed record encoder.
+    /// The `hird_tools@/0` form: per-tool wire names, type-parameter counts,
+    /// and value shapes, plus the constructor shapes of every ADT the module
+    /// declares, consumed by the audit sink's type-directed record encoder.
     fn tool_table_form(&self, out: &mut String) {
         let tools: Vec<String> = self
             .tool_defs
             .iter()
             .map(|t| {
                 format!(
-                    "{} => #{{\n{i}name => <<\"{}\"/utf8>>,\n{i}args => {},\n{i}result => {},\n{i}error => {}}}",
+                    "{} => #{{\n{i}name => <<\"{}\"/utf8>>,\n{i}params => {},\n{i}args => {},\n{i}result => {},\n{i}error => {}}}",
                     atom(&snake_case(&t.name)),
                     t.name,
-                    self.wire_shape(&t.input, &t.params, false),
-                    self.wire_shape(&t.output, &t.params, false),
+                    t.params.len(),
+                    self.wire_shape(&t.input, &t.params),
+                    self.wire_shape(&t.output, &t.params),
                     self.error_shape(t),
                     i = ind(4),
                 )
@@ -477,7 +545,7 @@ impl<'a> Emitter<'a> {
                         let fields: Vec<String> = ctor
                             .fields
                             .iter()
-                            .map(|f| self.wire_shape(f, &def.params, true))
+                            .map(|f| self.wire_shape(f, &def.params))
                             .collect();
                         format!(
                             "{{{}, <<\"{}\"/utf8>>, [{}]}}",
@@ -494,38 +562,32 @@ impl<'a> Emitter<'a> {
                 )
             })
             .collect();
-        let types_map = if types.is_empty() {
-            String::from("#{}")
-        } else {
-            format!("#{{\n{}{}}}", ind(3), types.join(&format!(",\n{}", ind(3))))
-        };
         out.push_str(&format!(
             "hird_tools@() ->\n\
-             {i}#{{tools => #{{\n\
-             {iii}{}}},\n\
-             {ii}types => {types_map}}}.\n",
-            tools.join(&format!(",\n{}", ind(3))),
+             {i}#{{tools => {},\n\
+             {ii}types => {}}}.\n",
+            table_map(&tools),
+            table_map(&types),
             i = ind(1),
             ii = ind(2),
-            iii = ind(3),
         ));
     }
 
-    /// A type's wire shape in the signature table: `unit`, `int`, `float`,
-    /// `string`, `bool`, `{list, S}`, `{tuple, [S…]}`,
-    /// `{record, [{label, S}…]}` (sorted labels), or `{adt, name, [S…]}` for
-    /// a declared ADT. A declaration type parameter renders as `{param, N}`
-    /// inside an ADT's constructor shapes (`as_param`) and as `dynamic` in a
-    /// generic tool's signature, whose instantiation is a call-site fact the
-    /// table cannot carry; anything else non-representable is `dynamic` too.
-    fn wire_shape(&self, ty: &Type, params: &[String], as_param: bool) -> String {
+    /// A type's wire shape, in the signature table and at call sites: `unit`,
+    /// `int`, `float`, `string`, `bool`, `{list, S}`, `{tuple, [S…]}`,
+    /// `{record, [{label, S}…]}` (sorted labels), `{param, N}` for the `N`-th
+    /// of `params`, or `{adt, name, [S…]}` for any other type constructor —
+    /// declared here, in another module, or predeclared (`Option`, `Next`),
+    /// its constructors found at runtime among every module's tables. A type
+    /// with no wire form (a function, a process reference, `Clock`) is
+    /// `dynamic`: the checker keeps those out of every tool's reach, so only
+    /// a constructor field no tool touches renders one.
+    fn wire_shape(&self, ty: &Type, params: &[String]) -> String {
         match unquantified(ty) {
             Type::TyTuple(elems) if elems.is_empty() => String::from("unit"),
             Type::TyTuple(elems) => {
-                let shapes: Vec<String> = elems
-                    .iter()
-                    .map(|e| self.wire_shape(e, params, as_param))
-                    .collect();
+                let shapes: Vec<String> =
+                    elems.iter().map(|e| self.wire_shape(e, params)).collect();
                 format!("{{tuple, [{}]}}", shapes.join(", "))
             }
             Type::TyRecord(fields) => {
@@ -535,7 +597,7 @@ impl<'a> Emitter<'a> {
                         format!(
                             "{{{}, {}}}",
                             atom(label.as_str()),
-                            self.wire_shape(field, params, as_param)
+                            self.wire_shape(field, params)
                         )
                     })
                     .collect();
@@ -546,25 +608,19 @@ impl<'a> Emitter<'a> {
                 ("Float", []) => String::from("float"),
                 ("String", []) => String::from("string"),
                 ("Bool", []) => String::from("bool"),
-                ("List", [elem]) => {
-                    format!("{{list, {}}}", self.wire_shape(elem, params, as_param))
-                }
+                ("List", [elem]) => format!("{{list, {}}}", self.wire_shape(elem, params)),
                 (n, []) if params.iter().any(|p| p == n) => {
-                    if as_param {
-                        let index = params.iter().position(|p| p == n).unwrap_or(0);
-                        format!("{{param, {index}}}")
-                    } else {
-                        String::from("dynamic")
-                    }
+                    let index = params.iter().position(|p| p == n).unwrap_or(0);
+                    format!("{{param, {index}}}")
                 }
-                (n, args) if self.type_defs.contains_key(n) => {
-                    let shapes: Vec<String> = args
-                        .iter()
-                        .map(|a| self.wire_shape(a, params, as_param))
-                        .collect();
+                ("Pid" | "ReplyTo" | "Clock", _) if !self.type_defs.contains_key(name.as_str()) => {
+                    String::from("dynamic")
+                }
+                (n, args) => {
+                    let shapes: Vec<String> =
+                        args.iter().map(|a| self.wire_shape(a, params)).collect();
                     format!("{{adt, {}, [{}]}}", atom(&snake_case(n)), shapes.join(", "))
                 }
-                _ => String::from("dynamic"),
             },
             Type::TyVar(_) | Type::TyFn(..) | Type::TyForall(..) => String::from("dynamic"),
         }
@@ -579,9 +635,7 @@ impl<'a> Emitter<'a> {
             .effects()
             .filter(|e| e.head().as_str() == "Exn");
         match (exns.next(), exns.next()) {
-            (Some(e), None) if e.args().len() == 1 => {
-                self.wire_shape(&e.args()[0], &tool.params, false)
-            }
+            (Some(e), None) if e.args().len() == 1 => self.wire_shape(&e.args()[0], &tool.params),
             _ => String::from("dynamic"),
         }
     }
@@ -1189,11 +1243,7 @@ impl<'a> Emitter<'a> {
             {
                 let handlers = handlers_ref(env, cx);
                 let args = self.expr(args_record, env, cx, indent, Ctx::Expr);
-                return format!(
-                    "hird_tool_dispatch:call({}, {}, {handlers}, {args})",
-                    atom(dispatch_name(&v.name)),
-                    caller_literal(env)
-                );
+                return self.dispatch(v, env, &handlers, &args);
             }
         }
         let fn_ty = self.effective_fn_type(&app.func, env);
@@ -1290,11 +1340,7 @@ impl<'a> Emitter<'a> {
                 && let [args_record] = args.as_slice()
             {
                 let handlers = map_arg.unwrap_or_else(|| handlers_ref(env, cx));
-                return format!(
-                    "hird_tool_dispatch:call({}, {}, {handlers}, {args_record})",
-                    atom(dispatch_name(&v.name)),
-                    caller_literal(env)
-                );
+                return self.dispatch(v, env, &handlers, args_record);
             }
             if let Some((module, member)) = v.name.rsplit_once('.') {
                 return format!(
@@ -1329,9 +1375,8 @@ impl<'a> Emitter<'a> {
             let args = cx.fresh_internal("Args");
             let map = cx.fresh_internal("Handlers");
             return format!(
-                "fun({args}, {map}) -> hird_tool_dispatch:call({}, {}, {map}, {args}) end",
-                atom(dispatch_name(&v.name)),
-                caller_literal(env)
+                "fun({args}, {map}) -> {} end",
+                self.dispatch(v, env, &map, &args)
             );
         }
         if let Some(ty) = self.fns.get(&v.name) {
@@ -1354,6 +1399,38 @@ impl<'a> Emitter<'a> {
         variable_base(&v.name)
     }
 
+    /// `hird_tool_dispatch:call(Tool, TypeArgs, Caller, Handlers, Args)`
+    /// for the tool use `v`, on rendered `handlers` and `args`.
+    fn dispatch(&self, v: &IrVar, env: &Env, handlers: &str, args: &str) -> String {
+        format!(
+            "hird_tool_dispatch:call({}, {}, {}, {handlers}, {args})",
+            atom(dispatch_name(&v.name)),
+            self.type_args(v),
+            caller_literal(env)
+        )
+    }
+
+    /// The type-argument list of the tool use `v`: each declared type
+    /// parameter's shape at this use, matched out of its instantiated type.
+    /// A parameter the signature never mentions reaches no value, so its
+    /// slot is `unit`.
+    fn type_args(&self, v: &IrVar) -> String {
+        let Some(tool) = self.tools.get(&v.name) else {
+            return String::from("[]");
+        };
+        let mut bound = Vec::new();
+        bound.resize(tool.params.len(), None);
+        bind_params(&tool.ty, unquantified(&v.ty), &tool.params, &mut bound);
+        let shapes: Vec<String> = bound
+            .into_iter()
+            .map(|ty| match ty {
+                Some(ty) => self.wire_shape(ty, &[]),
+                None => String::from("unit"),
+            })
+            .collect();
+        format!("[{}]", shapes.join(", "))
+    }
+
     // ── function-type views ──────────────────────────────────────
 
     /// The function type governing `expr`'s calling convention, read from its
@@ -1368,8 +1445,8 @@ impl<'a> Emitter<'a> {
                 if let Some(binding) = env.scope.get(&v.name) {
                     return as_fn(&binding.ty).cloned();
                 }
-                if let Some(ty) = self.tools.get(&v.name) {
-                    return Some(ty.clone());
+                if let Some(tool) = self.tools.get(&v.name) {
+                    return Some(tool.ty.clone());
                 }
                 if let Some(ty) = self.fns.get(&v.name) {
                     return as_fn(ty).cloned();
@@ -1654,6 +1731,61 @@ fn unquantified(ty: &Type) -> &Type {
     match ty {
         Type::TyForall(_, _, body) => body,
         other => other,
+    }
+}
+
+/// Binds each of `params`, as it stands in `pattern`, to the part of
+/// `actual` (an instance of `pattern`) in the same position; the first
+/// occurrence wins. Effects pair up only where a head has one effect on
+/// each side.
+fn bind_params<'a>(
+    pattern: &Type,
+    actual: &'a Type,
+    params: &[Type],
+    bound: &mut [Option<&'a Type>],
+) {
+    if let Some(i) = params.iter().position(|p| p == pattern) {
+        if let Some(slot @ None) = bound.get_mut(i) {
+            *slot = Some(actual);
+        }
+        return;
+    }
+    match (pattern, actual) {
+        (Type::TyCon(_, ps), Type::TyCon(_, xs)) | (Type::TyTuple(ps), Type::TyTuple(xs)) => {
+            for (p, x) in ps.iter().zip(xs) {
+                bind_params(p, x, params, bound);
+            }
+        }
+        (Type::TyRecord(ps), Type::TyRecord(xs)) => {
+            for (label, p) in ps {
+                if let Some(x) = xs.get(label) {
+                    bind_params(p, x, params, bound);
+                }
+            }
+        }
+        (Type::TyFn(ps, p_ret, p_row), Type::TyFn(xs, x_ret, x_row)) => {
+            for (p, x) in ps.iter().zip(xs) {
+                bind_params(p, x, params, bound);
+            }
+            bind_params(p_ret, x_ret, params, bound);
+            for p in p_row.effects() {
+                if let (Some(p), Some(x)) = (sole_effect(p_row, p), sole_effect(x_row, p)) {
+                    for (pa, xa) in p.args().iter().zip(x.args()) {
+                        bind_params(pa, xa, params, bound);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The only effect in `row` sharing `like`'s head, if there is exactly one.
+fn sole_effect<'r>(row: &'r EffectRow, like: &Effect) -> Option<&'r Effect> {
+    let mut same = row.effects().filter(|e| e.head() == like.head());
+    match (same.next(), same.next()) {
+        (Some(e), None) => Some(e),
+        _ => None,
     }
 }
 

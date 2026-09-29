@@ -43,7 +43,21 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Wire", WIRE),
     ("Timed", TIMED),
     ("Update", UPDATE),
+    ("Generic", GENERIC),
 ];
+
+/// Generic tools: shapes carry `{param, N}` in declaration order (`Pair`
+/// mentions `b` first), each use passes the shapes it fixes — a predeclared
+/// `Option` among them, and a `unit` slot for `Tag`'s unmentioned `a` —
+/// and a tool used as a value carries its use's instantiation too.
+const GENERIC: &str = "tool Echo<t> : { v: t } -> t\n\
+     tool Pair<a, b> : { x: b, y: a } -> (a, b)\n\
+     tool Tag<a, b> : { v: b } -> b\n\
+     fn nums() -> Int ! {Tool<Echo>} = echo({ v: 1 })\n\
+     fn maybe() -> Option<String> ! {Tool<Echo>} = echo({ v: Some(\"x\") })\n\
+     fn swapped() -> (Int, String) ! {Tool<Pair>} = pair({ x: \"b\", y: 1 })\n\
+     fn tagged() -> Int ! {Tool<Tag>} = tag({ v: 2 })\n\
+     fn as_value() -> ({ v: List<Int> }) -> List<Int> ! {Tool<Echo>} = echo";
 
 /// Record update: a map update over a variable base and over a computed
 /// base, which needs parentheses in Erlang.
@@ -615,6 +629,11 @@ fn snapshot_tool_signature_table() {
     insta::assert_snapshot!(emit(program("Wire"), "Wire"));
 }
 
+#[test]
+fn snapshot_generic_tool_type_arguments() {
+    insta::assert_snapshot!(emit(program("Generic"), "Generic"));
+}
+
 // ── erlc validation ──────────────────────────────────────────────
 
 /// Whether `erlc` can be spawned. Skipping callers note it, unless
@@ -814,6 +833,103 @@ fn cross_module_program_compiles_with_erlc() {
     std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
     for (name, _) in CROSS_MODULE {
         let module = lower_program(CROSS_MODULE, name);
+        let modules = emit_modules(&module, &format!("src/{}.hird", name.to_lowercase()));
+        assert_erlc_clean(&dir, &modules);
+    }
+}
+
+// ── wire shapes across modules ──────────────────────────────────
+
+/// A module declaring types (one private, reached through a public one)
+/// and a generic tool, and a shop whose own tool takes the imported type
+/// and which calls the imported tool at it.
+const SHAPES: &[(&str, &str)] = &[
+    (
+        "Shapes",
+        "module Shapes\n\
+         type Item = Item(String)\n\
+         pub type Order = Order(Item, Int)\n\
+         pub fn mk(s: String, n: Int) -> Order = Order(Item(s), n)\n\
+         pub tool Echo<t> : { v: t } -> t",
+    ),
+    (
+        "Shop",
+        "module Shop\n\
+         use Shapes.{Order, Echo, mk}\n\
+         use Shapes as S\n\
+         tool Place : { order: Order } -> Int\n\
+         pub fn place_one() -> Int ! {Tool<Place>} = place({ order: mk(\"x\", 1) })\n\
+         pub fn echo_order() -> Order ! {Tool<Echo>} = S.echo({ v: mk(\"y\", 2) })\n\
+         pub fn echo_int() -> Int ! {Tool<Echo>} = echo({ v: 3 })",
+    ),
+];
+
+/// A type is described once, by the table of the module declaring it —
+/// private ones included — and referenced by name from any other module's
+/// tool shapes; an imported generic tool's calls pass the shapes they fix.
+#[test]
+fn types_resolve_through_the_declaring_module_s_table() {
+    let shapes = emit_modules(&lower_program(SHAPES, "Shapes"), "src/shapes.hird")
+        .swap_remove(0)
+        .source;
+    assert!(
+        shapes.contains("item => [{item, <<\"Item\"/utf8>>, [string]}]"),
+        "{shapes}"
+    );
+    assert!(
+        shapes.contains("order => [{order, <<\"Order\"/utf8>>, [{adt, item, []}, int]}]"),
+        "{shapes}"
+    );
+    assert!(shapes.contains("params => 1,"), "{shapes}");
+    assert!(
+        shapes.contains("args => {record, [{v, {param, 0}}]}"),
+        "{shapes}"
+    );
+
+    let shop = emit_modules(&lower_program(SHAPES, "Shop"), "src/shop.hird")
+        .swap_remove(0)
+        .source;
+    assert!(
+        shop.contains("args => {record, [{order, {adt, order, []}}]}"),
+        "{shop}"
+    );
+    assert!(shop.contains("types => #{}"), "{shop}");
+    assert!(
+        shop.contains("hird_tool_dispatch:call(echo, [{adt, order, []}], "),
+        "{shop}"
+    );
+    assert!(
+        shop.contains("hird_tool_dispatch:call(echo, [int], "),
+        "{shop}"
+    );
+}
+
+/// Only a module declaring a tool or an ADT has a signature table.
+#[test]
+fn signature_tables_follow_tool_and_type_declarations() {
+    assert!(hird_codegen::has_signature_table(&lower_program(
+        SHAPES, "Shapes"
+    )));
+    assert!(hird_codegen::has_signature_table(&lower_program(
+        SHAPES, "Shop"
+    )));
+    assert!(!hird_codegen::has_signature_table(&lower_program(
+        CROSS_MODULE,
+        "App"
+    )));
+}
+
+/// Both modules of the shapes program compile with stock `erlc`.
+#[test]
+fn shapes_program_compiles_with_erlc() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("erlc_shapes");
+    std::fs::create_dir_all(&dir).expect("create erlc scratch dir");
+    for (name, _) in SHAPES {
+        let module = lower_program(SHAPES, name);
         let modules = emit_modules(&module, &format!("src/{}.hird", name.to_lowercase()));
         assert_erlc_clean(&dir, &modules);
     }

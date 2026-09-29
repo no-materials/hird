@@ -425,6 +425,6 @@ impl Checker {
 
 /// Whether a surface type name is a type variable (lowercase) rather than a
 /// constructor (`PascalCase`).
-fn is_var_name(name: &str) -> bool {
+pub(crate) fn is_var_name(name: &str) -> bool {
     name.chars().next().is_some_and(char::is_lowercase)
 }
