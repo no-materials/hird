@@ -318,7 +318,9 @@ supervisor PlannerSup {
 end `main` with `stand()` (effect `Stand`) to keep it up until Ctrl-C
 (or SIGTERM, where the platform has it), which shuts the trees down and
 syncs the audit stream before
-the halt. The full worked example is
+the halt. If a tree exhausts its restart budget, the stand ends as well:
+the remaining trees stop, the audit stream is synced, and the program
+exits 1 so a process manager can restart it. The full worked example is
 [`demo/agent_planner.hird`](../demo/agent_planner.hird) — a
 supervised planner driven end to end by `hird run`.
 

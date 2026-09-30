@@ -5,7 +5,10 @@
 %% setup. await/0 blocks the calling process until a stop trigger fires,
 %% then shuts down every supervisor the caller started and returns, so the
 %% caller's own teardown (the boot module's audit sync) runs after the
-%% trees are gone.
+%% trees are gone. A supervisor that exits on its own while standing —
+%% most often by exhausting its restart budget — ends the wait too: the
+%% remaining trees are stopped the same way and await/0 raises, so the
+%% program fails rather than standing with no tree.
 %%
 %% Two triggers exist, and a node arms every one that applies:
 %%
@@ -38,6 +41,9 @@
 
 %% Blocks until a trigger fires, then stops the caller's supervisors and
 %% returns. Arms the triggers that apply to this node (see triggers/0).
+%% Raises `{supervisor_down, Sup, Reason}` instead, after stopping the
+%% remaining trees, if a supervisor exits on its own first — most often by
+%% exhausting its restart budget.
 -spec await() -> ok.
 await() ->
     await(triggers()).
@@ -46,11 +52,20 @@ await() ->
 -spec await([trigger()]) -> ok.
 await(Triggers) ->
     Standing = self(),
+    Watched = maps:from_list(
+        [{monitor(process, Sup), Sup} || Sup <- supervisors(Standing)]),
     lists:foreach(fun(Trigger) -> arm(Trigger, Standing) end, Triggers),
-    receive
-        {?MODULE, shutdown} -> ok
+    Outcome = receive
+        {?MODULE, shutdown} -> ok;
+        {'DOWN', Ref, process, Sup, Reason} when is_map_key(Ref, Watched) ->
+            {supervisor_down, Sup, Reason}
     end,
-    lists:foreach(fun stop_supervisor/1, supervisors(Standing)).
+    maps:foreach(fun(R, _) -> demonitor(R, [flush]) end, Watched),
+    lists:foreach(fun stop_supervisor/1, supervisors(Standing)),
+    case Outcome of
+        ok -> ok;
+        Down -> error(Down)
+    end.
 
 %% The triggers that apply to this node: SIGTERM off Windows, and stdin
 %% end of file when the launcher passed `-hird_stop stdin`.

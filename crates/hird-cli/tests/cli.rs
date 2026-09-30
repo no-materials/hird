@@ -918,6 +918,81 @@ fn run_rest_for_one_restarts_later_siblings() {
     assert_eq!(count("last up"), 2, "audit log: {log}");
 }
 
+/// A standing program whose one actor crashes on every beat: under
+/// intensity 2 the supervisor gives up after the third start.
+const EXHAUSTED: &str = "type Cfg = Cfg(Clock)\n\
+     tool Log : { message: String } -> ()\n\
+     fn fake_log(args: { message: String }) -> () = ()\n\
+     actor Beater {\n\
+       state: Cfg,\n\
+       message: BeaterMsg = | Beat,\n\
+       init: fn(c: Cfg) ! {Tool<Log>, Schedule<BeaterMsg>} =\n\
+         match c {\n\
+           Cfg(clock) -> match log({ message: \"beater up\" }) {\n\
+             _ -> let next = schedule(clock, self(), Beat, 10) in c\n\
+           }\n\
+         },\n\
+       handle Beat, _ ! {} = crash!(\"beat\"),\n\
+     } ! {Tool<Log>, Schedule<BeaterMsg>}\n\
+     supervisor BeaterSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 2,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: beater, actor: Beater, start_args: Cfg(clock()), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn main() ! {Install, Supervise, Stand} =\n\
+       install { Tool<Log> -> fake_log } in\n\
+       let u = supervise(BeaterSup) in\n\
+       stand()";
+
+/// A tree that exhausts its restart budget ends a standing program: it
+/// exits nonzero on its own, naming the supervisor, with every start's
+/// record flushed.
+#[test]
+fn run_exits_when_the_tree_exhausts_its_restart_budget() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_exhausted_tree");
+    let file = write(&dir, "exhausted.hird", EXHAUSTED);
+    let audit = dir.join("audit.jsonl");
+    let err_path = dir.join("stderr.txt");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args([
+            "run",
+            &file,
+            "-o",
+            dir.join("out").to_str().expect("utf-8 path"),
+            "--audit-file",
+            audit.to_str().expect("utf-8 path"),
+        ])
+        .stdout(Stdio::null())
+        .stderr(fs::File::create(&err_path).expect("create the stderr file"))
+        .spawn()
+        .expect("spawn the hird binary");
+
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll the hird binary") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            panic!("the program kept standing after its tree gave up");
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+    let err = fs::read_to_string(&err_path).expect("read the stderr file");
+    assert!(!status.success(), "status: {status}, stderr: {err}");
+    assert!(err.contains("supervisor_down"), "stderr: {err}");
+
+    let log = fs::read_to_string(&audit).expect("read the audit log");
+    assert_eq!(log.matches("beater up").count(), 3, "audit log: {log}");
+}
+
 // ── time: scheduled sends and request timeouts ─────────────────
 
 /// An actor that swallows its requests: the handler never replies.

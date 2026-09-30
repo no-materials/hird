@@ -1653,7 +1653,7 @@ the headline claim the demo exists to make.
 
 ## ADR-025: Standing programs — `stand` keeps the tree up until shutdown
 
-**Date**: 2026-08-27
+**Date**: 2026-08-27 (amended 2026-09-30)
 **Status**: Accepted (builds on ADR-023/024; §4 superseded by ADR-027)
 
 ### Context
@@ -1688,6 +1688,20 @@ clean as its start: trees shut down, audit stream synced, then halt.
    so each supervisor terminates its children within their shutdown
    timeouts before exiting. No registry of started trees, no coupling
    between the `supervise` and `stand` lowerings.
+
+   *Amended 2026-09-30 — a tree that gives up ends the stand.* A
+   supervisor that exhausts its restart budget exits with `shutdown`,
+   and the boot process traps exits, so the signal used to sit unread
+   in its mailbox: the node stayed up with no tree, and a process
+   manager saw a live service it would never restart. `await` now
+   monitors the supervisors it stands on. If one goes down before a
+   stop trigger fires, `await` stops the remaining trees by the same
+   protocol and raises `{supervisor_down, Sup, Reason}`. `main` then
+   crashes, and the boot module flushes the audit sink and halts with
+   1, printing the reason. Escalation reaches the process manager, as
+   supervision intends. The sink is linked to the same process, but
+   what happens when it dies is the sink's own failure policy, not
+   this one: `await` watches only supervisors.
 
 4. **SIGTERM is the runtime's shutdown signal; `hird run` relays Ctrl-C.**
    The BEAM does not expose SIGINT to Erlang code (its break handler owns

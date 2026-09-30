@@ -5,7 +5,8 @@
 %% the way the VM delivers it (as an event on erl_signal_server; not on
 %% Windows, which has no SIGTERM), and end of file on an io device. The
 %% test module doubles as the supervisor callback module and provides its
-%% own trivial child.
+%% own trivial child. A tree that exhausts its restart budget is covered
+%% too.
 -module(hird_stand_tests).
 -behaviour(supervisor).
 
@@ -106,3 +107,31 @@ wait_for_handler(N) ->
         true -> ok;
         false -> timer:sleep(10), wait_for_handler(N - 1)
     end.
+
+%% A tree that exhausts its restart budget ends the wait: the other tree is
+%% stopped and await/1 raises, with no trigger fired. The standing process
+%% traps exits, as the boot process does, so the supervisor's exit arrives
+%% as a message rather than killing it.
+exhausted_tree_stops_the_rest_and_raises_test() ->
+    Test = self(),
+    Standing = spawn_link(fun() ->
+        process_flag(trap_exit, true),
+        {ok, Doomed} = supervisor:start_link(?MODULE, []),
+        {ok, Other} = supervisor:start_link(?MODULE, []),
+        Test ! {standing, Doomed, Other},
+        Result = try hird_stand:await([]) catch error:E -> {raised, E} end,
+        Test ! {returned, Result},
+        receive stop -> ok end
+    end),
+    {Doomed, Other} = receive {standing, D, O} -> {D, O} end,
+    %% Intensity 1: the second crash within the period exceeds the budget.
+    lists:foreach(fun(_) ->
+        {ok, Worker} = hird_sup_util:child_pid(Doomed, worker),
+        exit(Worker, kill),
+        timer:sleep(10)
+    end, [1, 2]),
+    ?assertEqual({returned, {raised, {supervisor_down, Doomed, shutdown}}},
+                 receive M = {returned, _} -> M after 2000 -> none end),
+    ?assertNot(is_process_alive(Doomed)),
+    ?assertNot(is_process_alive(Other)),
+    Standing ! stop.

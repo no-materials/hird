@@ -54,8 +54,10 @@ dispatcher.
   then shuts down every supervisor the caller started (its linked
   `supervisor` children, in reverse start order, by the OTP
   parent-shutdown protocol) and returns, so the boot module's audit sync
-  runs after the trees are gone. It replaces OTP's default signal handler
-  for the node's lifetime.
+  runs after the trees are gone. A supervisor that exits on its own first —
+  its restart budget exhausted — ends the wait as well: the other trees
+  are stopped the same way and `await` raises, so the program exits 1.
+  It replaces OTP's default signal handler for the node's lifetime.
 - `hird_clock.erl` — the clock capability: `real/0` is what `clock()`
   lowers to, and `schedule/4` is `schedule(clock, pid, msg, delay_ms)`:
   `erlang:send_after` into the destination's cast path. The clock value
