@@ -41,6 +41,26 @@ schedule and is not covered by these entries.
   performing only `Tool<X>`) is rejected too, since rows check for
   equality.
 
+- **A crashing `main` lost its audit records.** The boot module halted
+  on a runtime error without flushing the audit sink, so a run that
+  crashed after a burst of tool calls kept only the records the sink
+  had already written: about 2,000 of 20,000 in one measurement, to a
+  file or to stdout alike. A large burst failed a normal exit too: the
+  final flush gave up after gen_server's default 5 s, so a run of
+  300,000 calls exited 1 with a partial log. The sink is now flushed on
+  the crash path as well, and the flush waits for the whole backlog, so
+  every record logged before the VM halts is written. Exit then waits as
+  long as the sink takes to drain.
+
+- **A standing program outlived its own supervision tree.** A
+  supervisor that exhausted its restart budget exited, but its signal
+  sat unread in the standing process's mailbox, so the node stayed up
+  with no tree until it was killed. A process manager saw a live
+  service and never restarted it. A supervisor going down while the
+  program stands now ends the stand: the other trees are stopped in
+  order, the audit sink is flushed, and the program exits 1 with
+  `{supervisor_down, Sup, Reason}` on stderr.
+
 ## [0.4.0] — 2026-09-15
 
 ### Added
