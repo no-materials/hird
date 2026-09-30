@@ -34,9 +34,9 @@ that remembered to use it. Hirð's is a property of the language instead:
   a capability.
 - **Configured at the boundary.** Where records go is decided once, where
   the program is started: the generated boot module opens the sink before
-  `main` and flushes it after, at stdout by default and at a file with
-  `--audit-file`. Nothing in the language reaches the sink, so no library
-  can redirect or silence the stream mid-run.
+  `main` and flushes it after, on return or crash, at stdout by default
+  and at a file with `--audit-file`. Nothing in the language reaches the
+  sink, so no library can redirect or silence the stream mid-run.
 
 So "audited" is not a property of a deployment's configuration that an
 operator could get wrong. That is what makes the stream usable as evidence.
@@ -91,8 +91,11 @@ implementation does not make.
   everything it attempted, so a run's last attempted call may be missing
   from its own log. Crash evidence is the supervisor's business.
 - **Durability is best-effort.** Records reach the sink asynchronously and
-  the generated boot module flushes it before the run returns, so a normal
-  exit loses nothing. A hard halt of the VM can drop records still queued.
+  the generated boot module flushes it before the VM halts, whether `main`
+  returns or crashes, so neither exit loses a record. The flush waits for
+  the whole backlog, so a burst delays exit by as long as the sink takes
+  to write it. A hard halt of the VM — a kill signal, or SIGQUIT — can drop
+  records still queued.
 - **Arrival order, not causal order.** The stream is ordered by arrival at
   the sink. Calls from one process appear in call order; concurrent actors
   interleave, and a record carries no ordering token beyond its

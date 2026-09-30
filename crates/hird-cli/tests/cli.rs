@@ -391,6 +391,61 @@ fn run_audit_file_redirects_the_audit_stream() {
     );
 }
 
+/// Tool calls in a burst, then a crash in `main`.
+const CRASH_AFTER_BURST: &str = "tool Ping : { msg: String } -> String\n\
+     fn fake_ping(args: { msg: String }) -> String ! {} = \"pong\"\n\
+     fn pings(n: Int) -> () ! {Tool<Ping>} =\n\
+       if n == 0 then () else match ping({ msg: \"hi\" }) { _ -> pings(n - 1) }\n\
+     fn main() -> () ! {} =\n\
+       handle { Tool<Ping> -> fake_ping } in\n\
+         let u = pings(20000) in crash!(\"after the burst\")";
+
+/// A crashing `main` still flushes every record it logged, to either sink.
+#[test]
+fn run_crash_flushes_the_audit_sink() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_crash_flush");
+    let file = write(&dir, "main.hird", CRASH_AFTER_BURST);
+
+    let audit = dir.join("audit.jsonl");
+    let to_file = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_file").display().to_string(),
+        "--audit-file",
+        &audit.display().to_string(),
+    ]);
+    assert!(!to_file.status.success(), "the crash must fail the run");
+    assert!(
+        stderr(&to_file).contains("after the burst"),
+        "stderr: {}",
+        stderr(&to_file)
+    );
+    let logged = fs::read_to_string(&audit).expect("read the audit file");
+    assert_eq!(logged.lines().count(), 20000, "file sink lost records");
+
+    let to_stdout = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_stdout").display().to_string(),
+    ]);
+    assert!(!to_stdout.status.success(), "the crash must fail the run");
+    let printed = stdout(&to_stdout);
+    assert_eq!(
+        printed
+            .lines()
+            .filter(|l| l.contains("\"tool\":\"Ping\""))
+            .count(),
+        20000,
+        "stdout sink lost records"
+    );
+}
+
 #[test]
 fn run_replay_reproduces_a_recorded_run() {
     if !erlang_available() {

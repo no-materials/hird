@@ -2,7 +2,7 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% Audit sink behaviour: JSON-lines file output in arrival order, table
-%% registration, and append-across-restarts.
+%% registration, append-across-restarts, and an unbounded sync.
 -module(hird_audit_tests).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -67,3 +67,22 @@ file_sink_appends_across_restarts_test() ->
 log_without_a_running_sink_is_a_noop_test() ->
     ?assertEqual(undefined, whereis(hird_audit)),
     ?assertEqual(ok, hird_audit:log(record_at(1))).
+
+%% A backlog that outlasts gen_server's default 5 s call timeout: the sink
+%% is suspended past it, and sync still returns once the record lands.
+sync_outwaits_the_default_call_timeout_test_() ->
+    {timeout, 30, fun() ->
+        Path = fresh("audit_slow.jsonl"),
+        {ok, Sink} =
+            hird_audit:start_link([{sink, {file, Path}}, {tools, table()}]),
+        ok = sys:suspend(Sink),
+        ok = hird_audit:log(record_at(1)),
+        Self = self(),
+        spawn(fun() -> Self ! {synced, catch hird_audit:sync()} end),
+        timer:sleep(5500),
+        ok = sys:resume(Sink),
+        receive {synced, Result} -> ?assertEqual(ok, Result) end,
+        gen_server:stop(Sink),
+        {ok, Bytes} = file:read_file(Path),
+        ?assertMatch({match, _}, re:run(Bytes, <<"\"args\":1">>))
+    end}.

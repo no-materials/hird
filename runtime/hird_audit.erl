@@ -38,10 +38,11 @@ register_tools(Table) ->
 log(Record) ->
     gen_server:cast(?MODULE, {log, Record}).
 
-%% Blocks until every previously logged record has been written.
+%% Blocks until every previously logged record has been written, however
+%% long the backlog takes to drain.
 -spec sync() -> ok.
 sync() ->
-    gen_server:call(?MODULE, sync).
+    gen_server:call(?MODULE, sync, infinity).
 
 %% gen_server callbacks ---------------------------------------------------
 

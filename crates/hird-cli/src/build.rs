@@ -355,7 +355,8 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 /// `audit_file` when given, stdout otherwise), registers every signature
 /// table in `table_modules`, and calls `main` with an empty
 /// handler map. With `replay` it also starts the replay cursor over that
-/// log before `main` and requires the log fully consumed after. Kept as
+/// log before `main` and requires the log fully consumed after. A crash
+/// in `main` still flushes the sink before halting. Kept as
 /// generated source so the build output runs on plain `erl` without the
 /// CLI.
 fn boot_module(
@@ -417,7 +418,11 @@ fn boot_module(
         out,
         "%% Entry point for `erl -noshell -s {BOOT_MODULE} run`: runs main and"
     );
-    let _ = writeln!(out, "%% halts with a status reflecting success or crash.");
+    let _ = writeln!(
+        out,
+        "%% halts with a status reflecting success or crash, flushing the audit"
+    );
+    let _ = writeln!(out, "%% sink on the crash path too.");
     let _ = writeln!(out, "run() ->");
     let _ = writeln!(out, "    try main() of");
     let _ = writeln!(out, "        _ -> halt(0)");
@@ -427,6 +432,7 @@ fn boot_module(
         out,
         "            io:format(standard_error, \"hird: runtime error: ~p~n\", [{{Class, Reason, Stack}}]),"
     );
+    let _ = writeln!(out, "            _ = (catch hird_audit:sync()),");
     let _ = writeln!(out, "            halt(1)");
     let _ = writeln!(out, "    end.");
     out
