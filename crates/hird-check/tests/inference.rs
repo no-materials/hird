@@ -561,6 +561,59 @@ fn missing_cases_past_six_are_elided() {
 }
 
 #[test]
+fn list_patterns_take_lists_apart() {
+    insta::assert_snapshot!(check_str(
+        "fn head_or(l: List<Int>, d: Int) -> Int = match l {\n\
+           [] -> d,\n\
+           [x, .._] -> x,\n\
+         }\n\
+         fn length(l: List<a>) -> Int = match l {\n\
+           [] -> 0,\n\
+           [_, ..rest] -> 1 + length(rest),\n\
+         }\n\
+         fn pairs(l: List<(Int, String)>) -> Int = match l {\n\
+           [(n, _), (m, \"x\")] -> n + m,\n\
+           _ -> 0,\n\
+         }"
+    ));
+}
+
+#[test]
+fn list_match_names_missing_lengths() {
+    insta::assert_snapshot!(check_str(
+        "fn a(l: List<Int>) -> Int = match l { [] -> 0 }\n\
+         fn b(l: List<Int>) -> Int = match l { [] -> 0, [x] -> x }\n\
+         fn c(l: List<Int>) -> Int = match l { [x, .._] -> x }\n\
+         fn d(l: List<List<Int>>) -> Int = match l { [] -> 0, [[], .._] -> 1 }"
+    ));
+}
+
+#[test]
+fn list_arm_after_cover_is_redundant() {
+    insta::assert_snapshot!(check_str(
+        "fn f(l: List<Int>) -> Int = match l {\n\
+           [] -> 0,\n\
+           [x, .._] -> x,\n\
+           [y] -> y,\n\
+         }"
+    ));
+}
+
+#[test]
+fn let_refutable_list_rejected() {
+    insta::assert_snapshot!(check_str(
+        "fn first(l: List<Int>) -> Int = let [x, .._] = l in x"
+    ));
+}
+
+#[test]
+fn list_pattern_element_type_mismatch() {
+    insta::assert_snapshot!(check_str(
+        "fn f(l: List<Int>) -> Int = match l { [\"a\", .._] -> 0, _ -> 1 }"
+    ));
+}
+
+#[test]
 fn empty_match_is_non_exhaustive() {
     insta::assert_snapshot!(check_str(
         "type Option<a> = Some(a) | None\n\

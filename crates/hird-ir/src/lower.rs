@@ -45,10 +45,10 @@ use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
     IrClock, IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr,
     IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
-    IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField,
-    IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise,
-    IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar, IrWildcardPat,
-    LiteralValue,
+    IrListPat, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord,
+    IrRecordField, IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand,
+    IrSupervise, IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar,
+    IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -837,6 +837,11 @@ impl Lowerer<'_> {
             }),
             Pattern::Tuple(tuple) => IrPattern::Tuple(IrTuplePat {
                 elems: tuple.elements().map(|p| self.lower_pattern(&p)).collect(),
+                ty,
+            }),
+            Pattern::List(list) => IrPattern::List(IrListPat {
+                elems: list.elements().map(|p| self.lower_pattern(&p)).collect(),
+                rest: list.rest().map(|p| Box::new(self.lower_pattern(&p))),
                 ty,
             }),
             Pattern::Constructor(ctor) => IrPattern::Constructor(IrConstructorPat {

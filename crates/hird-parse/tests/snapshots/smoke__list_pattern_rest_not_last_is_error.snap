@@ -1,0 +1,44 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match l { [x, ..r, y] -> x }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "l"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        LIST_PAT
+          WHITESPACE " "
+          L_BRACKET "["
+          BIND_PAT
+            IDENT "x"
+          COMMA ","
+          WHITESPACE " "
+          DOT_DOT ".."
+          BIND_PAT
+            IDENT "r"
+          COMMA ","
+          BIND_PAT
+            WHITESPACE " "
+            IDENT "y"
+          R_BRACKET "]"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "x"
+      WHITESPACE " "
+      R_BRACE "}"
+---
+P0008 28..29: `..rest` must be the last entry of a list pattern

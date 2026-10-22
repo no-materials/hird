@@ -109,3 +109,45 @@ fn f(c: Cfg, p: (Int, Int)) → Int =
           pattern: (wildcard_pattern)
           value: (identifier)
           body: (identifier))))))
+
+==================
+List patterns: empty, fixed length, and with a rest
+==================
+
+fn f(l: List<Int>) → Int = match l {
+  [] → 0,
+  [x, (a, _)] → x,
+  [x, ..rest,] → x,
+  [[y], .._] → y,
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_identifier)))))
+    return_type: (return_type (type_identifier))
+    body: (match_expression
+      value: (identifier)
+      (match_arm pattern: (list_pattern) body: (integer))
+      (match_arm
+        pattern: (list_pattern
+          (bind_pattern)
+          (tuple_pattern (bind_pattern) (wildcard_pattern)))
+        body: (identifier))
+      (match_arm
+        pattern: (list_pattern
+          (bind_pattern)
+          (list_rest rest: (bind_pattern)))
+        body: (identifier))
+      (match_arm
+        pattern: (list_pattern
+          (list_pattern (bind_pattern))
+          (list_rest rest: (wildcard_pattern)))
+        body: (identifier)))))

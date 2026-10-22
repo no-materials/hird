@@ -1,0 +1,72 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match l { [] -> 0, [a, (b, _)] -> a, [x, ..rest,] -> x }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "l"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        LIST_PAT
+          WHITESPACE " "
+          L_BRACKET "["
+          R_BRACKET "]"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        INT "0"
+      COMMA ","
+      MATCH_ARM
+        LIST_PAT
+          WHITESPACE " "
+          L_BRACKET "["
+          BIND_PAT
+            IDENT "a"
+          COMMA ","
+          TUPLE_PAT
+            WHITESPACE " "
+            L_PAREN "("
+            BIND_PAT
+              IDENT "b"
+            COMMA ","
+            WILDCARD_PAT
+              WHITESPACE " "
+              IDENT "_"
+            R_PAREN ")"
+          R_BRACKET "]"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "a"
+      COMMA ","
+      MATCH_ARM
+        LIST_PAT
+          WHITESPACE " "
+          L_BRACKET "["
+          BIND_PAT
+            IDENT "x"
+          COMMA ","
+          WHITESPACE " "
+          DOT_DOT ".."
+          BIND_PAT
+            IDENT "rest"
+          COMMA ","
+          R_BRACKET "]"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        IDENT "x"
+      WHITESPACE " "
+      R_BRACE "}"

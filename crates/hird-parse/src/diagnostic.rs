@@ -45,8 +45,8 @@ pub enum DiagnosticCode {
     /// with constructors to hide, so `pub type alias` is the only exported
     /// form.
     P0007,
-    /// A `..base` entry that is not the single, last entry of a record
-    /// literal.
+    /// A `..` entry that is not the single, last entry: a record literal's
+    /// `..base`, or a list pattern's `..rest`.
     P0008,
 }
 

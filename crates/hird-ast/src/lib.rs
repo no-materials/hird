@@ -1669,6 +1669,32 @@ impl TuplePat {
 }
 
 ast_node! {
+    /// A list pattern (`[]`, `[a, b]`, `[a, ..rest]`).
+    ListPat => LIST_PAT
+}
+
+impl ListPat {
+    /// The element patterns before any `..rest`, in order.
+    pub fn elements(&self) -> impl Iterator<Item = Pattern> + '_ {
+        self.0
+            .children_with_tokens()
+            .take_while(|e| element_kind(*e) != SyntaxKind::DOT_DOT)
+            .filter_map(|e| e.into_node())
+            .filter_map(|n| Pattern::cast(n.clone()))
+    }
+
+    /// The tail pattern (after `..`), if any.
+    #[must_use]
+    pub fn rest(&self) -> Option<Pattern> {
+        self.0
+            .children_with_tokens()
+            .skip_while(|e| element_kind(*e) != SyntaxKind::DOT_DOT)
+            .filter_map(|e| e.into_node())
+            .find_map(|n| Pattern::cast(n.clone()))
+    }
+}
+
+ast_node! {
     /// A literal pattern (`1`, `"hi"`).
     LiteralPat => LITERAL_PAT
 }
@@ -1715,6 +1741,8 @@ pub enum Pattern {
     Constructor(ConstructorPat),
     /// `(.., ..)`
     Tuple(TuplePat),
+    /// `[.., ..rest]`
+    List(ListPat),
     /// `1`, `"hi"`
     Literal(LiteralPat),
     /// `_`
@@ -1729,6 +1757,7 @@ impl AstNode for Pattern {
             kind,
             SyntaxKind::CONSTRUCTOR_PAT
                 | SyntaxKind::TUPLE_PAT
+                | SyntaxKind::LIST_PAT
                 | SyntaxKind::LITERAL_PAT
                 | SyntaxKind::WILDCARD_PAT
                 | SyntaxKind::BIND_PAT
@@ -1739,6 +1768,7 @@ impl AstNode for Pattern {
         let pat = match syntax.kind() {
             SyntaxKind::CONSTRUCTOR_PAT => Self::Constructor(ConstructorPat(syntax)),
             SyntaxKind::TUPLE_PAT => Self::Tuple(TuplePat(syntax)),
+            SyntaxKind::LIST_PAT => Self::List(ListPat(syntax)),
             SyntaxKind::LITERAL_PAT => Self::Literal(LiteralPat(syntax)),
             SyntaxKind::WILDCARD_PAT => Self::Wildcard(WildcardPat(syntax)),
             SyntaxKind::BIND_PAT => Self::Bind(BindPat(syntax)),
@@ -1751,6 +1781,7 @@ impl AstNode for Pattern {
         match self {
             Self::Constructor(n) => n.syntax(),
             Self::Tuple(n) => n.syntax(),
+            Self::List(n) => n.syntax(),
             Self::Literal(n) => n.syntax(),
             Self::Wildcard(n) => n.syntax(),
             Self::Bind(n) => n.syntax(),

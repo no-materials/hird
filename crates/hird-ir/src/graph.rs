@@ -392,6 +392,7 @@ fn handled_constructor(pattern: &IrPattern) -> String {
     match pattern {
         IrPattern::Constructor(c) => c.name.clone(),
         IrPattern::Tuple(_)
+        | IrPattern::List(_)
         | IrPattern::Literal(_)
         | IrPattern::Wildcard(_)
         | IrPattern::Bind(_) => "_".to_owned(),

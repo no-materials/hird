@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn head_or(l: List<Int>, d: Int) -> Int = match l {\\n\\\n           [] -> d,\\n\\\n           [x, .._] -> x,\\n\\\n         }\\n\\\n         fn length(l: List<a>) -> Int = match l {\\n\\\n           [] -> 0,\\n\\\n           [_, ..rest] -> 1 + length(rest),\\n\\\n         }\\n\\\n         fn pairs(l: List<(Int, String)>) -> Int = match l {\\n\\\n           [(n, _), (m, \\\"x\\\")] -> n + m,\\n\\\n           _ -> 0,\\n\\\n         }\")"
+---
+head_or : List<Int> → Int → Int
+length : ∀a. List<a> → Int
+pairs : List<(Int, String)> → Int

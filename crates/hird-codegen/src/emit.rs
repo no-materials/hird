@@ -1495,6 +1495,11 @@ impl<'a> Emitter<'a> {
                     self.bind_pattern(p, env, cx, vars);
                 }
             }
+            IrPattern::List(list) => {
+                for p in list.elems.iter().chain(list.rest.as_deref()) {
+                    self.bind_pattern(p, env, cx, vars);
+                }
+            }
             IrPattern::Constructor(ctor) => {
                 for p in &ctor.fields {
                     self.bind_pattern(p, env, cx, vars);
@@ -1526,6 +1531,21 @@ impl<'a> Emitter<'a> {
                     .map(|p| self.render_pattern(p, vars, cx))
                     .collect();
                 format!("{{{}}}", elems.join(", "))
+            }
+            IrPattern::List(list) => {
+                let elems: Vec<String> = list
+                    .elems
+                    .iter()
+                    .map(|p| self.render_pattern(p, vars, cx))
+                    .collect();
+                match &list.rest {
+                    Some(rest) => format!(
+                        "[{} | {}]",
+                        elems.join(", "),
+                        self.render_pattern(rest, vars, cx)
+                    ),
+                    None => format!("[{}]", elems.join(", ")),
+                }
             }
             IrPattern::Constructor(ctor) => {
                 let tag = atom(&snake_case(&ctor.name));

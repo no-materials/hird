@@ -19,6 +19,7 @@
   (tuple)
   (tuple_type)
   (tuple_pattern)
+  (list_pattern)
   (parenthesized_expression)
   (parenthesized_type)
 ] @indent.begin

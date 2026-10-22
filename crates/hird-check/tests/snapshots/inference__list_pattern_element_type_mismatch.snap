@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn f(l: List<Int>) -> Int = match l { [\\\"a\\\", .._] -> 0, _ -> 1 }\")"
+---
+f : List<Int> → Int
+error[C0001] 39..42: type mismatch: expected `Int`, got `String`

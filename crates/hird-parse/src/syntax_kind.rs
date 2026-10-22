@@ -309,6 +309,8 @@ pub enum SyntaxKind {
     CONSTRUCTOR_PAT,
     /// Tuple pattern (`(a, b)`).
     TUPLE_PAT,
+    /// List pattern (`[a, b]`, `[a, ..rest]`).
+    LIST_PAT,
     /// Literal pattern.
     LITERAL_PAT,
     /// Wildcard pattern (`_`).

@@ -439,6 +439,30 @@ fn json_schema_is_stable() {
 }
 
 #[test]
+fn list_pattern_json_carries_rest_only_when_written() {
+    let module = lower(
+        "fn f(l: List<Int>) -> Int = match l { [x] -> x, [_, ..r] -> 0, [] -> 1 }",
+        "Main",
+    );
+    let IrExpr::Match(m) = &fn_named(&module, "f").body else {
+        panic!("body is a match");
+    };
+    let arms: Vec<String> = m
+        .arms
+        .iter()
+        .map(|arm| serde_json::to_string(&arm.pattern).expect("serialization succeeds"))
+        .collect();
+    assert_eq!(
+        arms,
+        [
+            r#"{"kind":"List","elems":[{"kind":"Bind","name":"x","type":"Int"}],"type":"List<Int>"}"#,
+            r#"{"kind":"List","elems":[{"kind":"Wildcard","type":"Int"}],"rest":{"kind":"Bind","name":"r","type":"List<Int>"},"type":"List<Int>"}"#,
+            r#"{"kind":"List","elems":[],"type":"List<Int>"}"#,
+        ]
+    );
+}
+
+#[test]
 fn json_pretty_snapshot() {
     let module = lower(
         "type Option<a> = Some(a) | None\n\

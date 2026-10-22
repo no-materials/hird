@@ -463,6 +463,7 @@ module.exports = grammar({
       choice(
         $.constructor_pattern,
         $.tuple_pattern,
+        $.list_pattern,
         $._parenthesized_pattern,
         $.integer,
         $.float,
@@ -484,6 +485,14 @@ module.exports = grammar({
         seq('(', ')'),
         seq('(', $._pattern, repeat1(seq(',', $._pattern)), optional(','), ')'),
       ),
+
+    // A `..rest` entry binds the list after the leading elements; the
+    // compiler, not the grammar, requires it to be single, last, and after an
+    // element.
+    list_pattern: ($) =>
+      seq('[', optional(commaList(choice($._pattern, $.list_rest))), ']'),
+
+    list_rest: ($) => seq('..', field('rest', $._pattern)),
 
     wildcard_pattern: ($) => '_',
 

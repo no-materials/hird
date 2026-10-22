@@ -20,10 +20,10 @@ use hird_ast::{AstNode, SourceFile};
 use hird_ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
     IrClock, IrConstructor, IrConstructorPat, IrCrash, IrDecl, IrExpr, IrExternRef, IrField,
-    IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrLiteral, IrLiteralPat,
-    IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply, IrRequest, IrSchedule,
-    IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise, IrSupervisorDef, IrTuple, IrTuplePat,
-    IrVar, IrWildcardPat, lower_module, pretty_print,
+    IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList, IrListPat, IrLiteral,
+    IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord, IrRecordField, IrReply,
+    IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand, IrSupervise, IrSupervisorDef,
+    IrTuple, IrTuplePat, IrVar, IrWildcardPat, lower_module, pretty_print,
 };
 use hird_types::{Effect, EffectRow, RowVar, Type};
 use proptest::prelude::*;
@@ -460,6 +460,11 @@ fn canon_pattern(pattern: &IrPattern, map: &mut VarMap) -> IrPattern {
             elems: t.elems.iter().map(|e| canon_pattern(e, map)).collect(),
             ty: canon_type(&t.ty, map),
         }),
+        IrPattern::List(l) => IrPattern::List(IrListPat {
+            elems: l.elems.iter().map(|e| canon_pattern(e, map)).collect(),
+            rest: l.rest.as_ref().map(|r| Box::new(canon_pattern(r, map))),
+            ty: canon_type(&l.ty, map),
+        }),
         IrPattern::Constructor(c) => IrPattern::Constructor(IrConstructorPat {
             name: c.name.clone(),
             type_name: c.type_name.clone(),
@@ -595,6 +600,13 @@ fn literal_and_wildcard_patterns() {
 #[test]
 fn tuple_pattern() {
     assert_roundtrips("fn first(p: (Int, String)) -> Int = match p { (a, b) -> a, }");
+}
+
+#[test]
+fn list_patterns_round_trip() {
+    assert_roundtrips(
+        "fn count(l: List<Int>) -> Int = match l { [] -> 0, [x] -> x, [_, (y), ..r] -> y, }",
+    );
 }
 
 #[test]

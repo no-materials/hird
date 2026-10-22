@@ -1,0 +1,36 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = match l { [..r] -> 0 }\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    MATCH_EXPR
+      WHITESPACE " "
+      MATCH_KW "match"
+      WHITESPACE " "
+      IDENT "l"
+      WHITESPACE " "
+      L_BRACE "{"
+      MATCH_ARM
+        LIST_PAT
+          WHITESPACE " "
+          L_BRACKET "["
+          DOT_DOT ".."
+          BIND_PAT
+            IDENT "r"
+          R_BRACKET "]"
+        WHITESPACE " "
+        ARROW "->"
+        WHITESPACE " "
+        INT "0"
+      WHITESPACE " "
+      R_BRACE "}"
+---
+P0002 20..22: a list pattern names at least one element before `..rest`

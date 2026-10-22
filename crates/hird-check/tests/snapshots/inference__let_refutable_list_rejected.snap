@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn first(l: List<Int>) -> Int = let [x, .._] = l in x\")"
+---
+first : List<Int> → Int
+error[C0057] 35..44: refutable pattern in `let`: does not cover `[]`; use `match` to handle every case

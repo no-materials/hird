@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn f(l: List<Int>) -> Int = match l {\\n\\\n           [] -> 0,\\n\\\n           [x, .._] -> x,\\n\\\n           [y] -> y,\\n\\\n         }\")"
+---
+f : List<Int> → Int
+warning[C0016] 61..65: unreachable match arm: this pattern is already covered

@@ -779,6 +779,8 @@ pub enum IrPattern {
     Constructor(IrConstructorPat),
     /// `(.., ..)`
     Tuple(IrTuplePat),
+    /// `[.., ..rest]`
+    List(IrListPat),
     /// A literal pattern.
     Literal(IrLiteralPat),
     /// `_`
@@ -806,6 +808,20 @@ pub struct IrConstructorPat {
 pub struct IrTuplePat {
     /// The element patterns, in order.
     pub elems: Vec<IrPattern>,
+    /// The matched type.
+    #[serde(rename = "type", serialize_with = "serialize_type")]
+    pub ty: Type,
+}
+
+/// A list pattern.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrListPat {
+    /// The leading element patterns, in order.
+    pub elems: Vec<IrPattern>,
+    /// The pattern for the rest of the list; `None` when the pattern matches
+    /// exactly `elems.len()` elements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rest: Option<Box<IrPattern>>,
     /// The matched type.
     #[serde(rename = "type", serialize_with = "serialize_type")]
     pub ty: Type,

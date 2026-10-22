@@ -79,7 +79,7 @@ fn tick(clock: Clock, pid: Pid<Msg>) → () ! {Tool<Log>, Schedule<Msg>} =
 ```
 type Result<a, e> = Ok(a) | Err(e)
 
-type List<a> = Cons(a, List<a>) | Nil
+type Tree<a> = Node(Tree<a>, a, Tree<a>) | Leaf
 
 type PlannerMsg =
   | PlanRepo(Path)
@@ -143,7 +143,20 @@ match msg {
 ```
 
 - Exhaustiveness is required. Missing constructors are compile errors.
-- Patterns: constructors, variables, wildcards (`_`), literals, tuples, nested.
+- Patterns: constructors, variables, wildcards (`_`), literals, tuples, lists,
+  nested.
+
+```
+match tasks {
+  [] → 0,
+  [only] → 1,
+  [first, second, ..rest] → 2 + count(rest),
+}
+```
+
+- A list pattern without `..rest` matches exactly its length; `[]` is the
+  empty list. `..rest` binds the list after the leading elements, written
+  once and last (P0008), after at least one element.
 
 ```
 let Config(clock, period) = config in …
@@ -457,8 +470,8 @@ others are the shape the discipline takes for user-declared capabilities.
   (P0005); write `(a == b) == c`.
 - **`;` needs a `()` left operand** (C0058): `f(x); g()` requires `f(x)` to
   return `()`. To drop a value on purpose, write `let _ = f(x) in g()`.
-- **`Cons`/`Nil` are not predefined**: `List` is a built-in type name with
-  no constructors until list literals and patterns exist. `Option` (with
+- **`Cons`/`Nil` are not predefined**: `List` is built in with no named
+  constructors; match it with `[]` and `[x, ..rest]`. `Option` (with
   `Some`/`None`), `Next` (with `Continue`/`Stop`), and `Bool` are
   predeclared, so they need no declaration.
 - **Handlers return `Next<State>`, not `State`**: `= st` in a handler is a

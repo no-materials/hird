@@ -196,7 +196,7 @@ against a draft with five typical mistakes and pins it as a test.
 | Naming a user effect head (`Audit<t>`) in a row without declaring it | C0027 unknown effect |
 | Declaring a built-in head (`effect Tool<t>`) | C0056 redundant declaration (warning) |
 | Non-exhaustive `match` over a sum type | C0015, listing the missing constructors |
-| Matching `Cons`/`Nil` on a `List` (built-in `List` carries no constructors; `Option` with `Some`/`None` is predeclared) | C0007 unknown constructor |
+| Matching `Cons`/`Nil` on a `List` (built-in `List` carries no constructors: match `[]` and `[x, ..rest]`; `Option` with `Some`/`None` is predeclared) | C0007 unknown constructor |
 | Constructing or destructuring an opaque capability outside its module | C0022 / C0021 |
 | `Tool<X>` arm where `X` is not a declared tool | C0033 |
 | Handler whose type does not match the tool's signature | C0034 (non-function handler: C0031) |

@@ -972,6 +972,18 @@ impl Checker {
                 }
                 Ok(())
             }
+            Pattern::List(list) => {
+                let elem_ty = self.subst.fresh_type();
+                let list_ty = Type::list(elem_ty.clone());
+                self.unify_at(expected, &list_ty, span)?;
+                for element in list.elements() {
+                    self.check_pattern(&element, &elem_ty)?;
+                }
+                if let Some(rest) = list.rest() {
+                    self.check_pattern(&rest, &list_ty)?;
+                }
+                Ok(())
+            }
             Pattern::Constructor(ctor) => {
                 let Some(name) = ctor.name() else {
                     return Err(Aborted);

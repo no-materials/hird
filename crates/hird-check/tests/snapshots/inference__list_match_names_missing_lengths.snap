@@ -1,0 +1,12 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn a(l: List<Int>) -> Int = match l { [] -> 0 }\\n\\\n         fn b(l: List<Int>) -> Int = match l { [] -> 0, [x] -> x }\\n\\\n         fn c(l: List<Int>) -> Int = match l { [x, .._] -> x }\\n\\\n         fn d(l: List<List<Int>>) -> Int = match l { [] -> 0, [[], .._] -> 1 }\")"
+---
+a : List<Int> → Int
+b : List<Int> → Int
+c : List<Int> → Int
+d : List<List<Int>> → Int
+error[C0015] 27..47: non-exhaustive match: missing case(s): `[_, .._]`
+error[C0015] 75..105: non-exhaustive match: missing case(s): `[_, _, .._]`
+error[C0015] 133..159: non-exhaustive match: missing case(s): `[]`
+error[C0015] 193..229: non-exhaustive match: missing case(s): `[[_, .._], .._]`

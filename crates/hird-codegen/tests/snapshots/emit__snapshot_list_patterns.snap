@@ -1,0 +1,36 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Lists\"), \"Lists\")"
+---
+%% Generated from src/lists.hird by the Hirð compiler. Do not edit.
+-module(hird_lists).
+-export([count/1, firsts/1, third/1]).
+
+%% src/lists.hird:1
+count(L) ->
+    case L of
+        [] ->
+            0;
+        [_ | Rest] ->
+            1 + count(Rest)
+    end.
+
+%% src/lists.hird:2
+firsts(L) ->
+    case L of
+        [{A, _}, {B, _} | _] ->
+            A + B;
+        [{A@1, _}] ->
+            A@1;
+        [] ->
+            0
+    end.
+
+%% src/lists.hird:7
+third(L) ->
+    case L of
+        [_, _, S | _] ->
+            S;
+        _ ->
+            <<""/utf8>>
+    end.

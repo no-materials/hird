@@ -10,6 +10,19 @@ schedule and is not covered by these entries.
 
 ## [Unreleased]
 
+### Added
+
+- **List patterns.** A list could be built with a literal and arrive as
+  a tool result, but no pattern could take it apart: `[` in a pattern
+  was a parse error, so a tool returning a list handed the program a
+  value it could not read. A pattern may now be `[]`, `[p1, …, pn]` (a
+  list of exactly that length) or `[p1, …, pn, ..rest]`, where `rest`
+  matches the list after the leading elements. List matches are checked
+  for exhaustiveness and redundancy like any other, with missing cases
+  written as lists (`[]`, `[_, _, .._]`), a refutable list `let` is
+  C0057, and a misplaced `..rest` is P0008. Patterns lower to Erlang
+  list patterns (`[X | Rest]`). The IR gains `IrListPat`.
+
 ### Fixed
 
 - **Generic tools and imported types crashed the audit sink.** Codegen

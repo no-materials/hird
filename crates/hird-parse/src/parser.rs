@@ -1645,7 +1645,8 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.depth -= 1;
     }
 
-    /// A pattern: a literal, tuple, wildcard `_`, constructor, or binding.
+    /// A pattern: a literal, tuple, list, wildcard `_`, constructor, or
+    /// binding.
     fn parse_pattern_inner(&mut self) {
         match self.current() {
             SyntaxKind::INT | SyntaxKind::FLOAT | SyntaxKind::STRING => {
@@ -1654,6 +1655,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
                 self.finish_node();
             }
             SyntaxKind::L_PAREN => self.parse_tuple_pattern(),
+            SyntaxKind::L_BRACKET => self.parse_list_pattern(),
             SyntaxKind::IDENT => {
                 if self.current_ident_text() == "_" {
                     self.start_node(SyntaxKind::WILDCARD_PAT);
@@ -1698,6 +1700,48 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         } else {
             self.expect(SyntaxKind::R_PAREN);
         }
+    }
+
+    /// `[]`, `[p, ...]`, or `[p, ..., ..rest]`.
+    fn parse_list_pattern(&mut self) {
+        self.start_node(SyntaxKind::LIST_PAT);
+        self.bump();
+        let mut rest_seen = false;
+        if !self.at(SyntaxKind::R_BRACKET) {
+            if self.at(SyntaxKind::DOT_DOT) {
+                self.emit(
+                    DiagnosticCode::P0002,
+                    "a list pattern names at least one element before `..rest`",
+                    Some("bind the whole list with a plain name instead"),
+                );
+            }
+            self.parse_list_pattern_entry(&mut rest_seen);
+            while self.eat(SyntaxKind::COMMA) {
+                if self.at(SyntaxKind::R_BRACKET) {
+                    break;
+                }
+                self.parse_list_pattern_entry(&mut rest_seen);
+            }
+        }
+        self.expect(SyntaxKind::R_BRACKET);
+        self.finish_node();
+    }
+
+    /// One list-pattern entry: an element pattern or the `..rest` tail.
+    /// Anything after a rest is reported and still parsed, so the pattern
+    /// recovers as one node.
+    fn parse_list_pattern_entry(&mut self, rest_seen: &mut bool) {
+        if *rest_seen {
+            self.emit(
+                DiagnosticCode::P0008,
+                "`..rest` must be the last entry of a list pattern",
+                Some("a list pattern takes at most one rest, written after every element"),
+            );
+        }
+        if self.eat(SyntaxKind::DOT_DOT) {
+            *rest_seen = true;
+        }
+        self.parse_pattern();
     }
 
     /// `Ctor` or `Ctor(p, ...)`.

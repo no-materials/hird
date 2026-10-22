@@ -44,6 +44,7 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Timed", TIMED),
     ("Update", UPDATE),
     ("Generic", GENERIC),
+    ("Lists", LISTS),
 ];
 
 /// Generic tools: shapes carry `{param, N}` in declaration order (`Pair`
@@ -58,6 +59,16 @@ const GENERIC: &str = "tool Echo<t> : { v: t } -> t\n\
      fn swapped() -> (Int, String) ! {Tool<Pair>} = pair({ x: \"b\", y: 1 })\n\
      fn tagged() -> Int ! {Tool<Tag>} = tag({ v: 2 })\n\
      fn as_value() -> ({ v: List<Int> }) -> List<Int> ! {Tool<Echo>} = echo";
+
+/// List patterns: empty, fixed-length, and with a rest, nested in a tuple
+/// and binding only some of their variables.
+const LISTS: &str = "fn count(l: List<a>) -> Int = match l { [] -> 0, [_, ..rest] -> 1 + count(rest) }\n\
+     fn firsts(l: List<(Int, Int)>) -> Int = match l {\n\
+       [(a, _), (b, _), .._] -> a + b,\n\
+       [(a, _)] -> a,\n\
+       [] -> 0,\n\
+     }\n\
+     fn third(l: List<String>) -> String = match l { [_, _, s, .._] -> s, _ -> \"\" }";
 
 /// Record update: a map update over a variable base and over a computed
 /// base, which needs parentheses in Erlang.
@@ -454,6 +465,11 @@ fn snapshot_records_and_field_access() {
 #[test]
 fn snapshot_record_update_is_map_update() {
     insta::assert_snapshot!(emit(program("Update"), "Update"));
+}
+
+#[test]
+fn snapshot_list_patterns() {
+    insta::assert_snapshot!(emit(program("Lists"), "Lists"));
 }
 
 #[test]

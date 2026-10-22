@@ -58,6 +58,7 @@ enum Pat {
     LitInt(u32),
     Ctor(&'static str, Vec<Self>),
     Tuple(Vec<Self>),
+    List(Vec<Self>, Option<Box<Self>>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -185,6 +186,14 @@ fn render_pat(p: &Pat) -> String {
         Pat::Ctor(n, args) if args.is_empty() => (*n).to_string(),
         Pat::Ctor(n, args) => format!("{n}({})", join(args.iter().map(render_pat), ", ")),
         Pat::Tuple(ps) => format!("({})", join(ps.iter().map(render_pat), ", ")),
+        Pat::List(ps, None) => format!("[{}]", join(ps.iter().map(render_pat), ", ")),
+        Pat::List(ps, Some(rest)) => {
+            format!(
+                "[{}, ..{}]",
+                join(ps.iter().map(render_pat), ", "),
+                render_pat(rest)
+            )
+        }
     }
 }
 
@@ -404,7 +413,10 @@ fn pat() -> BoxedStrategy<Pat> {
         prop_oneof![
             (pascal(), proptest::collection::vec(inner.clone(), 1..3))
                 .prop_map(|(n, a)| Pat::Ctor(n, a)),
-            proptest::collection::vec(inner, 2..4).prop_map(Pat::Tuple),
+            proptest::collection::vec(inner.clone(), 2..4).prop_map(Pat::Tuple),
+            proptest::collection::vec(inner.clone(), 0..3).prop_map(|ps| Pat::List(ps, None)),
+            (proptest::collection::vec(inner.clone(), 1..3), inner)
+                .prop_map(|(ps, rest)| Pat::List(ps, Some(Box::new(rest)))),
         ]
     })
     .boxed()

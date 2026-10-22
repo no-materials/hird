@@ -140,9 +140,21 @@ the result has `p`'s type, so an update can neither add nor remove
 fields. This is how an actor handler rebuilds record-shaped state:
 `Continue({ beats: st.beats + 1, ..st })`.
 
-`Option<a> = Some(a) | None` is predeclared, like `Bool`. `List` is a
-built-in type *name* with no constructors in v0.1; there are no list
-literals or patterns yet.
+`Option<a> = Some(a) | None` is predeclared, like `Bool`. `List<a>` is
+built in, with no named constructors: build one with a literal
+(`[1, 2, 3]`) and take it apart with list patterns, where `[]` is the
+empty list and `..rest` binds what follows the leading elements:
+
+```
+fn length(l: List<a>) → Int =
+  match l {
+    [] → 0,
+    [_, ..rest] → 1 + length(rest),
+  }
+```
+
+A list match is checked for exhaustiveness like any other; `[x]` alone
+reports the missing `[]` and `[_, _, .._]`, one at a time.
 
 ### Modules
 

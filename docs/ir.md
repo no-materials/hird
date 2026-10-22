@@ -145,6 +145,9 @@ Every pattern node carries the type of the value it matches.
 
 - `IrConstructorPat { name, type_name, fields, type }`.
 - `IrTuplePat { elems, type }`.
+- `IrListPat { elems, rest?, type }` — `rest` is present when the pattern
+  ends in `..rest`, and matches the list after `elems`; without it the
+  pattern matches exactly `elems.len()` elements.
 - `IrLiteralPat { value, type }`.
 - `IrWildcardPat { type }`.
 - `IrBindPat { name, type }`.

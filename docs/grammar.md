@@ -321,6 +321,7 @@ access on a `PascalCase` receiver and is resolved in the checker.
 ```
 pattern      ::= constructor_pat
                | tuple_pat
+               | list_pat
                | literal_pat
                | wildcard_pat
                | bind_pat
@@ -328,6 +329,10 @@ pattern      ::= constructor_pat
 constructor_pat ::= IDENT ( '(' pattern ( ',' pattern )* ','? ')' )?
 
 tuple_pat    ::= '(' pattern ',' pattern ( ',' pattern )* ','? ')'
+
+list_pat     ::= '[' ( pattern ( ',' pattern )* ( ',' list_rest )? ','? )? ']'
+
+list_rest    ::= '..' pattern
 
 literal_pat  ::= INT | FLOAT | STR
 
@@ -339,6 +344,11 @@ bind_pat     ::= IDENT
 Note: `constructor_pat` and `bind_pat` are disambiguated by naming convention
 — PascalCase is a constructor, snake_case is a binding. The lexer enforces
 canonical naming.
+
+A `list_pat` without `list_rest` matches a list of exactly that length; `[]`
+is the empty list. With `..rest`, the leading patterns match the first
+elements and `rest` the remaining list. The rest follows at least one element
+(P0002 otherwise) and is written once, last (P0008).
 
 ## Type Expressions
 

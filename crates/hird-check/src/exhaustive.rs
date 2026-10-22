@@ -11,9 +11,10 @@
 //! already covered.
 //!
 //! Only finite constructor sets are closed signatures: declared (or seeded)
-//! ADTs and tuples. `Int`/`Float`/`String`, type variables, records, and
-//! function types are open, so a match over them is exhaustive only through a
-//! wildcard or variable arm.
+//! ADTs, tuples, and `List` (empty, or a head and the rest). A list pattern
+//! is a chain of the latter two. `Int`/`Float`/`String`, type variables,
+//! records, and function types are open, so a match over them is exhaustive
+//! only through a wildcard or variable arm.
 
 use alloc::format;
 use alloc::string::String;
@@ -34,6 +35,10 @@ enum Ctor {
     Variant(Name),
     /// The sole constructor of a tuple type.
     Tuple,
+    /// The empty list.
+    Nil,
+    /// A non-empty list: its head and the rest of the list.
+    Cons,
     /// A literal, keyed by source text. Its signature is open (infinite).
     Lit(String),
 }
@@ -72,6 +77,17 @@ fn lower(pattern: &Pattern) -> Option<Pat> {
                 elems.push(lower(&elem)?);
             }
             Pat::Con(Ctor::Tuple, elems)
+        }
+        Pattern::List(list) => {
+            let mut tail = match list.rest() {
+                Some(rest) => lower(&rest)?,
+                None => Pat::Con(Ctor::Nil, Vec::new()),
+            };
+            let elems: Vec<Pattern> = list.elements().collect();
+            for elem in elems.iter().rev() {
+                tail = Pat::Con(Ctor::Cons, alloc::vec![lower(elem)?, tail]);
+            }
+            tail
         }
         Pattern::Constructor(ctor) => {
             let mut fields = Vec::new();
@@ -167,6 +183,7 @@ fn render_witness(witness: &Witness) -> String {
     match witness {
         Witness::Wild => String::from("_"),
         Witness::Con(Ctor::Lit(text), _) => text.clone(),
+        Witness::Con(Ctor::Nil | Ctor::Cons, _) => render_list(witness),
         Witness::Con(Ctor::Tuple, args) => {
             let inner: Vec<String> = args.iter().map(render_witness).collect();
             format!("({})", inner.join(", "))
@@ -177,6 +194,25 @@ fn render_witness(witness: &Witness) -> String {
             } else {
                 let inner: Vec<String> = args.iter().map(render_witness).collect();
                 format!("{name}({})", inner.join(", "))
+            }
+        }
+    }
+}
+
+/// Renders a `Nil`/`Cons` chain as a list pattern: `[a, b]`, or `[a, ..t]`
+/// when the chain ends in an unconstrained tail `t`.
+fn render_list(mut witness: &Witness) -> String {
+    let mut elems: Vec<String> = Vec::new();
+    loop {
+        match witness {
+            Witness::Con(Ctor::Cons, args) if args.len() == 2 => {
+                elems.push(render_witness(&args[0]));
+                witness = &args[1];
+            }
+            Witness::Con(Ctor::Nil, _) => return format!("[{}]", elems.join(", ")),
+            tail => {
+                elems.push(format!("..{}", render_witness(tail)));
+                return format!("[{}]", elems.join(", "));
             }
         }
     }
@@ -452,15 +488,18 @@ impl Checker {
     fn signature(&self, ty: &Type) -> Option<Vec<(Ctor, usize)>> {
         match self.subst.resolve(ty) {
             Type::TyTuple(elems) => Some(alloc::vec![(Ctor::Tuple, elems.len())]),
-            Type::TyCon(name, _) => {
-                let ctors = self.registry.adt_constructors(name.as_str())?;
-                Some(
+            Type::TyCon(name, _) => match self.registry.adt_constructors(name.as_str()) {
+                Some(ctors) => Some(
                     ctors
                         .iter()
                         .map(|ctor| (Ctor::Variant(ctor.clone()), self.ctor_arity(ctor.as_str())))
                         .collect(),
-                )
-            }
+                ),
+                None if name.as_str() == "List" => {
+                    Some(alloc::vec![(Ctor::Nil, 0), (Ctor::Cons, 2)])
+                }
+                None => None,
+            },
             _ => None,
         }
     }
@@ -474,17 +513,25 @@ impl Checker {
 
     /// The field types of `ctor` at column type `col_ty`, in order.
     ///
-    /// Tuples read their element types directly. A variant instantiates its
-    /// scheme and unifies the result with `col_ty`; because `col_ty` is
-    /// concrete here, that unification only binds the fresh instantiation
-    /// variables and cannot disturb the surrounding inference state.
+    /// Tuples read their element types directly, and a non-empty list its
+    /// element type and itself. A variant instantiates its scheme and unifies
+    /// the result with `col_ty`; because `col_ty` is concrete here, that
+    /// unification only binds the fresh instantiation variables and cannot
+    /// disturb the surrounding inference state.
     fn field_types(&mut self, ctor: &Ctor, col_ty: &Type, span: Span) -> Vec<Type> {
         match ctor {
             Ctor::Tuple => match self.subst.resolve(col_ty) {
                 Type::TyTuple(elems) => elems,
                 _ => Vec::new(),
             },
-            Ctor::Lit(_) => Vec::new(),
+            Ctor::Cons => match self.subst.resolve(col_ty) {
+                Type::TyCon(name, args) => match args.first() {
+                    Some(elem) => alloc::vec![elem.clone(), Type::TyCon(name, args)],
+                    None => Vec::new(),
+                },
+                _ => Vec::new(),
+            },
+            Ctor::Nil | Ctor::Lit(_) => Vec::new(),
             Ctor::Variant(name) => {
                 let Some(info) = self.registry.ctor(name.as_str()) else {
                     return Vec::new();

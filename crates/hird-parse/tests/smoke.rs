@@ -716,6 +716,23 @@ fn expr_match_tuple_pattern() {
 }
 
 #[test]
+fn expr_match_list_patterns() {
+    insta::assert_snapshot!(render_cst(
+        "fn f() = match l { [] -> 0, [a, (b, _)] -> a, [x, ..rest,] -> x }"
+    ));
+}
+
+#[test]
+fn list_pattern_rest_not_last_is_error() {
+    insta::assert_snapshot!(render_cst("fn f() = match l { [x, ..r, y] -> x }"));
+}
+
+#[test]
+fn list_pattern_rest_first_is_error() {
+    insta::assert_snapshot!(render_cst("fn f() = match l { [..r] -> 0 }"));
+}
+
+#[test]
 fn expr_match_nested_pattern() {
     insta::assert_snapshot!(render_cst("fn f() = match x { Foo(Bar(y), _) -> y }"));
 }

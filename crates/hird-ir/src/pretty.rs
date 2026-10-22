@@ -1023,6 +1023,20 @@ impl Printer {
                 }
                 self.push(")");
             }
+            IrPattern::List(list) => {
+                self.push("[");
+                for (i, elem) in list.elems.iter().enumerate() {
+                    if i > 0 {
+                        self.push(", ");
+                    }
+                    self.pattern(elem);
+                }
+                if let Some(rest) = &list.rest {
+                    self.push(", ..");
+                    self.pattern(rest);
+                }
+                self.push("]");
+            }
             IrPattern::Constructor(ctor) => {
                 self.push(&ctor.name);
                 if let [first, rest @ ..] = ctor.fields.as_slice() {

@@ -820,9 +820,42 @@ fn pattern_tuple() {
             Pattern::Literal(_) => "lit",
             Pattern::Constructor(_) => "ctor",
             Pattern::Tuple(_) => "tuple",
+            Pattern::List(_) => "list",
         })
         .collect();
     assert_eq!(kinds, ["bind", "wild", "lit"]);
+}
+
+#[test]
+fn pattern_list() {
+    let Pattern::List(empty) = arm_pattern("[]") else {
+        panic!("expected list pattern");
+    };
+    assert_eq!(empty.elements().count(), 0);
+    assert!(empty.rest().is_none());
+
+    let Pattern::List(fixed) = arm_pattern("[x, [y], 1]") else {
+        panic!("expected list pattern");
+    };
+    let elems: Vec<_> = fixed.elements().collect();
+    assert!(matches!(
+        elems[..],
+        [Pattern::Bind(_), Pattern::List(_), Pattern::Literal(_)]
+    ));
+    assert!(fixed.rest().is_none());
+
+    let Pattern::List(open) = arm_pattern("[x, _, ..rest]") else {
+        panic!("expected list pattern");
+    };
+    let elems: Vec<_> = open.elements().collect();
+    assert!(matches!(
+        elems[..],
+        [Pattern::Bind(_), Pattern::Wildcard(_)]
+    ));
+    let Some(Pattern::Bind(rest)) = open.rest() else {
+        panic!("expected a bound rest");
+    };
+    assert_eq!(rest.name(), Some("rest"));
 }
 
 #[test]
