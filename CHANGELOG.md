@@ -31,7 +31,10 @@ schedule and is not covered by these entries.
   otherwise) and a misplaced tail is P0008. It lowers to Erlang's
   `[X | Rest]`; the IR's `IrList` gains an optional `tail`. A
   supervisor's `children` list must still be written out in full
-  (C0046).
+  (C0046). The planner demo now carries its backlog as `List<Task>`
+  instead of its own `Backlog` type, so its `ReadRepo` audit record holds
+  a JSON array of tasks; a recording made before this change no longer
+  replays against it.
 
 ### Fixed
 

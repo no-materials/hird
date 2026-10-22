@@ -19,12 +19,8 @@ type TicketId = TicketId(String)
 // A pending work item discovered in the repository: priority, title, body.
 type Task = Task(Int, String, String)
 
-// A cons list of tasks (v0.1 has no list patterns, so the demo carries
-// its own).
-type Backlog = Backlog(Task, Backlog) | EmptyBacklog
-
 // What Tool<ReadRepo> reports: the branch name and the raw backlog.
-type RepoState = RepoState(String, Backlog)
+type RepoState = RepoState(String, List<Task>)
 
 type PlannerConfig = PlannerConfig(String)
 // Repositories planned and tickets filed since the planner took its post.
@@ -44,24 +40,24 @@ tool Log : LogArgs → ()
 // ── pure analysis ────────────────────────────────────────────────
 
 // The backlog restricted to actionable tasks (positive priority).
-fn actionable(backlog: Backlog) → Backlog =
+fn actionable(backlog: List<Task>) → List<Task> =
   match backlog {
-    EmptyBacklog → EmptyBacklog,
-    Backlog(Task(priority, title, body), rest) →
+    [] → [],
+    [Task(priority, title, body), ..rest] →
       if priority > 0
-        then Backlog(Task(priority, title, body), actionable(rest))
+        then [Task(priority, title, body), ..actionable(rest)]
         else actionable(rest),
   }
 
 // Repository state to the tickets worth filing.
-fn analyze(repo: RepoState) → Backlog =
+fn analyze(repo: RepoState) → List<Task> =
   let RepoState(_, backlog) = repo in actionable(backlog)
 
 // Files one ticket per task, logging each, and counts what it filed.
-fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
+fn file_tickets(backlog: List<Task>) → Int ! {Tool<CreateTicket>, Tool<Log>} =
   match backlog {
-    EmptyBacklog → 0,
-    Backlog(Task(_, title, body), rest) →
+    [] → 0,
+    [Task(_, title, body), ..rest] →
       let _ = create_ticket({ title: title, body: body }) in
       log({ level: "info", message: title });
       1 + file_tickets(rest),
@@ -116,10 +112,11 @@ supervisor PlannerSup {
 fn demo_read_repo(args: ReadRepoArgs) → RepoState =
   RepoState(
     "main",
-    Backlog(Task(2, "Fix the lexer TODO", "The lexer carries a stale TODO comment."),
-    Backlog(Task(0, "Tidy whitespace", "Cosmetic only; not worth a ticket."),
-    Backlog(Task(1, "Fuzz the parser", "The parser has no fuzz harness."),
-    EmptyBacklog))))
+    [
+      Task(2, "Fix the lexer TODO", "The lexer carries a stale TODO comment."),
+      Task(0, "Tidy whitespace", "Cosmetic only; not worth a ticket."),
+      Task(1, "Fuzz the parser", "The parser has no fuzz harness."),
+    ])
 
 // "Creates" a ticket by echoing its title back as the id; the audit
 // stream is the durable record.

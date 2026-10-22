@@ -206,7 +206,7 @@ fn demo_effect_graph_names_actor_supervisor_and_tools() {
     assert!(out.contains("supervisor PlannerSup"), "stdout: {out}");
     assert!(
         out.contains(
-            "fn file_tickets(backlog: Backlog) \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
+            "fn file_tickets(backlog: List<Task>) \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
         ),
         "stdout: {out}"
     );
@@ -270,10 +270,11 @@ fn harness_source() -> String {
         "\nfn mock_read_repo(args: { path: Path }) \u{2192} RepoState =\n\
          \x20 RepoState(\n\
          \x20   \"mock\",\n\
-         \x20   Backlog(Task(2, \"Mock: refit the keel\", \"From the mock repository.\"),\n\
-         \x20   Backlog(Task(0, \"Mock: skip me\", \"Not actionable.\"),\n\
-         \x20   Backlog(Task(1, \"Mock: caulk the hull\", \"From the mock repository.\"),\n\
-         \x20   EmptyBacklog))))\n\
+         \x20   [\n\
+         \x20     Task(2, \"Mock: refit the keel\", \"From the mock repository.\"),\n\
+         \x20     Task(0, \"Mock: skip me\", \"Not actionable.\"),\n\
+         \x20     Task(1, \"Mock: caulk the hull\", \"From the mock repository.\"),\n\
+         \x20   ])\n\
          \nfn mock_create_ticket(args: { title: String, body: String }) \u{2192} TicketId =\n\
          \x20 TicketId(\"TK-mock\")\n\
          \nfn mock_log(args: { level: String, message: String }) \u{2192} () = ()\n",

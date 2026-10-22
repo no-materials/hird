@@ -7,7 +7,7 @@
       "actors": [
         {
           "name": "Planner",
-          "line": 72,
+          "line": 68,
           "state": {
             "display": "{ repos: Int, tickets: Int }",
             "structure": {
@@ -238,7 +238,7 @@
       "supervisors": [
         {
           "name": "PlannerSup",
-          "line": 104,
+          "line": 100,
           "strategy": "one_for_one",
           "intensity": 5,
           "period": 60,
@@ -316,7 +316,7 @@
       "tools": [
         {
           "name": "ReadRepo",
-          "line": 40,
+          "line": 36,
           "params": [],
           "input": {
             "display": "{ path: Path }",
@@ -347,7 +347,7 @@
         },
         {
           "name": "CreateTicket",
-          "line": 41,
+          "line": 37,
           "params": [],
           "input": {
             "display": "{ body: String, title: String }",
@@ -383,7 +383,7 @@
         },
         {
           "name": "Log",
-          "line": 42,
+          "line": 38,
           "params": [],
           "input": {
             "display": "{ level: String, message: String }",
@@ -420,26 +420,38 @@
       "functions": [
         {
           "name": "actionable",
-          "line": 47,
+          "line": 43,
           "params": [
             {
               "name": "backlog",
               "type": {
-                "display": "Backlog",
+                "display": "List<Task>",
                 "structure": {
                   "kind": "Con",
-                  "name": "Backlog",
-                  "args": []
+                  "name": "List",
+                  "args": [
+                    {
+                      "kind": "Con",
+                      "name": "Task",
+                      "args": []
+                    }
+                  ]
                 }
               }
             }
           ],
           "result": {
-            "display": "Backlog",
+            "display": "List<Task>",
             "structure": {
               "kind": "Con",
-              "name": "Backlog",
-              "args": []
+              "name": "List",
+              "args": [
+                {
+                  "kind": "Con",
+                  "name": "Task",
+                  "args": []
+                }
+              ]
             }
           },
           "effects": {
@@ -450,7 +462,7 @@
         },
         {
           "name": "analyze",
-          "line": 57,
+          "line": 53,
           "params": [
             {
               "name": "repo",
@@ -465,11 +477,17 @@
             }
           ],
           "result": {
-            "display": "Backlog",
+            "display": "List<Task>",
             "structure": {
               "kind": "Con",
-              "name": "Backlog",
-              "args": []
+              "name": "List",
+              "args": [
+                {
+                  "kind": "Con",
+                  "name": "Task",
+                  "args": []
+                }
+              ]
             }
           },
           "effects": {
@@ -480,16 +498,22 @@
         },
         {
           "name": "file_tickets",
-          "line": 61,
+          "line": 57,
           "params": [
             {
               "name": "backlog",
               "type": {
-                "display": "Backlog",
+                "display": "List<Task>",
                 "structure": {
                   "kind": "Con",
-                  "name": "Backlog",
-                  "args": []
+                  "name": "List",
+                  "args": [
+                    {
+                      "kind": "Con",
+                      "name": "Task",
+                      "args": []
+                    }
+                  ]
                 }
               }
             }
@@ -539,7 +563,7 @@
         },
         {
           "name": "default_config",
-          "line": 100,
+          "line": 96,
           "params": [],
           "result": {
             "display": "PlannerConfig",
@@ -557,7 +581,7 @@
         },
         {
           "name": "demo_read_repo",
-          "line": 116,
+          "line": 112,
           "params": [
             {
               "name": "args",
@@ -592,7 +616,7 @@
         },
         {
           "name": "demo_create_ticket",
-          "line": 126,
+          "line": 123,
           "params": [
             {
               "name": "args",
@@ -632,7 +656,7 @@
         },
         {
           "name": "demo_log",
-          "line": 129,
+          "line": 126,
           "params": [
             {
               "name": "args",
@@ -671,7 +695,7 @@
         },
         {
           "name": "run_demo",
-          "line": 136,
+          "line": 133,
           "params": [],
           "result": {
             "display": "()",
@@ -722,7 +746,7 @@
         },
         {
           "name": "main",
-          "line": 146,
+          "line": 143,
           "params": [],
           "result": {
             "display": "()",

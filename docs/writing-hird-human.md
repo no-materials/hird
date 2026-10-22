@@ -186,7 +186,7 @@ omitted row means `! {}`. The row lists what the function's own
 process does — call tools, send messages, spawn processes:
 
 ```
-fn file_tickets(backlog: Backlog) → Int ! {Tool<CreateTicket>, Tool<Log>} =
+fn file_tickets(backlog: List<Task>) → Int ! {Tool<CreateTicket>, Tool<Log>} =
   ...
 ```
 

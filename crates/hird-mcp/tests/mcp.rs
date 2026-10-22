@@ -291,8 +291,8 @@ fn list_definitions_outlines_the_module_in_source_order() {
         "Task : Int \u{2192} String \u{2192} String \u{2192} Task"
     );
     assert_eq!(
-        entry("EmptyBacklog", "constructor")["signature"],
-        "EmptyBacklog : Backlog"
+        entry("Shutdown", "message_constructor")["signature"],
+        "Shutdown : PlannerMsg"
     );
     assert_eq!(
         entry("PlannerState", "type alias")["signature"],
@@ -308,7 +308,7 @@ fn list_definitions_outlines_the_module_in_source_order() {
     );
     assert_eq!(
         entry("file_tickets", "function")["signature"],
-        "fn file_tickets : Backlog \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
+        "fn file_tickets : List<Task> \u{2192} Int ! {Tool<CreateTicket>, Tool<Log>}"
     );
     assert!(
         entry("Planner", "actor")["signature"]
@@ -440,7 +440,7 @@ fn lookup_definition_reports_location_type_doc_and_kind() {
         json!({ "file": file, "name": "analyze" }),
     );
     assert_eq!(result["kind"], "function");
-    assert_eq!(result["type"], "RepoState \u{2192} Backlog");
+    assert_eq!(result["type"], "RepoState \u{2192} List<Task>");
     assert_eq!(
         result["doc"],
         "Repository state to the tickets worth filing."
