@@ -4,7 +4,7 @@ expression: "emit(program(\"Lists\"), \"Lists\")"
 ---
 %% Generated from src/lists.hird by the Hirð compiler. Do not edit.
 -module(hird_lists).
--export([count/1, firsts/1, third/1]).
+-export([count/1, firsts/1, third/1, doubled/1, prefixed/2]).
 
 %% src/lists.hird:1
 count(L) ->
@@ -34,3 +34,21 @@ third(L) ->
         _ ->
             <<""/utf8>>
     end.
+
+%% src/lists.hird:8
+doubled(L) ->
+    case L of
+        [] ->
+            [];
+        [X | Rest] ->
+            [X * 2 | doubled(Rest)]
+    end.
+
+%% src/lists.hird:9
+prefixed(L, B) ->
+    [0, 1 | case B of
+        true ->
+            L;
+        false ->
+            []
+    end].

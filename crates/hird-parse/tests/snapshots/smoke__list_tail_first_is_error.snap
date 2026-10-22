@@ -1,0 +1,21 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = [..t]\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    LIST_LIT
+      WHITESPACE " "
+      L_BRACKET "["
+      DOT_DOT ".."
+      IDENT "t"
+      R_BRACKET "]"
+---
+P0002 10..12: a list literal names at least one element before `..tail`

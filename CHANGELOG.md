@@ -23,6 +23,16 @@ schedule and is not covered by these entries.
   C0057, and a misplaced `..rest` is P0008. Patterns lower to Erlang
   list patterns (`[X | Rest]`). The IR gains `IrListPat`.
 
+- **List literals with a tail.** A list literal could only list fixed
+  elements, so no function could return a list it computed: `map`,
+  `filter` and the like could not be written. A literal may now end in
+  `..tail` to put its elements in front of an existing list,
+  `[x, ..rest]`, where `tail` has the literal's list type (C0001
+  otherwise) and a misplaced tail is P0008. It lowers to Erlang's
+  `[X | Rest]`; the IR's `IrList` gains an optional `tail`. A
+  supervisor's `children` list must still be written out in full
+  (C0046).
+
 ### Fixed
 
 - **Generic tools and imported types crashed the audit sink.** Codegen

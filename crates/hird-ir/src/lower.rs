@@ -406,6 +406,7 @@ impl Lowerer<'_> {
             Expr::Tuple(tuple) => self.lower_tuple(tuple),
             Expr::List(list) => IrExpr::List(IrList {
                 elems: list.elements().map(|e| self.lower_expr(&e)).collect(),
+                tail: list.tail().map(|e| Box::new(self.lower_expr(&e))),
                 ty: self.expr_type(expr),
             }),
             Expr::Paren(paren) => match paren.inner() {

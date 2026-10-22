@@ -729,6 +729,10 @@ pub struct IrTuple {
 pub struct IrList {
     /// The elements, in order.
     pub elems: Vec<IrExpr>,
+    /// The list the elements are prepended to (`[a, ..tail]`); `None` for
+    /// a list of exactly `elems`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail: Option<Box<IrExpr>>,
     /// The list's type.
     #[serde(rename = "type", serialize_with = "serialize_type")]
     pub ty: Type,

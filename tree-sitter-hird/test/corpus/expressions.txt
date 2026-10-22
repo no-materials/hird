@@ -198,6 +198,33 @@ fn bump(st: State) → State = { beats: st.beats + 1, ..st }
       (record_base base: (identifier)))))
 
 ==================
+List with a tail
+==================
+
+fn f(x: Int, xs: List<Int>) → List<Int> = [1, x, ..xs,]
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter
+        name: (identifier)
+        type: (generic_type
+          name: (type_identifier)
+          arguments: (type_arguments (type_identifier)))))
+    return_type: (return_type
+      (generic_type
+        name: (type_identifier)
+        arguments: (type_arguments (type_identifier))))
+    body: (list
+      (integer)
+      (identifier)
+      (list_tail tail: (identifier)))))
+
+==================
 Application binds tighter than infix, field access tighter still
 ==================
 

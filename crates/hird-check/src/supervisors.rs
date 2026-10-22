@@ -246,16 +246,20 @@ impl Checker {
         let Some(value) = field.value() else {
             return derived;
         };
-        let Expr::List(list) = &value else {
-            self.error(
-                CheckCode::C0046,
-                expr_span(&value, self.source_id),
-                format!(
-                    "supervisor `{sup}`'s `children` must be a list of child specs, \
-                     e.g. `[ {{ id: c, actor: A, start_args: e, restart: permanent }} ]`"
-                ),
-            );
-            return derived;
+        // A `..tail` would add children the declaration does not show.
+        let list = match &value {
+            Expr::List(list) if list.tail().is_none() => list,
+            _ => {
+                self.error(
+                    CheckCode::C0046,
+                    expr_span(&value, self.source_id),
+                    format!(
+                        "supervisor `{sup}`'s `children` must be a list of child specs, \
+                         e.g. `[ {{ id: c, actor: A, start_args: e, restart: permanent }} ]`"
+                    ),
+                );
+                return derived;
+            }
         };
         let mut ids: BTreeMap<String, Span> = BTreeMap::new();
         for elem in list.elements() {

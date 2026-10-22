@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn positives(xs: List<Int>) -> List<Int> = match xs {\\n\\\n           [] -> [],\\n\\\n           [x, ..rest] -> if x > 0 then [x, ..positives(rest)] else positives(rest),\\n\\\n         }\\n\\\n         fn map(f: a -> b ! {r}, xs: List<a>) -> List<b> ! {r} = match xs {\\n\\\n           [] -> [],\\n\\\n           [x, ..rest] -> [f(x), ..map(f, rest)],\\n\\\n         }\\n\\\n         fn pair(x: a, xs: List<a>) = [x, x, ..xs]\")"
+---
+map : ∀a b r. (a → b ! {r}) → List<a> → List<b> ! {r}
+pair : ∀a. a → List<a> → List<a>
+positives : List<Int> → List<Int>

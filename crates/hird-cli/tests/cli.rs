@@ -19,19 +19,21 @@ const PING: &str = "tool Ping : { msg: String } -> String\n\
        handle { Tool<Ping> -> fake_ping } in\n\
          match ping({ msg: \"hi\" }) { _ -> () }";
 
-/// A tool returning a list, taken apart by list patterns; each `Report`
-/// call records a value computed from it.
+/// A tool returning a list, taken apart by list patterns and rebuilt with a
+/// `..tail`; each `Report` call records a value computed from it.
 const LISTS: &str = "tool Tasks : { n: Int } -> List<Int>\n\
      tool Report : { total: Int } -> ()\n\
      fn sum(l: List<Int>) -> Int = match l { [] -> 0, [x, ..rest] -> x + sum(rest) }\n\
      fn second(l: List<Int>) -> Int = match l { [_, y, .._] -> y, _ -> 0 }\n\
+     fn doubled(l: List<Int>) -> List<Int> = match l { [] -> [], [x, ..rest] -> [x * 2, ..doubled(rest)] }\n\
      fn fake_tasks(args: { n: Int }) -> List<Int> = [args.n, 20, 300]\n\
      fn fake_report(args: { total: Int }) -> () = ()\n\
      fn main() ! {} =\n\
        handle { Tool<Tasks> -> fake_tasks, Tool<Report> -> fake_report } in\n\
          let l = tasks({ n: 1 }) in\n\
          report({ total: sum(l) });\n\
-         report({ total: second(l) })";
+         report({ total: second(l) });\n\
+         report({ total: sum(doubled([5, ..l])) })";
 
 /// An actor and supervisor module with a tool, for the effect graph.
 const PLANNER: &str = "type Path = Path(String)\n\
@@ -386,6 +388,7 @@ fn run_takes_a_tool_result_list_apart() {
     );
     assert!(out.contains("\"args\":{\"total\":321}"), "stdout: {out}");
     assert!(out.contains("\"args\":{\"total\":20}"), "stdout: {out}");
+    assert!(out.contains("\"args\":{\"total\":652}"), "stdout: {out}");
 }
 
 #[test]

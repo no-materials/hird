@@ -442,6 +442,9 @@ fn collect_expr_effects(expr: &IrExpr, out: &mut BTreeMap<String, usize>) {
             for elem in &list.elems {
                 collect_expr_effects(elem, out);
             }
+            if let Some(tail) = &list.tail {
+                collect_expr_effects(tail, out);
+            }
         }
         IrExpr::Record(record) => {
             for field in &record.fields {
@@ -812,6 +815,10 @@ impl Printer {
             IrExpr::List(list) => {
                 self.push("[");
                 self.comma_separated(&list.elems);
+                if let Some(tail) = &list.tail {
+                    self.push(", ..");
+                    self.expr(tail, PREC_LOW);
+                }
                 self.push("]");
             }
             IrExpr::Record(record) => {

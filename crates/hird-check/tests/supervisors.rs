@@ -211,6 +211,24 @@ fn duplicate_child_id() {
     )));
 }
 
+/// A `..tail` on `children` would add children the declaration does not
+/// show; the children list must be written out.
+#[test]
+fn children_with_tail_rejected() {
+    insta::assert_snapshot!(check_str(&with_prelude(
+        "fn more() = []
+supervisor Sup {
+  strategy: one_for_one,
+  intensity: 5,
+  period: 60,
+  children: [
+    { id: c, actor: Planner, start_args: planner_config(), restart: permanent },
+    ..more()
+  ]
+}"
+    )));
+}
+
 /// An invalid `restart` disposition is rejected.
 #[test]
 fn invalid_restart() {

@@ -46,7 +46,7 @@ pub enum DiagnosticCode {
     /// form.
     P0007,
     /// A `..` entry that is not the single, last entry: a record literal's
-    /// `..base`, or a list pattern's `..rest`.
+    /// `..base`, a list literal's `..tail`, or a list pattern's `..rest`.
     P0008,
 }
 

@@ -1000,7 +1000,13 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|e| self.expr(e, env, cx, indent, Ctx::Expr))
                     .collect();
-                format!("[{}]", elems.join(", "))
+                match &list.tail {
+                    Some(tail) => {
+                        let tail = self.expr(tail, env, cx, indent, Ctx::Expr);
+                        format!("[{} | {tail}]", elems.join(", "))
+                    }
+                    None => format!("[{}]", elems.join(", ")),
+                }
             }
             IrExpr::Record(record) => {
                 let fields: Vec<String> = record

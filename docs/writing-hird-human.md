@@ -154,7 +154,17 @@ fn length(l: List<a>) → Int =
 ```
 
 A list match is checked for exhaustiveness like any other; `[x]` alone
-reports the missing `[]` and `[_, _, .._]`, one at a time.
+reports the missing `[]` and `[_, _, .._]`, one at a time. A literal
+ending in `..tail` builds a list in front of an existing one, which is
+how a function returns a list it computes:
+
+```
+fn doubled(l: List<Int>) → List<Int> =
+  match l {
+    [] → [],
+    [x, ..rest] → [x * 2, ..doubled(rest)],
+  }
+```
 
 ### Modules
 

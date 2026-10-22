@@ -1,0 +1,27 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"fn f() = [a, ..t, b]\")"
+---
+SOURCE_FILE
+  FN_DECL
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "f"
+    L_PAREN "("
+    R_PAREN ")"
+    WHITESPACE " "
+    EQ "="
+    LIST_LIT
+      WHITESPACE " "
+      L_BRACKET "["
+      IDENT "a"
+      COMMA ","
+      WHITESPACE " "
+      DOT_DOT ".."
+      IDENT "t"
+      COMMA ","
+      WHITESPACE " "
+      IDENT "b"
+      R_BRACKET "]"
+---
+P0008 18..19: `..tail` must be the last entry of a list literal

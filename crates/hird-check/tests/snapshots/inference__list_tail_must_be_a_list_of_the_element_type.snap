@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"fn a(xs: List<String>) -> List<Int> = [1, ..xs]\\n\\\n         fn b() = [1, ..2]\")"
+---
+a : List<String> → List<Int>
+b : ∀a. a
+error[C0001] 44..46: type mismatch: expected `Int`, got `String`
+error[C0001] 63..64: type mismatch: expected `List<Int>`, got `Int`

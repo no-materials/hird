@@ -292,7 +292,9 @@ unit_lit     ::= '(' ')'
 
 tuple_lit    ::= '(' expr ',' expr ( ',' expr )* ','? ')'
 
-list_lit     ::= '[' ( expr ( ',' expr )* ','? )? ']'
+list_lit     ::= '[' ( expr ( ',' expr )* ( ',' list_tail )? ','? )? ']'
+
+list_tail    ::= '..' expr
 
 record_lit   ::= '{' ( record_field ( ',' record_field )* )? ( ',' record_base )? ','? '}'
 
@@ -305,6 +307,10 @@ field_name   ::= IDENT | keyword
 
 A `field_name` may be a keyword spelling (e.g. `actor: Planner` in a supervisor
 child spec); the `name :` shape leaves no ambiguity.
+
+A `..tail` entry puts a list literal's elements in front of the list
+`tail`, of the same element type. It follows at least one element (P0002
+otherwise) and is written once, last (P0008).
 
 A `..base` tail makes the literal an update: the listed fields come from
 the literal and every other field from `base`, whose record type the result

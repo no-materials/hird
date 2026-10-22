@@ -146,7 +146,13 @@ impl Checker {
                     let ty = self.infer_expr(&elem)?;
                     self.unify_at(&elem_ty, &ty, span)?;
                 }
-                Ok(Type::list(elem_ty))
+                let list_ty = Type::list(elem_ty);
+                if let Some(tail) = list.tail() {
+                    let span = expr_span(&tail, self.source_id);
+                    let ty = self.infer_expr(&tail)?;
+                    self.unify_at(&list_ty, &ty, span)?;
+                }
+                Ok(list_ty)
             }
             Expr::Paren(paren) => {
                 let Some(inner) = paren.inner() else {

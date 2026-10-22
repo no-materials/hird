@@ -133,7 +133,8 @@ Every expression node carries its resolved type.
 - `IrVar { name, type }` — a variable, function, operator, or qualified-name
   (`Mod.member`) reference. Its type is the instantiation at this use site.
 - `IrTuple { elems, type }` — a tuple; an empty tuple is unit (`()`).
-- `IrList { elems, type }`.
+- `IrList { elems, tail?, type }` — `tail` is present for `[a, ..tail]`, the
+  list the elements are put in front of.
 - `IrRecord { fields, base?, type }`, where each `IrRecordField { label,
   value }`; `base` is present for an update (`{ f: v, ..base }`), whose type
   is the base's.

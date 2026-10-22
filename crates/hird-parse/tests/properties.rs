@@ -87,6 +87,7 @@ enum Expr {
     Paren(Box<Self>),
     Tuple(Vec<Self>),
     List(Vec<Self>),
+    ListTail(Vec<Self>, Box<Self>),
     Record(Vec<(&'static str, Self)>),
     Lambda(Vec<&'static str>, Box<Self>),
     Let(&'static str, Option<Ty>, Box<Self>, Box<Self>),
@@ -206,6 +207,13 @@ fn render_expr(e: &Expr, sp: Spelling) -> String {
         Expr::Paren(e) => format!("({})", render_expr(e, sp)),
         Expr::Tuple(es) => format!("({})", join_exprs(es, sp, ", ")),
         Expr::List(es) => format!("[{}]", join_exprs(es, sp, ", ")),
+        Expr::ListTail(es, tail) => {
+            format!(
+                "[{}, ..{}]",
+                join_exprs(es, sp, ", "),
+                render_expr(tail, sp)
+            )
+        }
         Expr::Record(fields) if fields.is_empty() => "{}".to_string(),
         Expr::Record(fields) => {
             let body = fields
@@ -450,6 +458,11 @@ fn expr() -> BoxedStrategy<Expr> {
             inner.clone().prop_map(|e| Expr::Paren(Box::new(e))),
             proptest::collection::vec(inner.clone(), 2..4).prop_map(Expr::Tuple),
             proptest::collection::vec(inner.clone(), 0..4).prop_map(Expr::List),
+            (
+                proptest::collection::vec(inner.clone(), 1..3),
+                inner.clone()
+            )
+                .prop_map(|(es, tail)| Expr::ListTail(es, Box::new(tail))),
             proptest::collection::vec((snake(), inner.clone()), 0..3).prop_map(Expr::Record),
             (proptest::collection::vec(snake(), 1..3), inner.clone())
                 .prop_map(|(ps, b)| Expr::Lambda(ps, Box::new(b))),

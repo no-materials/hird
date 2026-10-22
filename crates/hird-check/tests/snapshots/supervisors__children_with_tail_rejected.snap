@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/supervisors.rs
+expression: "check_str(&with_prelude(\"fn more() = []\nsupervisor Sup {\n  strategy: one_for_one,\n  intensity: 5,\n  period: 60,\n  children: [\n    { id: c, actor: Planner, start_args: planner_config(), restart: permanent },\n    ..more()\n  ]\n}\"))"
+---
+error[C0046] 1012..1112: supervisor `Sup`'s `children` must be a list of child specs, e.g. `[ { id: c, actor: A, start_args: e, restart: permanent } ]`
+supervisor Sup ! {}

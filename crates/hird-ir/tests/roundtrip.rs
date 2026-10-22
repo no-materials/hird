@@ -367,6 +367,7 @@ fn canon_expr(expr: &IrExpr, map: &mut VarMap) -> IrExpr {
         }),
         IrExpr::List(list) => IrExpr::List(IrList {
             elems: list.elems.iter().map(|e| canon_expr(e, map)).collect(),
+            tail: list.tail.as_ref().map(|t| Box::new(canon_expr(t, map))),
             ty: canon_type(&list.ty, map),
         }),
         IrExpr::Record(record) => IrExpr::Record(IrRecord {
@@ -606,6 +607,14 @@ fn tuple_pattern() {
 fn list_patterns_round_trip() {
     assert_roundtrips(
         "fn count(l: List<Int>) -> Int = match l { [] -> 0, [x] -> x, [_, (y), ..r] -> y, }",
+    );
+}
+
+#[test]
+fn list_tail_round_trips() {
+    assert_roundtrips(
+        "fn evens(xs: List<Int>) -> List<Int> = match xs { [] -> [], [x, ..r] -> [x, x + 1, ..evens(r)], }\n\
+         fn pre(xs: List<Int>) -> List<Int> = [0, ..if True then xs else []]",
     );
 }
 

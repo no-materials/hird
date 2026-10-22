@@ -132,6 +132,24 @@ field the base lacks is an error (C0010), the base must be a known record
 
 ---
 
+## Lists
+
+```
+fn positives(xs: List<Int>) → List<Int> =
+  match xs {
+    [] → [],
+    [x, ..rest] → if x > 0 then [x, ..positives(rest)] else positives(rest),
+  }
+```
+
+`List<a>` is built in: `[1, 2, 3]` is a literal, and a literal ending in
+`..tail` puts its elements in front of the list `tail`, which has the same
+element type (`[x, ..xs]`). One tail, written last (P0008), after at least
+one element. Lists are taken apart with list patterns (below) and lower to
+Erlang lists.
+
+---
+
 ## Pattern Matching
 
 ```

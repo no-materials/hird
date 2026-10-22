@@ -614,6 +614,29 @@ fn list_pattern_element_type_mismatch() {
 }
 
 #[test]
+fn list_tail_builds_lists() {
+    insta::assert_snapshot!(check_str(
+        "fn positives(xs: List<Int>) -> List<Int> = match xs {\n\
+           [] -> [],\n\
+           [x, ..rest] -> if x > 0 then [x, ..positives(rest)] else positives(rest),\n\
+         }\n\
+         fn map(f: a -> b ! {r}, xs: List<a>) -> List<b> ! {r} = match xs {\n\
+           [] -> [],\n\
+           [x, ..rest] -> [f(x), ..map(f, rest)],\n\
+         }\n\
+         fn pair(x: a, xs: List<a>) = [x, x, ..xs]"
+    ));
+}
+
+#[test]
+fn list_tail_must_be_a_list_of_the_element_type() {
+    insta::assert_snapshot!(check_str(
+        "fn a(xs: List<String>) -> List<Int> = [1, ..xs]\n\
+         fn b() = [1, ..2]"
+    ));
+}
+
+#[test]
 fn empty_match_is_non_exhaustive() {
     insta::assert_snapshot!(check_str(
         "type Option<a> = Some(a) | None\n\

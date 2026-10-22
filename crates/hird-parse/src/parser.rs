@@ -1558,21 +1558,47 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         }
     }
 
-    /// `[a, b, ...]` — a list literal.
+    /// `[a, b, ...]` — a list literal; a `..tail` entry ends it with an
+    /// existing list.
     fn parse_list_lit(&mut self) {
         self.start_node(SyntaxKind::LIST_LIT);
         self.expect(SyntaxKind::L_BRACKET);
+        let mut tail_seen = false;
         if !self.at(SyntaxKind::R_BRACKET) {
-            self.parse_expr();
+            if self.at(SyntaxKind::DOT_DOT) {
+                self.emit(
+                    DiagnosticCode::P0002,
+                    "a list literal names at least one element before `..tail`",
+                    Some("write the tail list itself"),
+                );
+            }
+            self.parse_list_entry(&mut tail_seen);
             while self.eat(SyntaxKind::COMMA) {
                 if self.at(SyntaxKind::R_BRACKET) {
                     break;
                 }
-                self.parse_expr();
+                self.parse_list_entry(&mut tail_seen);
             }
         }
         self.expect(SyntaxKind::R_BRACKET);
         self.finish_node();
+    }
+
+    /// One list-literal entry: an element or the `..tail` list. Anything
+    /// after a tail is reported and still parsed, so the literal recovers as
+    /// one node.
+    fn parse_list_entry(&mut self, tail_seen: &mut bool) {
+        if *tail_seen {
+            self.emit(
+                DiagnosticCode::P0008,
+                "`..tail` must be the last entry of a list literal",
+                Some("a list literal takes at most one tail, written after every element"),
+            );
+        }
+        if self.eat(SyntaxKind::DOT_DOT) {
+            *tail_seen = true;
+        }
+        self.parse_expr();
     }
 
     /// `{` always begins a record literal here; there is no block-expression

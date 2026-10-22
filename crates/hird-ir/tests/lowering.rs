@@ -463,6 +463,26 @@ fn list_pattern_json_carries_rest_only_when_written() {
 }
 
 #[test]
+fn list_json_carries_tail_only_when_written() {
+    let module = lower(
+        "fn a(xs: List<Int>) -> List<Int> = [1, ..xs]\n\
+         fn b() -> List<Int> = [1]",
+        "Main",
+    );
+    let json = |name: &str| {
+        serde_json::to_string(&fn_named(&module, name).body).expect("serialization succeeds")
+    };
+    assert_eq!(
+        json("a"),
+        r#"{"kind":"List","elems":[{"kind":"Literal","value":{"Int":"1"},"type":"Int"}],"tail":{"kind":"Var","name":"xs","type":"List<Int>"},"type":"List<Int>"}"#
+    );
+    assert_eq!(
+        json("b"),
+        r#"{"kind":"List","elems":[{"kind":"Literal","value":{"Int":"1"},"type":"Int"}],"type":"List<Int>"}"#
+    );
+}
+
+#[test]
 fn json_pretty_snapshot() {
     let module = lower(
         "type Option<a> = Some(a) | None\n\

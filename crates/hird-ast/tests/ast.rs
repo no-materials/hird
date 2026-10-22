@@ -464,6 +464,13 @@ fn tuple_list_paren() {
         panic!("expected list");
     };
     assert_eq!(l.elements().count(), 2);
+    assert!(l.tail().is_none());
+
+    let Expr::List(l) = body("[1, 2, ..rest]") else {
+        panic!("expected list");
+    };
+    assert_eq!(l.elements().count(), 2);
+    assert!(matches!(l.tail(), Some(Expr::Name(n)) if n.text() == "rest"));
 
     let Expr::Paren(p) = body("(x)") else {
         panic!("expected paren");

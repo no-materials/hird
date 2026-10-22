@@ -61,14 +61,17 @@ const GENERIC: &str = "tool Echo<t> : { v: t } -> t\n\
      fn as_value() -> ({ v: List<Int> }) -> List<Int> ! {Tool<Echo>} = echo";
 
 /// List patterns: empty, fixed-length, and with a rest, nested in a tuple
-/// and binding only some of their variables.
+/// and binding only some of their variables; and list literals ending in a
+/// `..tail`, over a call and over an `if`.
 const LISTS: &str = "fn count(l: List<a>) -> Int = match l { [] -> 0, [_, ..rest] -> 1 + count(rest) }\n\
      fn firsts(l: List<(Int, Int)>) -> Int = match l {\n\
        [(a, _), (b, _), .._] -> a + b,\n\
        [(a, _)] -> a,\n\
        [] -> 0,\n\
      }\n\
-     fn third(l: List<String>) -> String = match l { [_, _, s, .._] -> s, _ -> \"\" }";
+     fn third(l: List<String>) -> String = match l { [_, _, s, .._] -> s, _ -> \"\" }\n\
+     fn doubled(l: List<Int>) -> List<Int> = match l { [] -> [], [x, ..rest] -> [x * 2, ..doubled(rest)] }\n\
+     fn prefixed(l: List<Int>, b: Bool) -> List<Int> = [0, 1, ..if b then l else []]";
 
 /// Record update: a map update over a variable base and over a computed
 /// base, which needs parentheses in Erlang.
@@ -468,7 +471,7 @@ fn snapshot_record_update_is_map_update() {
 }
 
 #[test]
-fn snapshot_list_patterns() {
+fn snapshot_list_patterns_and_tails() {
     insta::assert_snapshot!(emit(program("Lists"), "Lists"));
 }
 

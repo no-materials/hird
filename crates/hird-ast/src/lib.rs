@@ -1207,14 +1207,23 @@ impl TupleLit {
 }
 
 ast_node! {
-    /// A list literal (`[a, b, c]`).
+    /// A list literal (`[a, b, c]`, `[a, ..tail]`).
     ListLit => LIST_LIT
 }
 
 impl ListLit {
-    /// The list elements, in order.
+    /// The elements before any `..tail`, in order.
     pub fn elements(&self) -> impl Iterator<Item = Expr> + '_ {
-        exprs(&self.0)
+        self.0
+            .children_with_tokens()
+            .take_while(|e| element_kind(*e) != SyntaxKind::DOT_DOT)
+            .filter_map(Expr::cast_element)
+    }
+
+    /// The list the elements are prepended to (after `..`), if any.
+    #[must_use]
+    pub fn tail(&self) -> Option<Expr> {
+        expr_after(&self.0, SyntaxKind::DOT_DOT)
     }
 }
 

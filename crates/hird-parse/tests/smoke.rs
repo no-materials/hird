@@ -645,6 +645,21 @@ fn expr_list() {
 }
 
 #[test]
+fn expr_list_with_tail() {
+    insta::assert_snapshot!(render_cst("fn f() = [a, g(b), ..rest(c),]"));
+}
+
+#[test]
+fn list_tail_not_last_is_error() {
+    insta::assert_snapshot!(render_cst("fn f() = [a, ..t, b]"));
+}
+
+#[test]
+fn list_tail_first_is_error() {
+    insta::assert_snapshot!(render_cst("fn f() = [..t]"));
+}
+
+#[test]
 fn expr_list_empty() {
     insta::assert_snapshot!(render_cst("fn f() = []"));
 }

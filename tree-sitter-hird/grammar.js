@@ -444,7 +444,12 @@ module.exports = grammar({
 
     tuple: ($) => seq('(', $._expression, repeat1(seq(',', $._expression)), optional(','), ')'),
 
-    list: ($) => seq('[', optional(commaList($._expression)), ']'),
+    // A `..tail` entry prepends the elements to an existing list; the
+    // compiler, not the grammar, requires it to be single, last, and after an
+    // element.
+    list: ($) => seq('[', optional(commaList(choice($._expression, $.list_tail))), ']'),
+
+    list_tail: ($) => seq('..', field('tail', $._expression)),
 
     // A `..base` entry makes the literal an update; the compiler, not the
     // grammar, requires it to be single and last.

@@ -1631,6 +1631,9 @@ fn expr_refs(expr: &IrExpr, out: &mut BTreeSet<String>) {
             for elem in &e.elems {
                 expr_refs(elem, out);
             }
+            if let Some(tail) = &e.tail {
+                expr_refs(tail, out);
+            }
         }
         IrExpr::Record(e) => {
             for field in &e.fields {
