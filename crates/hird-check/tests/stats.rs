@@ -77,6 +77,66 @@ fn counters_are_deterministic() {
     }
 }
 
+/// A match on a `width`-wide tuple of `Bool`s: one all-`True` row, then `_`.
+fn tuple_match(width: usize) -> String {
+    let params: Vec<String> = (1..=width).map(|i| format!("a{i}: Bool")).collect();
+    let args: Vec<String> = (1..=width).map(|i| format!("a{i}")).collect();
+    format!(
+        "fn f({}) → Int = match ({}) {{ ({}) → 1, _ → 0 }}",
+        params.join(", "),
+        args.join(", "),
+        vec!["True"; width].join(", ")
+    )
+}
+
+/// A decision table: ten rows over a `width`-wide tuple of a ten-constructor
+/// enum, each column a rotation of the constructors, then `_`.
+fn decision_table(width: usize) -> String {
+    let params: Vec<String> = (1..=width).map(|i| format!("a{i}: Level")).collect();
+    let args: Vec<String> = (1..=width).map(|i| format!("a{i}")).collect();
+    let rows: Vec<String> = (0..10)
+        .map(|row| {
+            let cells: Vec<String> = (0..width)
+                .map(|col| format!("L{}", (row + col) % 10 + 1))
+                .collect();
+            format!("({}) → {row}", cells.join(", "))
+        })
+        .collect();
+    format!(
+        "type Level = L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10\n\
+         fn f({}) → Int = match ({}) {{ {}, _ → 0 }}",
+        params.join(", "),
+        args.join(", "),
+        rows.join(", ")
+    )
+}
+
+#[test]
+fn exhaustiveness_work_is_linear_in_tuple_width() {
+    for (shape, small, large) in [
+        (
+            "tuple-match",
+            check(&tuple_match(6)),
+            check(&tuple_match(12)),
+        ),
+        (
+            "decision-table",
+            check(&decision_table(2)),
+            check(&decision_table(4)),
+        ),
+    ] {
+        let (small, large) = (small.stats, large.stats);
+        assert!(
+            large.exhaustiveness_rows <= 2 * small.exhaustiveness_rows,
+            "{shape}: {small:?} vs {large:?}"
+        );
+        assert!(
+            large.exhaustiveness_witnesses <= 2 * small.exhaustiveness_witnesses,
+            "{shape}: {small:?} vs {large:?}"
+        );
+    }
+}
+
 #[test]
 fn program_stats_sum_the_modules() {
     let program = check_program(&[

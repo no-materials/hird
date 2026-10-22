@@ -1,0 +1,14 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(\"type C = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8\\n\\\n         fn f(c: C) -> Int = match c {\\n\\\n           C1 -> 1,\\n\\\n         }\")"
+---
+C1 : C
+C2 : C
+C3 : C
+C4 : C
+C5 : C
+C6 : C
+C7 : C
+C8 : C
+f : C → Int
+error[C0015] 66..87: non-exhaustive match: missing case(s): `C2`, `C3`, `C4`, `C5`, `C6`, `C7`, and more

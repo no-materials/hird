@@ -542,6 +542,25 @@ fn tuple_components_exhaustive() {
 }
 
 #[test]
+fn tuple_witness_leaves_unconstrained_columns_wild() {
+    insta::assert_snapshot!(check_str(
+        "fn f(p: (Bool, Bool, Bool, Bool)) -> Int = match p {\n\
+           (True, True, True, True) -> 1,\n\
+         }"
+    ));
+}
+
+#[test]
+fn missing_cases_past_six_are_elided() {
+    insta::assert_snapshot!(check_str(
+        "type C = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8\n\
+         fn f(c: C) -> Int = match c {\n\
+           C1 -> 1,\n\
+         }"
+    ));
+}
+
+#[test]
 fn empty_match_is_non_exhaustive() {
     insta::assert_snapshot!(check_str(
         "type Option<a> = Some(a) | None\n\

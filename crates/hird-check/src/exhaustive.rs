@@ -132,6 +132,13 @@ fn head_ctors(matrix: &[Vec<Pat>]) -> Vec<Ctor> {
     ctors
 }
 
+/// Missing cases a diagnostic names before its "and more" tail.
+const MAX_SHOWN: usize = 6;
+
+/// Witness rows the exhaustiveness check collects: one past [`MAX_SHOWN`],
+/// enough to know whether more exist.
+const WITNESS_LIMIT: usize = MAX_SHOWN + 1;
+
 /// Re-wraps witness rows produced after specialising by `ctor` of `arity`:
 /// the leading `arity` columns become the constructor's sub-witnesses.
 fn wrap_ctor(ctor: &Ctor, arity: usize, rows: Vec<Vec<Witness>>) -> Vec<Vec<Witness>> {
@@ -176,8 +183,8 @@ fn render_witness(witness: &Witness) -> String {
 }
 
 /// The distinct value shapes in `witnesses`, rendered, sorted, and capped at
-/// six with an "and N more" tail. `None` when the only witness is a bare
-/// wildcard: an open type with no constructor to name.
+/// [`MAX_SHOWN`] with an "and more" tail. `None` when the only witness is a
+/// bare wildcard: an open type with no constructor to name.
 fn missing_cases(witnesses: &[Vec<Witness>]) -> Option<String> {
     let mut cases: Vec<String> = witnesses
         .iter()
@@ -191,15 +198,13 @@ fn missing_cases(witnesses: &[Vec<Witness>]) -> Option<String> {
     if cases.iter().all(|case| case == "_") {
         return None;
     }
-    const MAX: usize = 6;
-    let extra = cases.len().saturating_sub(MAX);
     let mut shown: Vec<String> = cases
         .iter()
-        .take(MAX)
+        .take(MAX_SHOWN)
         .map(|case| format!("`{case}`"))
         .collect();
-    if extra > 0 {
-        shown.push(format!("and {extra} more"));
+    if cases.len() > MAX_SHOWN {
+        shown.push(String::from("and more"));
     }
     Some(shown.join(", "))
 }
@@ -238,7 +243,14 @@ impl Checker {
         let Some(pat) = lower(pattern) else { return };
         let span = node_span(pattern.syntax(), self.source_id);
         let rows = [alloc::vec![pat]];
-        let witnesses = self.useful(&rows, &[Pat::Wild], core::slice::from_ref(ty), span);
+        let witnesses = self.useful(
+            &rows,
+            &[Pat::Wild],
+            core::slice::from_ref(ty),
+            WITNESS_LIMIT,
+            true,
+            span,
+        );
         if !witnesses.is_empty() {
             self.diags.push(CheckDiagnostic::error(
                 CheckCode::C0057,
@@ -264,12 +276,20 @@ impl Checker {
             arms.push((pat, node_span(pattern.syntax(), self.source_id)));
         }
 
-        // Redundancy: every arm must be useful against the arms above it.
+        // Redundancy: every arm must be useful against the arms above it. One
+        // witness settles that.
         let mut rows: Vec<Vec<Pat>> = Vec::new();
         for (pat, arm_span) in arms {
             let row = alloc::vec![pat];
             if self
-                .useful(&rows, &row, core::slice::from_ref(scrutinee), span)
+                .useful(
+                    &rows,
+                    &row,
+                    core::slice::from_ref(scrutinee),
+                    1,
+                    false,
+                    span,
+                )
                 .is_empty()
             {
                 self.diags.push(CheckDiagnostic::warning(
@@ -282,7 +302,14 @@ impl Checker {
         }
 
         // Exhaustiveness: a wildcard must not be useful against all arms.
-        let witnesses = self.useful(&rows, &[Pat::Wild], core::slice::from_ref(scrutinee), span);
+        let witnesses = self.useful(
+            &rows,
+            &[Pat::Wild],
+            core::slice::from_ref(scrutinee),
+            WITNESS_LIMIT,
+            true,
+            span,
+        );
         if !witnesses.is_empty() {
             self.diags.push(CheckDiagnostic::error(
                 CheckCode::C0015,
@@ -292,22 +319,25 @@ impl Checker {
         }
     }
 
-    /// Maranget's usefulness with witness reconstruction: the value shapes `q`
-    /// admits that no row of `matrix` does. An empty result means `q` is not
-    /// useful (every value it matches is already covered).
+    /// Maranget's usefulness with witness reconstruction: up to `limit` value
+    /// shapes `q` admits that no row of `matrix` does. An empty result means
+    /// `q` is not useful (every value it matches is already covered).
     ///
     /// `col_types` gives each column's type, in step with the pattern vectors;
-    /// every row and `q` have `col_types.len()` columns. Counts the rows it
-    /// visits and the witness rows it returns.
+    /// every row and `q` have `col_types.len()` columns. `top` marks `q`'s
+    /// first column as the scrutinee itself. Counts the rows it visits and the
+    /// witness rows it returns.
     fn useful(
         &mut self,
         matrix: &[Vec<Pat>],
         q: &[Pat],
         col_types: &[Type],
+        limit: usize,
+        top: bool,
         span: Span,
     ) -> Vec<Vec<Witness>> {
         self.stats.exhaustiveness_rows += matrix.len() as u64;
-        let witnesses = self.useful_step(matrix, q, col_types, span);
+        let witnesses = self.useful_step(matrix, q, col_types, limit, top, span);
         self.stats.exhaustiveness_witnesses += witnesses.len() as u64;
         witnesses
     }
@@ -319,6 +349,8 @@ impl Checker {
         matrix: &[Vec<Pat>],
         q: &[Pat],
         col_types: &[Type],
+        limit: usize,
+        top: bool,
         span: Span,
     ) -> Vec<Vec<Witness>> {
         let Some((col_ty, rest_types)) = col_types.split_first() else {
@@ -339,7 +371,7 @@ impl Checker {
                 sub_q.extend_from_slice(q_rest);
                 let mut sub_types = fields;
                 sub_types.extend_from_slice(rest_types);
-                let sub = self.useful(&specialized, &sub_q, &sub_types, span);
+                let sub = self.useful(&specialized, &sub_q, &sub_types, limit, false, span);
                 wrap_ctor(ctor, arity, sub)
             }
             Pat::Wild => {
@@ -347,9 +379,12 @@ impl Checker {
                 match self.signature(col_ty) {
                     Some(all) if all.iter().all(|(ctor, _)| present.contains(ctor)) => {
                         // Complete signature: useful iff some constructor's
-                        // specialisation is. Recurse into each and collect.
+                        // specialisation is. Recurse into each until `limit`.
                         let mut out = Vec::new();
                         for (ctor, _) in &all {
+                            if out.len() >= limit {
+                                break;
+                            }
                             let fields = self.field_types(ctor, col_ty, span);
                             let arity = fields.len();
                             let specialized = specialize(matrix, ctor, arity);
@@ -357,7 +392,14 @@ impl Checker {
                             sub_q.extend_from_slice(q_rest);
                             let mut sub_types = fields;
                             sub_types.extend_from_slice(rest_types);
-                            let sub = self.useful(&specialized, &sub_q, &sub_types, span);
+                            let sub = self.useful(
+                                &specialized,
+                                &sub_q,
+                                &sub_types,
+                                limit - out.len(),
+                                false,
+                                span,
+                            );
                             out.extend(wrap_ctor(ctor, arity, sub));
                         }
                         out
@@ -365,30 +407,40 @@ impl Checker {
                     signature => {
                         // Open, or closed with constructors missing: recurse on
                         // the default matrix, then head each witness with a
-                        // missing constructor (closed) or a wildcard (open).
-                        let sub = self.useful(&default_matrix(matrix), q_rest, rest_types, span);
+                        // missing constructor, or with a wildcard when the type
+                        // is open or, below the scrutinee, no row names one.
+                        let sub = self.useful(
+                            &default_matrix(matrix),
+                            q_rest,
+                            rest_types,
+                            limit,
+                            false,
+                            span,
+                        );
                         if sub.is_empty() {
                             return Vec::new();
                         }
                         let heads: Vec<Witness> = match signature {
-                            Some(all) => all
+                            Some(all) if top || !present.is_empty() => all
                                 .into_iter()
                                 .filter(|(ctor, _)| !present.contains(ctor))
                                 .map(|(ctor, arity)| {
                                     Witness::Con(ctor, alloc::vec![Witness::Wild; arity])
                                 })
                                 .collect(),
-                            None => alloc::vec![Witness::Wild],
+                            _ => alloc::vec![Witness::Wild],
                         };
-                        let mut out = Vec::new();
-                        for witness_head in &heads {
-                            for tail in &sub {
-                                let mut row = alloc::vec![witness_head.clone()];
-                                row.extend_from_slice(tail);
-                                out.push(row);
-                            }
-                        }
-                        out
+                        heads
+                            .iter()
+                            .flat_map(|head| {
+                                sub.iter().map(move |tail| {
+                                    let mut row = alloc::vec![head.clone()];
+                                    row.extend_from_slice(tail);
+                                    row
+                                })
+                            })
+                            .take(limit)
+                            .collect()
                     }
                 }
             }

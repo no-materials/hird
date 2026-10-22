@@ -8,7 +8,7 @@ expression: counters(&report)
   "emulator_boots": 0,
   "erl_bytes": 0,
   "exhaustiveness_rows": 30,
-  "exhaustiveness_witnesses": 30,
+  "exhaustiveness_witnesses": 18,
   "modules": 1,
   "modules_compiled": 0,
   "modules_reused": 0,

@@ -61,6 +61,17 @@ schedule and is not covered by these entries.
   order, the audit sink is flushed, and the program exits 1 with
   `{supervisor_down, Sup, Reason}` on stderr.
 
+- **A wide tuple match could hang `hird check` and the LSP.** Coverage
+  checking built every missing case before showing six, so cost doubled
+  with each column: an exhaustive match over 18 `Bool`s took a second
+  and 360 MB, and a 6-wide decision table over a 10-constructor enum
+  1.7 s and 525 MB. Both now check in under a millisecond with flat
+  memory, and checking grows linearly with tuple width. A C0015 or C0057
+  message now writes `_` for a column no remaining arm inspects, so
+  `(True, True, True, True)` alone is missing `(False, _, _, _)`, not
+  eight concrete rows "and 2 more", and past six missing cases it ends
+  with "and more" instead of a count.
+
 ## [0.4.0] — 2026-09-15
 
 ### Added
