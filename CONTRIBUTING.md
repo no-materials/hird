@@ -129,6 +129,11 @@ merges, emulator boots, and more. Wall time is noisy; the counters are
 deterministic, so a change that moves one shows it in a diff.
 `hird check --help` defines each one.
 
+`runtime/bench/bench.sh <scenario>` measures the Erlang runtime's hot
+paths — the audit sink, replay loading, supervised-child lookup and
+handler installs — reporting ops/s, p50/p99 latency and memory per case;
+[`runtime/README.md`](runtime/README.md#benchmarks) lists the scenarios.
+
 ## Definition of done
 
 A change is finished when:

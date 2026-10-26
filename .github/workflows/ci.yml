@@ -195,6 +195,13 @@ jobs:
         shell: bash
         run: ./runtime/test.sh
 
+      # Every runtime benchmark scenario at small sizes, so the harness keeps up with the runtime
+      # it measures. The numbers are not checked; one platform is enough.
+      - name: runtime benchmark smoke run
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./runtime/bench/bench.sh all --quick
+
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:

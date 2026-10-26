@@ -79,3 +79,40 @@ CI runs this script, and then the workspace test suite with `erlc` on
 `HIRD_REQUIRE_BEAM`, which turns the "skipping: erlc not found on PATH"
 path of the Rust tests into a failure, so a broken toolchain install
 cannot pass as a green run.
+
+## Benchmarks
+
+```sh
+./bench/bench.sh <scenario> [--quick]
+```
+
+compiles the runtime and `bench/` into `bench/_build`, then runs one
+scenario, or `all`, printing a table per scenario with ops/s, p50, p99
+and max latency, and memory for each case:
+
+- `audit` — dispatch throughput through the audit sink: 1 and 16
+  producers, 16 B, 4 KiB and 64 KiB payloads, file and stdout sinks.
+- `sync` — how long `sync/0` waits behind the backlog a burst leaves.
+- `mailbox` — the sink's queue and memory over time under a producer
+  paced at 10k and at 200k calls per second.
+- `replay` — cursor load time and memory for 50k, 200k and 1M record
+  logs, then offer throughput.
+- `child` — a `child(Sup, id)` lookup and a send, from 1 and 16 callers.
+- `restart` — lookup latency while a sibling restarts with a 1 s init.
+- `install` — `install_handler/2` replacing a handler, against 0 to
+  100k processes.
+
+The scenarios call the runtime as generated code does
+(`hird_tool_dispatch:call/5`, `hird_sup_util:child_pid/2` on a
+registered supervisor), so a change behind those calls shows in the
+numbers without touching the bench. The report goes to stdout and the
+emulator's own standard output to `/dev/null`, so the stdout sink
+figures cover the Erlang io path, not a terminal. Throughput loops time
+one operation in 16, since a clock read is a syscall on some clock
+sources (`restart`, `install` and the `sync` wait time every one); the
+header prints what timing adds to each latency on the machine at hand.
+Replay logs are written once per size under `bench/_build` and reused:
+the 1M log is 140 MB, and a full `replay` run takes minutes.
+
+`--quick` shrinks every size for a smoke run; CI runs `all --quick` on
+Linux after the eunit suites, so the harness keeps up with the runtime.
