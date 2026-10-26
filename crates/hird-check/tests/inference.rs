@@ -81,7 +81,7 @@ fn adt_constructors_are_typed() {
 #[test]
 fn recursive_adt() {
     insta::assert_snapshot!(check_str(
-        "type List<a> = Cons(a, List<a>) | Nil\n\
+        "type Seq<a> = Cons(a, Seq<a>) | Nil\n\
          fn main() = Cons(1, Cons(2, Nil))"
     ));
 }
@@ -345,9 +345,9 @@ fn constructor_pattern_match() {
 #[test]
 fn nested_patterns() {
     insta::assert_snapshot!(check_str(
-        "type List<a> = Cons(a, List<a>) | Nil\n\
+        "type Seq<a> = Cons(a, Seq<a>) | Nil\n\
          type Option<a> = Some(a) | None\n\
-         fn first_or_zero(opt: Option<List<Int>>) -> Int = match opt {\n\
+         fn first_or_zero(opt: Option<Seq<Int>>) -> Int = match opt {\n\
            Some(Cons(x, _)) -> x,\n\
            Some(Nil) -> 0,\n\
            None -> 0,\n\
@@ -512,9 +512,9 @@ fn redundant_constructor_arm() {
 #[test]
 fn nested_non_exhaustive() {
     insta::assert_snapshot!(check_str(
-        "type List<a> = Cons(a, List<a>) | Nil\n\
+        "type Seq<a> = Cons(a, Seq<a>) | Nil\n\
          type Option<a> = Some(a) | None\n\
-         fn first(opt: Option<List<Int>>) -> Int = match opt {\n\
+         fn first(opt: Option<Seq<Int>>) -> Int = match opt {\n\
            Some(Cons(x, _)) -> x,\n\
            None -> 0,\n\
          }"

@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\",\n\"module M\\n\\\n         type alias String = Int\\n\\\n         tool Clock : { n: Int } -> ()\\n\\\n         type St = St(Int)\\n\\\n         actor A {\\n\\\n           state: St,\\n\\\n           message: Pid = | Ping,\\n\\\n           init: fn(s: St) ! {} = s,\\n\\\n           handle Ping, st ! {} = Continue(st),\\n\\\n         }\",)])"
+---
+== M ==
+Ping : Pid
+St : Int → St
+clock : { n: Int } → () ! {Tool<Clock>}
+error[C0063] 20..26: type `String` is built in; a declaration cannot take its name
+error[C0063] 38..43: type `Clock` is built in; a declaration cannot take its name
+error[C0063] 111..114: type `Pid` is built in; a declaration cannot take its name

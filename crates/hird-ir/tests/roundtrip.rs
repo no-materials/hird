@@ -508,8 +508,8 @@ fn adt_match_and_constructors() {
 #[test]
 fn recursive_adt_and_nested_constructors() {
     assert_roundtrips(
-        "type List<a> = Cons(a, List<a>) | Nil\n\
-         fn build() -> List<Int> = Cons(1, Cons(2, Nil))",
+        "type Seq<a> = Cons(a, Seq<a>) | Nil\n\
+         fn build() -> Seq<Int> = Cons(1, Cons(2, Nil))",
     );
 }
 

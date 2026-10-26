@@ -10,6 +10,18 @@ use hird_types::{BUILTIN_EFFECTS, Name, Type};
 
 use crate::ModuleName;
 
+/// The arity of built-in type `name` — `Int`, `Float`, `String`, `List`, the
+/// actor references `Pid` and `ReplyTo`, and the capability `Clock` — or
+/// `None` for any other name. None is an ADT, so no declaration may take
+/// one's name (C0063).
+pub(crate) fn builtin_type_arity(name: &str) -> Option<usize> {
+    match name {
+        "Int" | "Float" | "String" | "Clock" => Some(0),
+        "List" | "Pid" | "ReplyTo" => Some(1),
+        _ => None,
+    }
+}
+
 /// A declared algebraic data type.
 #[derive(Debug)]
 pub(crate) struct AdtInfo {
@@ -123,19 +135,15 @@ impl Registry {
         self.ctors.get(&Name::new(name))
     }
 
-    /// The arity of the type constructor `name`: declared ADTs first, then
-    /// the built-ins (`Int`, `Float`, `String`, `List`, the actor references
-    /// `Pid`, `ReplyTo`, and the capability `Clock`). `Option`, like `Next`
-    /// and `Bool`, is a seeded ADT.
+    /// The arity of the type constructor `name`: a declared ADT, else a
+    /// built-in ([`builtin_type_arity`]). `Option`, like `Next` and `Bool`,
+    /// is a seeded ADT. A declaration of a built-in name is rejected (C0063)
+    /// but still registered, so it is found first.
     pub(crate) fn type_arity(&self, name: &str) -> Option<usize> {
         if let Some(info) = self.adts.get(&Name::new(name)) {
             return Some(info.arity);
         }
-        match name {
-            "Int" | "Float" | "String" | "Clock" => Some(0),
-            "List" | "Pid" | "ReplyTo" => Some(1),
-            _ => None,
-        }
+        builtin_type_arity(name)
     }
 
     /// Whether `name` is an opaque capability type: a declared ADT whose

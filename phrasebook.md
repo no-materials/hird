@@ -89,7 +89,8 @@ type PlannerMsg =
 
 Constructors are typed functions: `Ok : ∀a e. a → Result<a, e>`. `Option<a> =
 Some(a) | None` is predeclared (like `Bool` and `Next`); a user declaration
-shadows it.
+shadows it. The built-in types (`Int`, `Float`, `String`, `List`, `Pid`,
+`ReplyTo`, `Clock`) are not ADTs and cannot be redeclared (C0063).
 
 ---
 
@@ -492,6 +493,10 @@ others are the shape the discipline takes for user-declared capabilities.
   constructors; match it with `[]` and `[x, ..rest]`. `Option` (with
   `Some`/`None`), `Next` (with `Continue`/`Stop`), and `Bool` are
   predeclared, so they need no declaration.
+- **Built-in type names are taken** (C0063): no `type`, `type alias`,
+  `tool`, or actor message type may be named `Int`, `Float`, `String`,
+  `List`, `Pid`, `ReplyTo`, or `Clock`. A list-shaped ADT needs its own
+  name (`type Seq<a> = Cons(a, Seq<a>) | Nil`).
 - **Handlers return `Next<State>`, not `State`**: `= st` in a handler is a
   type error — write `= Continue(st)`; stop with `= Stop`.
 - **Handler maps never cross `spawn`/`supervise`**: a `handle` block around

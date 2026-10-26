@@ -1,0 +1,11 @@
+---
+source: crates/hird-check/tests/modules.rs
+expression: "check_modules(&[(\"M\",\n\"module M\\n\\\n         type List<a> = Cons(a, List<a>) | Nil\\n\\\n         fn f() -> List<Int> = [1, 2]\\n\\\n         fn g(l: List<Int>) -> Int = match l { Cons(x, _) -> x, Nil -> 0 }\\n\\\n         fn main() -> () = let _ = g(f()) in ()\",)])"
+---
+== M ==
+Cons : ∀a. a → List<a> → List<a>
+Nil : ∀a. List<a>
+f : () → List<Int>
+g : List<Int> → Int
+main : () → ()
+error[C0063] 14..18: type `List` is built in; a declaration cannot take its name

@@ -242,6 +242,40 @@ fn duplicate_type_definition() {
     insta::assert_snapshot!(check_modules(&[("M", "module M\ntype T = A\ntype T = B")]));
 }
 
+/// A built-in type's name is taken: a list literal is typed `List<a>` by
+/// name, so a declared `List` would unify with it while its constructors
+/// match tagged tuples, not Erlang lists.
+#[test]
+fn declaring_a_builtin_type_is_rejected() {
+    insta::assert_snapshot!(check_modules(&[(
+        "M",
+        "module M\n\
+         type List<a> = Cons(a, List<a>) | Nil\n\
+         fn f() -> List<Int> = [1, 2]\n\
+         fn g(l: List<Int>) -> Int = match l { Cons(x, _) -> x, Nil -> 0 }\n\
+         fn main() -> () = let _ = g(f()) in ()",
+    )]));
+}
+
+/// Every form that defines a type name — alias, tool marker, actor message
+/// type — is barred from a built-in's name.
+#[test]
+fn builtin_type_names_are_reserved_in_every_type_namespace_form() {
+    insta::assert_snapshot!(check_modules(&[(
+        "M",
+        "module M\n\
+         type alias String = Int\n\
+         tool Clock : { n: Int } -> ()\n\
+         type St = St(Int)\n\
+         actor A {\n\
+           state: St,\n\
+           message: Pid = | Ping,\n\
+           init: fn(s: St) ! {} = s,\n\
+           handle Ping, st ! {} = Continue(st),\n\
+         }",
+    )]));
+}
+
 #[test]
 fn type_and_constructor_share_a_name() {
     insta::assert_snapshot!(check_modules(&[(

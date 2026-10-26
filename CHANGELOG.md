@@ -98,6 +98,14 @@ schedule and is not covered by these entries.
   eight concrete rows "and 2 more", and past six missing cases it ends
   with "and more" instead of a count.
 
+- **A type named after a built-in replaced it.** A module could declare
+  `type List<a> = Cons(a, List<a>) | Nil`, and list literals then typed
+  as that ADT while still compiling to Erlang lists, so a `match` on
+  `Cons`/`Nil` checked clean and failed at runtime. The same held for
+  `Int`, `Float`, `String`, `Pid`, `ReplyTo`, and `Clock`, through a
+  `type`, a `type alias`, a `tool`, or an actor's message type. Each is
+  now C0063.
+
 ## [0.4.0] — 2026-09-15
 
 ### Added

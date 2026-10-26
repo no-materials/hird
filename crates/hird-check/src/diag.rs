@@ -189,6 +189,9 @@ pub enum CheckCode {
     /// A use of a generic tool leaves its args, result, or error type
     /// unknown at compile time, so its invocation records have no wire shape.
     C0062,
+    /// A type, alias, tool, or message type takes the name of a built-in
+    /// type (`Int`, `Float`, `String`, `List`, `Pid`, `ReplyTo`, `Clock`).
+    C0063,
 }
 
 /// A secondary source location attached to a diagnostic.

@@ -297,7 +297,7 @@ fn nullary_constructor_reference_knows_its_type() {
 #[test]
 fn recursive_adt_field_types_use_parameter_names() {
     let module = lower(
-        "type List<a> = Cons(a, List<a>) | Nil\n\
+        "type Seq<a> = Cons(a, Seq<a>) | Nil\n\
          fn build() = Cons(1, Cons(2, Nil))",
         "Lst",
     );
@@ -309,7 +309,7 @@ fn recursive_adt_field_types_use_parameter_names() {
     let cons = &def.constructors[0];
     assert_eq!(cons.name, "Cons");
     assert_eq!(ty_str(&cons.fields[0]), "a");
-    assert_eq!(ty_str(&cons.fields[1]), "List<a>");
+    assert_eq!(ty_str(&cons.fields[1]), "Seq<a>");
 
     // The body is a nested constructor application.
     let IrDecl::Fn(build) = &module.declarations[1] else {
@@ -319,9 +319,9 @@ fn recursive_adt_field_types_use_parameter_names() {
         panic!("body is a `Cons` application");
     };
     assert_eq!(outer.name, "Cons");
-    assert_eq!(outer.type_name, "List");
+    assert_eq!(outer.type_name, "Seq");
     assert_eq!(outer.args.len(), 2);
-    assert_eq!(ty_str(&outer.result_type), "List<Int>");
+    assert_eq!(ty_str(&outer.result_type), "Seq<Int>");
     let IrExpr::Constructor(inner) = &outer.args[1] else {
         panic!("second argument is the nested `Cons`");
     };

@@ -26,7 +26,7 @@ use crate::diag::{CheckCode, CheckDiagnostic, Severity};
 use crate::elaborate::{Scope, is_var_name};
 use crate::env::Env;
 use crate::program::{ExportedType, ModuleInterface};
-use crate::registry::{CtorInfo, Registry};
+use crate::registry::{CtorInfo, Registry, builtin_type_arity};
 use crate::{
     CheckStats, CheckedFile, ImportedTool, ModuleName, NodeKey, expr_span, name_token_span,
     node_span,
@@ -578,9 +578,17 @@ impl Checker {
         );
     }
 
-    /// Records a type-namespace definition at `span`, reporting a duplicate
-    /// (C0018) against the first occurrence.
+    /// Records a type-namespace definition at `span`, reporting a built-in
+    /// type's name (C0063) and a duplicate (C0018) against the first
+    /// occurrence.
     pub(crate) fn note_type_name(&mut self, name: &str, span: Span) {
+        if builtin_type_arity(name).is_some() {
+            self.diags.push(CheckDiagnostic::error(
+                CheckCode::C0063,
+                span,
+                format!("type `{name}` is built in; a declaration cannot take its name"),
+            ));
+        }
         note_duplicate(
             &mut self.diags,
             &mut self.type_spans,
