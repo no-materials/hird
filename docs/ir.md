@@ -42,9 +42,9 @@ appear in the IR. Functions, data types, externs, and tools do.
 | `handle { … } in body`        | an `IrHandle` carrying the arms, body, and block row   |
 
 Operator references use the canonical operator symbol as the variable name
-(`+`, `-`, `*`, `/`, `<`, `<=`, `>`, `>=`, `==`, `!=`, and the Unicode logical
-forms `∧`, `∨`). The operator's type is the n-ary function type synthesised
-from its operand and result types.
+(`+`, `-`, `*`, `/`, `++`, `<`, `<=`, `>`, `>=`, `==`, `!=`, and the Unicode
+logical forms `∧`, `∨`). The operator's type is the n-ary function type
+synthesised from its operand and result types.
 
 ### N-ary functions
 

@@ -135,6 +135,8 @@ pub enum TokenKind {
     // --- Operators ---
     /// `+`
     Plus,
+    /// `++`
+    PlusPlus,
     /// `-`
     Minus,
     /// `*`

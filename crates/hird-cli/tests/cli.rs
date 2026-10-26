@@ -35,6 +35,17 @@ const LISTS: &str = "tool Tasks : { n: Int } -> List<Int>\n\
          report({ total: second(l) });\n\
          report({ total: sum(doubled([5, ..l])) })";
 
+/// Strings joined with `++` from literals, a parameter, record fields, and
+/// a tool result; each `Say` call records the joined line.
+const CONCAT: &str = "tool Say : { line: String } -> String\n\
+     fn fake_say(args: { line: String }) -> String = args.line ++ \"!\"\n\
+     fn greet(name: String) -> String = \"hello, \" ++ name\n\
+     fn main() ! {} =\n\
+       handle { Tool<Say> -> fake_say } in\n\
+         let who = { first: \"hir\", last: \"ð\" } in\n\
+         let echoed = say({ line: greet(who.first ++ who.last) }) in\n\
+         match say({ line: echoed ++ \" \" ++ say({ line: \"again\" }) }) { _ -> () }";
+
 /// An actor and supervisor module with a tool, for the effect graph.
 const PLANNER: &str = "type Path = Path(String)\n\
      type RepoState = RepoState(String)\n\
@@ -389,6 +400,28 @@ fn run_takes_a_tool_result_list_apart() {
     assert!(out.contains("\"args\":{\"total\":321}"), "stdout: {out}");
     assert!(out.contains("\"args\":{\"total\":20}"), "stdout: {out}");
     assert!(out.contains("\"args\":{\"total\":652}"), "stdout: {out}");
+}
+
+#[test]
+fn run_joins_strings() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("run_concat");
+    let file = write(&dir, "main.hird", CONCAT);
+    let out_dir = dir.join("out");
+    let output = hird(&["run", &file, "-o", &out_dir.display().to_string()]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(
+        out.contains("\"args\":{\"line\":\"hello, hirð\"},\"result\":{\"ok\":\"hello, hirð!\"}"),
+        "stdout: {out}"
+    );
+    assert!(
+        out.contains("\"args\":{\"line\":\"hello, hirð! again!\"}"),
+        "stdout: {out}"
+    );
 }
 
 #[test]

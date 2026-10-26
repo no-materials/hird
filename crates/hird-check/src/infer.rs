@@ -1039,7 +1039,8 @@ impl Checker {
     }
 
     /// Binary operators per the v0.1 table: `Int` arithmetic and ordering,
-    /// polymorphic equality, `Bool` connectives. No overloading.
+    /// `String` concatenation, polymorphic equality, `Bool` connectives. No
+    /// overloading.
     fn infer_binop(&mut self, op: &BinOpExpr) -> Checked<Type> {
         let Some(kind) = binop_kind(op) else {
             return Err(Aborted);
@@ -1059,6 +1060,11 @@ impl Checker {
                 self.unify_at(&Type::int(), &lhs_ty, lhs_span)?;
                 self.unify_at(&Type::int(), &rhs_ty, rhs_span)?;
                 Ok(Type::int())
+            }
+            SyntaxKind::PLUS_PLUS => {
+                self.unify_at(&Type::string(), &lhs_ty, lhs_span)?;
+                self.unify_at(&Type::string(), &rhs_ty, rhs_span)?;
+                Ok(Type::string())
             }
             SyntaxKind::LT | SyntaxKind::LE | SyntaxKind::GT | SyntaxKind::GE => {
                 self.unify_at(&Type::int(), &lhs_ty, lhs_span)?;
@@ -1288,6 +1294,7 @@ fn binop_kind(op: &BinOpExpr) -> Option<SyntaxKind> {
             matches!(
                 kind,
                 SyntaxKind::PLUS
+                    | SyntaxKind::PLUS_PLUS
                     | SyntaxKind::MINUS
                     | SyntaxKind::STAR
                     | SyntaxKind::SLASH

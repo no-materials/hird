@@ -99,6 +99,8 @@ pub enum SyntaxKind {
     // -- Operators --
     /// `+`
     PLUS,
+    /// `++`
+    PLUS_PLUS,
     /// `-`
     MINUS,
     /// `*`
@@ -359,6 +361,7 @@ impl From<TokenKind> for SyntaxKind {
             TokenKind::Float => Self::FLOAT,
             TokenKind::Str => Self::STRING,
             TokenKind::Plus => Self::PLUS,
+            TokenKind::PlusPlus => Self::PLUS_PLUS,
             TokenKind::Minus => Self::MINUS,
             TokenKind::Star => Self::STAR,
             TokenKind::Slash => Self::SLASH,
@@ -452,6 +455,7 @@ impl cstree::Syntax for SyntaxKind {
             Self::IN_KW => Some("in"),
             Self::ALIAS_KW => Some("alias"),
             Self::PLUS => Some("+"),
+            Self::PLUS_PLUS => Some("++"),
             Self::MINUS => Some("-"),
             Self::STAR => Some("*"),
             Self::SLASH => Some("/"),

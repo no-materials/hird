@@ -658,6 +658,24 @@ fn operator_mismatch() {
     insta::assert_snapshot!(check_str(r#"fn main() = 1 + "one""#));
 }
 
+#[test]
+fn concat_joins_strings() {
+    insta::assert_snapshot!(check_str(
+        r#"fn greet(name: String) -> String = "hello, " ++ name ++ "!"
+           fn same(a: String) = a ++ "" == a"#
+    ));
+}
+
+#[test]
+fn concat_rejects_non_strings() {
+    insta::assert_snapshot!(check_str(r#"fn main() = 1 ++ 2"#));
+}
+
+#[test]
+fn concat_rejects_a_non_string_operand() {
+    insta::assert_snapshot!(check_str(r#"fn label(n: Int) -> String = "n = " ++ n"#));
+}
+
 // ── records ─────────────────────────────────────────────────────
 
 #[test]

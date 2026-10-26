@@ -252,10 +252,11 @@ Precedence from lowest to highest:
 | 1    | `\|\|`                     | left  | logical or           |
 | 2    | `&&`                       | left  | logical and          |
 | 3    | `==` `!=` `<` `>` `<=` `>=` | none  | relational           |
-| 4    | `+` `-`                    | left  | additive             |
-| 5    | `*` `/`                    | left  | multiplicative       |
-| 6    | application                | left  | function application |
-| 7    | `.`                        | left  | field access         |
+| 4    | `++`                       | left  | string concatenation |
+| 5    | `+` `-`                    | left  | additive             |
+| 6    | `*` `/`                    | left  | multiplicative       |
+| 7    | application                | left  | function application |
+| 8    | `.`                        | left  | field access         |
 
 The logical operators `&&` and `||` (canonical `∧` `∨`) are left-associative
 and bind looser than the relational tier, so `a == b && c == d` groups as
@@ -265,11 +266,15 @@ The relational operators form a single non-associative tier: a chain such
 as `a == b == c` or `a < b == c` is a parse error (`P0005`). Compare
 chained results explicitly with parentheses: `(a == b) == c`.
 
+`++` joins two `String`s. It sits between the relational and additive
+tiers, so `a ++ b == c` groups as `(a ++ b) == c`.
+
 ```
 infix_expr   ::= prefix_expr ( bin_op prefix_expr )*
 
 bin_op       ::= '||' | '&&'
                | '==' | '!=' | '<' | '>' | '<=' | '>='
+               | '++'
                | '+' | '-' | '*' | '/'
 
 prefix_expr  ::= app_expr

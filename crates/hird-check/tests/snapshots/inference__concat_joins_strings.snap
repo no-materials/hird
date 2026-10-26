@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn greet(name: String) -> String = \"hello, \" ++ name ++ \"!\"\n           fn same(a: String) = a ++ \"\" == a\"#)"
+---
+greet : String → String
+same : String → Bool

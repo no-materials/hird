@@ -36,6 +36,13 @@ schedule and is not covered by these entries.
   a JSON array of tasks; a recording made before this change no longer
   replays against it.
 
+- **String concatenation.** No operator or builtin joined two strings
+  (`"hello, " + name` was C0001), so a program could not assemble a
+  prompt, a log line or a path from parts. `a ++ b` now joins two
+  `String`s; any other operand is C0001. It binds looser than `+` `-` and
+  tighter than the comparisons, and is left-associative. A chain lowers
+  to one Erlang binary construction (`<<A/binary, B/binary>>`).
+
 ### Fixed
 
 - **Generic tools and imported types crashed the audit sink.** Codegen

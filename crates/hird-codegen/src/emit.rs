@@ -90,8 +90,8 @@ use core::slice;
 
 use hird_ir::{
     IrActorDef, IrActorHandler, IrApp, IrChildSpec, IrConstructor, IrConstructorPat, IrDecl,
-    IrExpr, IrExternRef, IrFnDef, IrHandle, IrInstall, IrLambda, IrLet, IrMatch, IrModule,
-    IrPattern, IrSpan, IrSupervisorDef, IrToolDef, IrTypeDef, IrVar, LiteralValue,
+    IrExpr, IrExternRef, IrFnDef, IrHandle, IrInstall, IrLambda, IrLet, IrLiteral, IrMatch,
+    IrModule, IrPattern, IrSpan, IrSupervisorDef, IrToolDef, IrTypeDef, IrVar, LiteralValue,
 };
 use hird_types::{Effect, EffectRow, Type};
 
@@ -1230,13 +1230,19 @@ impl<'a> Emitter<'a> {
     }
 
     /// A function application. Dispatches on the callee: primitive operators
-    /// print infix, tool calls route through the runtime dispatcher, and
-    /// everything else is a call whose handler-map argument and argument
-    /// adaptations are read off the callee's function type.
+    /// print infix, `++` builds a binary, tool calls route through the
+    /// runtime dispatcher, and everything else is a call whose handler-map
+    /// argument and argument adaptations are read off the callee's function
+    /// type.
     fn app(&self, app: &IrApp, env: &Env, cx: &mut FnCx, indent: usize) -> String {
         if let IrExpr::Var(v) = app.func.as_ref()
             && !env.scope.contains_key(&v.name)
         {
+            if is_concat(app) {
+                let mut segments = Vec::new();
+                self.concat_segments(app, env, cx, indent, &mut segments);
+                return format!("<<{}>>", segments.join(", "));
+            }
             if let Some(op) = erlang_operator(&v.name)
                 && app.args.len() == 2
             {
@@ -1277,6 +1283,38 @@ impl<'a> Emitter<'a> {
             format!("({rendered})")
         } else {
             rendered
+        }
+    }
+
+    /// The binary segments of a `++` chain, flattened left to right so the
+    /// whole chain builds one binary. A string literal splices in as its
+    /// text; any other operand but a variable is parenthesised, since a
+    /// segment value must be a primary expression (`<<(f(X))/binary>>`).
+    fn concat_segments(
+        &self,
+        app: &IrApp,
+        env: &Env,
+        cx: &mut FnCx,
+        indent: usize,
+        segments: &mut Vec<String>,
+    ) {
+        for arg in &app.args {
+            match arg {
+                IrExpr::App(inner) if is_concat(inner) => {
+                    self.concat_segments(inner, env, cx, indent, segments);
+                }
+                IrExpr::Literal(IrLiteral {
+                    value: LiteralValue::Str(text),
+                    ..
+                }) => segments.push(format!("\"{}\"/utf8", string_body(text))),
+                IrExpr::Var(v) if env.scope.contains_key(&v.name) => {
+                    segments.push(format!("{}/binary", self.var_value(v, env, cx)));
+                }
+                other => {
+                    let rendered = self.expr(other, env, cx, indent, Ctx::Expr);
+                    segments.push(format!("({rendered})/binary"));
+                }
+            }
         }
     }
 
@@ -1642,14 +1680,20 @@ fn init_arg(params: &[String]) -> String {
 fn literal(value: &LiteralValue) -> String {
     match value {
         LiteralValue::Int(text) | LiteralValue::Float(text) => String::from(&**text),
-        LiteralValue::Str(text) => {
-            let inner = text
-                .strip_prefix('"')
-                .and_then(|t| t.strip_suffix('"'))
-                .unwrap_or(text);
-            format!("<<\"{inner}\"/utf8>>")
-        }
+        LiteralValue::Str(text) => format!("<<\"{}\"/utf8>>", string_body(text)),
     }
+}
+
+/// A string literal's source text without its quotes.
+fn string_body(text: &str) -> &str {
+    text.strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .unwrap_or(text)
+}
+
+/// Whether `app` applies the `++` primitive.
+fn is_concat(app: &IrApp) -> bool {
+    app.args.len() == 2 && matches!(app.func.as_ref(), IrExpr::Var(v) if v.name == "++")
 }
 
 /// The handler-map key of an effect: `{tool, read_repo}`-style tuples for

@@ -149,3 +149,24 @@ fn f(a: Int, b: Int) → Bool = a + b * 2 - 1 / 3 == 4 && a < b || a >= b
           right: (integer))
         right: (binary_expression left: (identifier) right: (identifier)))
       right: (binary_expression left: (identifier) right: (identifier)))))
+
+==================
+Concatenation: relational < ++ < additive, left-associative
+==================
+
+fn f(a: String, b: String) → Bool = a ++ b ++ c + 1 == a
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type_identifier))
+      (parameter name: (identifier) type: (type_identifier)))
+    return_type: (return_type (type_identifier))
+    body: (binary_expression
+      left: (binary_expression
+        left: (binary_expression left: (identifier) right: (identifier))
+        right: (binary_expression left: (identifier) right: (integer)))
+      right: (identifier))))

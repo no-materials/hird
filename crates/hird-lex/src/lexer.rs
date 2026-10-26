@@ -69,7 +69,15 @@ impl<'src> Lexer<'src> {
             b']' => self.single(TokenKind::RBracket, start),
             b',' => self.single(TokenKind::Comma, start),
             b';' => self.single(TokenKind::Semicolon, start),
-            b'+' => self.single(TokenKind::Plus, start),
+            b'+' => {
+                self.pos += 1;
+                if bytes.get(self.pos) == Some(&b'+') {
+                    self.pos += 1;
+                    self.tok(TokenKind::PlusPlus, start)
+                } else {
+                    self.tok(TokenKind::Plus, start)
+                }
+            }
             b'*' => self.single(TokenKind::Star, start),
             b'.' => {
                 self.pos += 1;
@@ -667,6 +675,7 @@ mod tests {
         assert_eq!(kinds(".."), vec![DotDot]);
         assert_eq!(kinds("&&"), vec![AmpAmp]);
         assert_eq!(kinds("||"), vec![PipePipe]);
+        assert_eq!(kinds("++"), vec![PlusPlus]);
     }
 
     #[test]

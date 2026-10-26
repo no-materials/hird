@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/inference.rs
+expression: "check_str(r#\"fn label(n: Int) -> String = \"n = \" ++ n\"#)"
+---
+label : Int → String
+error[C0001] 39..40: type mismatch: expected `String`, got `Int`

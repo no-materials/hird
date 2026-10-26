@@ -406,6 +406,20 @@ fn bin_op_logical_precedence() {
 }
 
 #[test]
+fn bin_op_concat_precedence() {
+    // `a ++ b + c` parses as `a ++ (b + c)` — `++` binds looser than `+`.
+    let Expr::BinOp(concat) = body("a ++ b + c") else {
+        panic!("expected binop");
+    };
+    assert_eq!(concat.op(), Some("++"));
+    assert!(matches!(concat.lhs(), Some(Expr::Name(_))));
+    let Some(Expr::BinOp(add)) = concat.rhs() else {
+        panic!("expected nested binop on the right");
+    };
+    assert_eq!(add.op(), Some("+"));
+}
+
+#[test]
 fn app_expr_is_left_nested() {
     // `f x y` parses as `(f x) y`.
     let Expr::App(outer) = body("f x y") else {

@@ -1,0 +1,28 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Concat\"), \"Concat\")"
+---
+%% Generated from src/concat.hird by the Hirð compiler. Do not edit.
+-module(hird_concat).
+-export([greet/1, full/1, shout/2, same/2]).
+
+%% src/concat.hird:2
+greet(Name) ->
+    <<"hello, "/utf8, Name/binary>>.
+
+%% src/concat.hird:3
+full(P) ->
+    <<(maps:get(first, P))/binary, " "/utf8, (maps:get(last, P))/binary>>.
+
+%% src/concat.hird:4
+shout(P, Loud) ->
+    <<(greet(full(P)))/binary, (case Loud of
+        true ->
+            <<"!"/utf8>>;
+        false ->
+            <<"."/utf8>>
+    end)/binary>>.
+
+%% src/concat.hird:6
+same(A, B) ->
+    <<A/binary, B/binary, ""/utf8>> =:= <<A/binary, B/binary>>.

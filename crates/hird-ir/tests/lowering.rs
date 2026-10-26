@@ -103,6 +103,22 @@ fn logical_operator_normalises_to_unicode() {
     assert_eq!(op.name, "\u{2227}", "`&&` canonicalises to `\u{2227}`");
 }
 
+#[test]
+fn concat_lowers_to_application() {
+    let module = lower(
+        "fn greet(name: String) -> String = \"hi \" ++ name",
+        "Greet",
+    );
+    let IrExpr::App(app) = &only_fn(&module).body else {
+        panic!("expected application");
+    };
+    let IrExpr::Var(op) = app.func.as_ref() else {
+        panic!("expected operator reference");
+    };
+    assert_eq!(op.name, "++");
+    assert_eq!(ty_str(&op.ty), "String \u{2192} String \u{2192} String");
+}
+
 // ── let, lambda, application ─────────────────────────────────────
 
 #[test]

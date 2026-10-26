@@ -603,6 +603,19 @@ fn expr_logical_looser_than_relational() {
 }
 
 #[test]
+fn expr_concat_left_associative() {
+    // `a ++ b ++ c` is `(a ++ b) ++ c`.
+    insta::assert_snapshot!(render_cst("fn f() = a ++ b ++ c"));
+}
+
+#[test]
+fn expr_concat_between_additive_and_relational() {
+    // `++` binds looser than `+` and tighter than `==`:
+    // `(a ++ (b + c)) == d`.
+    insta::assert_snapshot!(render_cst("fn f() = a ++ b + c == d"));
+}
+
+#[test]
 fn expr_application_chain() {
     insta::assert_snapshot!(render_cst("fn f() = f x y"));
 }

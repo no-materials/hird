@@ -90,6 +90,9 @@ ASCII operator spellings normalise to Unicode at lex time: `->`
 becomes `→`, `=>` becomes `⇒`, `\` becomes `λ`. Both forms are legal
 input; the canonical form is the Unicode one.
 
+Strings join with `++` (`"hello, " ++ name`); `+` is `Int` arithmetic
+only. `++` binds looser than `+` and tighter than the comparisons.
+
 ### Types
 
 Algebraic data types, structural records, tuples, and lambdas:

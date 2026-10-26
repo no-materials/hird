@@ -1281,6 +1281,7 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         match kind {
             SyntaxKind::STAR | SyntaxKind::SLASH => Some((30, 31, Assoc::Left)),
             SyntaxKind::PLUS | SyntaxKind::MINUS => Some((20, 21, Assoc::Left)),
+            SyntaxKind::PLUS_PLUS => Some((15, 16, Assoc::Left)),
             SyntaxKind::LT
             | SyntaxKind::LE
             | SyntaxKind::GT

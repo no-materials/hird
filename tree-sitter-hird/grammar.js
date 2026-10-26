@@ -16,10 +16,11 @@ const PREC = {
   or: 2,
   and: 3,
   compare: 4,
-  add: 5,
-  mul: 6,
-  application: 7,
-  field: 8,
+  concat: 5,
+  add: 6,
+  mul: 7,
+  application: 8,
+  field: 9,
 };
 
 // The lexer canonicalises each ASCII spelling to its Unicode form, so both
@@ -394,6 +395,7 @@ module.exports = grammar({
           [PREC.or, OR],
           [PREC.and, AND],
           [PREC.compare, ['==', '!=', '<', '>', '<=', '>=']],
+          [PREC.concat, ['++']],
           [PREC.add, ['+', '-']],
           [PREC.mul, ['*', '/']],
         ].map(([precedence, operators]) =>

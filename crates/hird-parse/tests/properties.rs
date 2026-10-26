@@ -64,6 +64,7 @@ enum Pat {
 #[derive(Debug, Clone, Copy)]
 enum BinOp {
     Add,
+    Concat,
     Sub,
     Mul,
     Div,
@@ -155,6 +156,7 @@ impl BinOp {
     fn spelling(self, sp: Spelling) -> &'static str {
         match self {
             Self::Add => "+",
+            Self::Concat => "++",
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
@@ -380,6 +382,7 @@ fn tyvar() -> impl Strategy<Value = &'static str> + Clone {
 fn binop() -> impl Strategy<Value = BinOp> + Clone {
     prop_oneof![
         Just(BinOp::Add),
+        Just(BinOp::Concat),
         Just(BinOp::Sub),
         Just(BinOp::Mul),
         Just(BinOp::Div),

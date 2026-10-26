@@ -151,6 +151,21 @@ Erlang lists.
 
 ---
 
+## Strings
+
+```
+fn greet(name: String) → String = "hello, " ++ name
+```
+
+`++` joins two strings: `String × String → String`, nothing else (`+` is
+`Int` only and there is no overloading, so `"a" + b` and `1 ++ 2` are
+C0001). It binds looser than `+` `-` and tighter than the comparisons, and
+is left-associative: `a ++ b ++ c == d` means `((a ++ b) ++ c) == d`.
+Strings are UTF-8 binaries; a chain lowers to one Erlang binary
+construction (`<<A/binary, B/binary, C/binary>>`).
+
+---
+
 ## Pattern Matching
 
 ```
@@ -487,6 +502,8 @@ others are the shape the discipline takes for user-declared capabilities.
   (a `{` never starts an application argument).
 - **Relational operators do not chain**: `a == b == c` is a parse error
   (P0005); write `(a == b) == c`.
+- **`+` does not join strings** (C0001): `"id: " + name` is a type error;
+  write `"id: " ++ name`.
 - **`;` needs a `()` left operand** (C0058): `f(x); g()` requires `f(x)` to
   return `()`. To drop a value on purpose, write `let _ = f(x) in g()`.
 - **`Cons`/`Nil` are not predefined**: `List` is built in with no named

@@ -213,6 +213,7 @@ against a draft with five typical mistakes and pins it as a test.
 | `{ z: 1, ..p }` where `p` has no `z` | C0010 — records are closed; an update cannot add fields |
 | `f { a: 1 }` instead of `f({ a: 1 })` | parse error — `{` never starts an application argument |
 | Chained comparisons `a == b == c` | P0005 — relational operators do not associate |
+| `"id: " + name` to join strings | C0001 — `+` is `Int` only; join strings with `++` |
 | Missing comma between `match`/`handle` arms | P0001 |
 | camelCase / SCREAMING_CASE identifiers | lexer rejection, surfacing as P0001/P0002 parse errors |
 | Statement-block bodies `fn f() = { let x = 1; x }` | parse/check errors — `{…}` is a record; use `let … in` |

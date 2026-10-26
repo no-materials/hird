@@ -1932,6 +1932,7 @@ fn is_binop(kind: SyntaxKind) -> bool {
     matches!(
         kind,
         SyntaxKind::PLUS
+            | SyntaxKind::PLUS_PLUS
             | SyntaxKind::MINUS
             | SyntaxKind::STAR
             | SyntaxKind::SLASH

@@ -57,16 +57,18 @@ const PREC_OR: u8 = 1;
 const PREC_AND: u8 = 2;
 /// Relational operators (`==`, `<`, …); non-associative.
 const PREC_REL: u8 = 3;
+/// String concatenation (`++`).
+const PREC_CONCAT: u8 = 4;
 /// Additive operators (`+`, `-`).
-const PREC_ADD: u8 = 4;
+const PREC_ADD: u8 = 5;
 /// Multiplicative operators (`*`, `/`).
-const PREC_MUL: u8 = 5;
+const PREC_MUL: u8 = 6;
 /// Function and constructor application.
-const PREC_APP: u8 = 6;
+const PREC_APP: u8 = 7;
 /// Field access (`.`), the tightest-binding form below atoms.
-const PREC_POSTFIX: u8 = 7;
+const PREC_POSTFIX: u8 = 8;
 /// A self-delimiting atom: literal, variable, tuple, list, or record.
-const PREC_ATOM: u8 = 8;
+const PREC_ATOM: u8 = 9;
 
 /// Operator associativity, as far as the printer needs to parenthesise.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -86,6 +88,7 @@ fn operator_info(name: &str) -> Option<(u8, Assoc)> {
         "\u{2228}" => (PREC_OR, Assoc::Left),
         "\u{2227}" => (PREC_AND, Assoc::Left),
         "==" | "!=" | "<" | ">" | "<=" | ">=" => (PREC_REL, Assoc::NonAssoc),
+        "++" => (PREC_CONCAT, Assoc::Left),
         "+" | "-" => (PREC_ADD, Assoc::Left),
         "*" | "/" => (PREC_MUL, Assoc::Left),
         _ => return None,

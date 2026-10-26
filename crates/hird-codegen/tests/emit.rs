@@ -45,7 +45,17 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("Update", UPDATE),
     ("Generic", GENERIC),
     ("Lists", LISTS),
+    ("Concat", CONCAT),
 ];
+
+/// String concatenation: a chain flattens into one binary, literals splice
+/// in as text, and a call, field read, or `if` operand is parenthesised.
+const CONCAT: &str = "type alias Person = { first: String, last: String }\n\
+     fn greet(name: String) -> String = \"hello, \" ++ name\n\
+     fn full(p: Person) -> String = p.first ++ \" \" ++ p.last\n\
+     fn shout(p: Person, loud: Bool) -> String =\n\
+       greet(full(p)) ++ (if loud then \"!\" else \".\")\n\
+     fn same(a: String, b: String) -> Bool = a ++ (b ++ \"\") == a ++ b";
 
 /// Generic tools: shapes carry `{param, N}` in declaration order (`Pair`
 /// mentions `b` first), each use passes the shapes it fixes — a predeclared
@@ -473,6 +483,11 @@ fn snapshot_record_update_is_map_update() {
 #[test]
 fn snapshot_list_patterns_and_tails() {
     insta::assert_snapshot!(emit(program("Lists"), "Lists"));
+}
+
+#[test]
+fn snapshot_string_concat() {
+    insta::assert_snapshot!(emit(program("Concat"), "Concat"));
 }
 
 #[test]

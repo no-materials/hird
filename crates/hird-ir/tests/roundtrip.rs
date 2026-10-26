@@ -626,6 +626,15 @@ fn nested_operator_precedence() {
 }
 
 #[test]
+fn concat_precedence() {
+    // `++` is left-associative and tighter than `==`: the right-nested chain
+    // keeps its parentheses, the comparison needs none.
+    assert_roundtrips(
+        "fn same(a: String, b: String) -> Bool = a ++ (b ++ \"!\") == a ++ b ++ \"!\"",
+    );
+}
+
+#[test]
 fn qualified_let_bindings() {
     // Sequential `let`s nest to the right; the printer must keep them parseable.
     assert_roundtrips(
