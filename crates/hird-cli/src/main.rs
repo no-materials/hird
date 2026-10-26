@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 
 mod build;
+mod cache;
 mod demo;
 mod pipeline;
 mod report;
@@ -55,24 +56,29 @@ enum Command {
         timings: TimingsArg,
     },
     /// Compile to Erlang source and .beam files.
+    ///
+    /// The output runs without the CLI: `erl -noshell -pa <OUT_DIR> -s
+    /// hird_boot run`, adding `-hird_audit_file <PATH>` to append the audit
+    /// stream to a file and `-hird_replay <LOG>` to replay a recording.
+    ///
+    /// Compiled modules are kept in a build cache shared by every build,
+    /// keyed by their Erlang source and the `erlc` that compiled them:
+    /// ``, else `hird` under ``,
+    /// `%LOCALAPPDATA%`, or `~/.cache`. Deleting it is always safe.
     Build {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,
         /// The build output directory.
         #[arg(short, long, default_value = "_build/hird")]
         out_dir: PathBuf,
-        /// Append the audit stream to this file instead of stdout.
-        #[arg(long)]
-        audit_file: Option<PathBuf>,
-        /// Replay tool calls from this recorded audit log instead of
-        /// dispatching to handlers.
-        #[arg(long)]
-        replay: Option<PathBuf>,
         /// Timing and work-counter reporting.
         #[command(flatten)]
         timings: TimingsArg,
     },
     /// Build, then run on BEAM (requires a module defining `fn main`).
+    ///
+    /// Builds as `hird build` does, sharing its build cache, then boots one
+    /// emulator to run the program.
     Run {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,
@@ -148,8 +154,8 @@ struct TimingsArg {
     ///
     /// Phases, in the order a command runs them: `load` (read the sources),
     /// `parse` (lexing included), `check`, `lower`, `emit` (generate
-    /// Erlang), `write` (the `.erl` files), `erlc`, and `run` (the
-    /// emulator).
+    /// Erlang), `write` (the `.erl` files), `erlc` (the `.beam` files,
+    /// reused from the build cache or compiled), and `run` (the emulator).
     ///
     /// Counters depend only on the sources and the paths they are named by:
     /// `modules`, `tokens`, `cst_nodes`, `typed_nodes`, `unify_calls`
@@ -158,8 +164,8 @@ struct TimingsArg {
     /// `exhaustiveness_witnesses` (witness rows built), `effect_row_merges`
     /// (effects visited merging call rows into body rows), `erl_bytes`
     /// (generated Erlang; the runtime and boot module excluded),
-    /// `modules_compiled` and `modules_reused` (Erlang modules), and
-    /// `emulator_boots`.
+    /// `modules_compiled` and `modules_reused` (Erlang modules handed to
+    /// `erlc`, and copied from the build cache), and `emulator_boots`.
     #[arg(
         long,
         value_name = "FORMAT",
@@ -206,18 +212,10 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
         Command::Build {
             input,
             out_dir,
-            audit_file,
-            replay,
             timings: report,
         } => {
             let mut timings = Timings::default();
-            build_input(
-                &input,
-                &out_dir,
-                audit_file.as_deref(),
-                replay.as_deref(),
-                &mut timings,
-            )?;
+            build_input(&input, &out_dir, &mut timings)?;
             report.report(&timings);
             Ok(ExitCode::SUCCESS)
         }
@@ -234,15 +232,10 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
                     "arguments to `main` are reserved and not supported in v0.1"
                 ));
             }
+            let boot_args = build::boot_args(audit_file.as_deref(), replay.as_deref())?;
             let mut timings = Timings::default();
-            let output = build_input(
-                &input,
-                &out_dir,
-                audit_file.as_deref(),
-                replay.as_deref(),
-                &mut timings,
-            )?;
-            let status = build::run(&output, &mut timings)?;
+            let output = build_input(&input, &out_dir, &mut timings)?;
+            let status = build::run(&output, &boot_args, &mut timings)?;
             report.report(&timings);
             Ok(u8::try_from(status).map_or(ExitCode::FAILURE, ExitCode::from))
         }
@@ -345,14 +338,10 @@ fn check_input(
 }
 
 /// Checks `input` and builds it into `out_dir`, recording every phase in
-/// `timings`; the audit stream goes to `audit_file` when given, stdout
-/// otherwise, and `replay` makes the boot module replay tool calls from
-/// that recorded log.
+/// `timings`.
 fn build_input(
     input: &Path,
     out_dir: &Path,
-    audit_file: Option<&Path>,
-    replay: Option<&Path>,
     timings: &mut Timings,
 ) -> Result<build::BuildOutput, Failure> {
     let modules = check_input(input, timings)?;
@@ -362,5 +351,5 @@ fn build_input(
             .map(|m| (m.path.clone(), m.lower()))
             .collect()
     });
-    build::build(&lowered, out_dir, audit_file, replay, timings)
+    build::build(&lowered, out_dir, timings)
 }

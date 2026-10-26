@@ -37,8 +37,9 @@ that remembered to use it. Hirð's is a property of the language instead:
 - **Configured at the boundary.** Where records go is decided once, where
   the program is started: the generated boot module opens the sink before
   `main` and flushes it after, on return or crash, at stdout by default
-  and at a file with `--audit-file`. Nothing in the language reaches the
-  sink, so no library can redirect or silence the stream mid-run.
+  and at a file with `--audit-file` (`-hird_audit_file` when the build is
+  started on plain `erl`). Nothing in the language reaches the sink, so
+  no library can redirect or silence the stream mid-run.
 
 So "audited" is not a property of a deployment's configuration that an
 operator could get wrong. That is what makes the stream usable as evidence.

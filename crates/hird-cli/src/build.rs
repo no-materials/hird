@@ -5,6 +5,7 @@
 //! files into the build directory, generate the boot module, and drive
 //! `erlc`/`erl`.
 
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
@@ -16,6 +17,7 @@ use hird_codegen::erlang_module_name;
 use hird_ir::{IrDecl, IrFnDef, IrModule};
 use hird_types::Type;
 
+use crate::cache::BeamCache;
 use crate::timings::Timings;
 use crate::{Failure, fail};
 
@@ -90,6 +92,11 @@ const RUNTIME: [(&str, &str); 9] = [
 /// The generated boot module's name.
 const BOOT_MODULE: &str = "hird_boot";
 
+/// The options every `erlc` run takes: `+deterministic` keeps build paths
+/// out of a `.beam`, so one compiled in another build directory is the
+/// same file.
+const ERLC_OPTIONS: [&str; 1] = ["+deterministic"];
+
 /// The advice printed when `erlc`/`erl` are not on `PATH`.
 const ERLANG_MISSING: &str =
     "Erlang/OTP not found. Install from https://www.erlang.org/ or use asdf/nix.";
@@ -111,81 +118,63 @@ pub(crate) struct BuildOutput {
 }
 
 /// Emits `modules` (paired with their source paths) plus the runtime and
-/// boot module into `out_dir`, then compiles everything with `erlc`,
-/// recording the `emit`, `write`, and `erlc` phases and their counters in
-/// `timings`. The boot module's audit sink appends to `audit_file` when
-/// given, stdout otherwise; with `replay` it starts a replay cursor over
-/// that log before running `main`.
+/// boot module into `out_dir`, then gives every module a `.beam`: reused
+/// from the build cache when it holds one, compiled by one `erlc` run
+/// otherwise. Records the `emit`, `write`, and `erlc` phases and their
+/// counters in `timings`.
 pub(crate) fn build(
     modules: &[(PathBuf, IrModule)],
     out_dir: &Path,
-    audit_file: Option<&Path>,
-    replay: Option<&Path>,
     timings: &mut Timings,
 ) -> Result<BuildOutput, Failure> {
     let entry = find_entry_point(modules)?;
-    let audit_file = match audit_file {
-        Some(path) => Some(
-            path.to_str()
-                .ok_or_else(|| fail!("audit file path `{}` is not valid UTF-8", path.display()))?,
-        ),
-        None => None,
-    };
-    let replay = match replay {
-        Some(path) => Some(
-            path.to_str()
-                .ok_or_else(|| fail!("replay log path `{}` is not valid UTF-8", path.display()))?,
-        ),
-        None => None,
-    };
 
     let emitted = timings.phase("emit", || emit(modules))?;
     timings.erl_bytes = emitted.iter().map(|(_, source)| source.len() as u64).sum();
 
-    let erl_files = timings.phase("write", || -> Result<Vec<PathBuf>, Failure> {
+    let boot = entry.as_ref().map(|entry| {
+        let table_modules: Vec<String> = modules
+            .iter()
+            .filter(|(_, m)| hird_codegen::has_signature_table(m))
+            .map(|(_, m)| erlang_module_name(&m.name))
+            .collect();
+        boot_module(entry, &table_modules)
+    });
+    let sources: Vec<(&str, &str)> = emitted
+        .iter()
+        .map(|(name, source)| (name.as_str(), source.as_str()))
+        .chain(RUNTIME)
+        .chain(boot.as_deref().map(|source| (BOOT_MODULE, source)))
+        .collect();
+
+    timings.phase("write", || -> Result<(), Failure> {
         fs::create_dir_all(out_dir)
             .map_err(|e| fail!("cannot create `{}`: {e}", out_dir.display()))?;
-        let mut erl_files = Vec::new();
-        for (name, source) in emitted.iter().map(|(n, s)| (n.as_str(), s.as_str())) {
-            erl_files.push(write_erl(out_dir, name, source)?);
+        for (name, source) in &sources {
+            write_erl(out_dir, name, source)?;
         }
-        for (name, source) in RUNTIME {
-            erl_files.push(write_erl(out_dir, name, source)?);
-        }
-        if let Some(entry) = &entry {
-            let table_modules: Vec<String> = modules
-                .iter()
-                .filter(|(_, m)| hird_codegen::has_signature_table(m))
-                .map(|(_, m)| erlang_module_name(&m.name))
-                .collect();
-            erl_files.push(write_erl(
-                out_dir,
-                BOOT_MODULE,
-                &boot_module(entry, &table_modules, audit_file, replay),
-            )?);
-        }
-        Ok(erl_files)
+        Ok(())
     })?;
 
-    let mut erlc = Command::new("erlc");
-    erlc.arg("-o").arg(out_dir).args(&erl_files);
-    timings.modules_compiled = erl_files.len() as u64;
-    timings.emulator_boots += 1;
-    let output = timings
-        .phase("erlc", || erlc.output())
-        .map_err(erlang_unavailable)?;
-    io::Write::write_all(&mut io::stderr(), &output.stdout)
-        .and_then(|()| io::Write::write_all(&mut io::stderr(), &output.stderr))
-        .map_err(|e| fail!("cannot write erlc output: {e}"))?;
-    if !output.status.success() {
-        return Err(fail!("erlc failed with {}", output.status));
+    let beams = timings.phase("erlc", || compile(&sources, out_dir))?;
+    timings.modules_compiled = beams.compiled;
+    timings.modules_reused = beams.reused;
+    if beams.compiled > 0 {
+        timings.emulator_boots += 1;
     }
 
-    eprintln!(
-        "compiled {} module(s) to {}",
-        erl_files.len(),
-        out_dir.display()
-    );
+    match beams.reused {
+        0 => eprintln!(
+            "compiled {} module(s) to {}",
+            beams.compiled,
+            out_dir.display()
+        ),
+        reused => eprintln!(
+            "compiled {} module(s) to {}, reused {reused} from the build cache",
+            beams.compiled,
+            out_dir.display()
+        ),
+    }
     Ok(BuildOutput {
         out_dir: out_dir.to_path_buf(),
         entry,
@@ -203,7 +192,11 @@ fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failur
         .collect();
     origin.insert(BOOT_MODULE.to_owned(), PathBuf::from("the Hirð runtime"));
     for (path, module) in modules {
-        for out in hird_codegen::emit_modules(module, &path.display().to_string()) {
+        // The file name alone: generated Erlang must not depend on where
+        // the source sits, or the same module built elsewhere misses the
+        // build cache.
+        let file_name = path.file_name().unwrap_or(path.as_os_str());
+        for out in hird_codegen::emit_modules(module, &file_name.to_string_lossy()) {
             if let Some(first) = origin.insert(out.name.clone(), path.clone()) {
                 return Err(fail!(
                     "generated module name `{}` collides: `{}` and `{}`",
@@ -218,6 +211,66 @@ fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failur
     Ok(emitted)
 }
 
+/// How a build's modules got their `.beam` files.
+struct Beams {
+    /// Modules handed to `erlc`.
+    compiled: u64,
+    /// Modules copied from the build cache.
+    reused: u64,
+}
+
+/// Gives each of `sources`, already written to `out_dir`, a `.beam` there:
+/// copied from the build cache when it holds one, else compiled by a single
+/// `erlc` run and then stored in the cache.
+fn compile(sources: &[(&str, &str)], out_dir: &Path) -> Result<Beams, Failure> {
+    let cache = BeamCache::open(&ERLC_OPTIONS);
+    let beam = |name: &str| out_dir.join(format!("{name}.beam"));
+    let mut misses: Vec<(&str, Option<String>)> = Vec::new();
+    for &(name, source) in sources {
+        let key = cache.as_ref().map(|cache| cache.key(source));
+        let hit = cache
+            .as_ref()
+            .zip(key.as_deref())
+            .is_some_and(|(cache, key)| cache.fetch(key, &beam(name)));
+        if !hit {
+            misses.push((name, key));
+        }
+    }
+    let beams = Beams {
+        compiled: misses.len() as u64,
+        reused: (sources.len() - misses.len()) as u64,
+    };
+    if misses.is_empty() {
+        return Ok(beams);
+    }
+
+    let output = Command::new("erlc")
+        .args(ERLC_OPTIONS)
+        .arg("-o")
+        .arg(out_dir)
+        .args(
+            misses
+                .iter()
+                .map(|(name, _)| out_dir.join(format!("{name}.erl"))),
+        )
+        .output()
+        .map_err(erlang_unavailable)?;
+    io::Write::write_all(&mut io::stderr(), &output.stdout)
+        .and_then(|()| io::Write::write_all(&mut io::stderr(), &output.stderr))
+        .map_err(|e| fail!("cannot write erlc output: {e}"))?;
+    if !output.status.success() {
+        return Err(fail!("erlc failed with {}", output.status));
+    }
+    if let Some(cache) = &cache {
+        for (name, key) in &misses {
+            if let Some(key) = key {
+                cache.store(key, &beam(name));
+            }
+        }
+    }
+    Ok(beams)
+}
+
 /// Runs a built program on BEAM through the generated boot module, returning
 /// the emulator's exit status.
 ///
@@ -229,7 +282,12 @@ fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failur
 /// console delivers Ctrl-C to the emulator too, where the BEAM's break
 /// handler would act on it, so the emulator is told to ignore it (`+Bi`) and
 /// the pipe is the only stop path. Nothing here is platform-specific.
-pub(crate) fn run(build: &BuildOutput, timings: &mut Timings) -> Result<i32, Failure> {
+/// `boot_args` are the boot module's init arguments, from [`boot_args`].
+pub(crate) fn run(
+    build: &BuildOutput,
+    boot_args: &[OsString],
+    timings: &mut Timings,
+) -> Result<i32, Failure> {
     let entry_module = match &build.entry {
         Some(_) => BOOT_MODULE,
         None => {
@@ -250,6 +308,7 @@ pub(crate) fn run(build: &BuildOutput, timings: &mut Timings) -> Result<i32, Fai
             .arg("run")
             .arg("-hird_stop")
             .arg("stdin")
+            .args(boot_args)
             .stdin(Stdio::piped())
             .spawn()
             .map_err(erlang_unavailable)?;
@@ -260,6 +319,30 @@ pub(crate) fn run(build: &BuildOutput, timings: &mut Timings) -> Result<i32, Fai
             .map_err(|e| fail!("cannot wait for Erlang/OTP: {e}"))
     })?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// The boot module's init arguments: `-hird_audit_file <path>` to append
+/// the audit stream to `audit_file`, `-hird_replay <path>` to replay that
+/// log. Paths are made absolute, so none reads as an emulator flag, and
+/// must be UTF-8.
+pub(crate) fn boot_args(
+    audit_file: Option<&Path>,
+    replay: Option<&Path>,
+) -> Result<Vec<OsString>, Failure> {
+    let mut args = Vec::new();
+    for (flag, what, path) in [
+        ("-hird_audit_file", "audit file", audit_file),
+        ("-hird_replay", "replay log", replay),
+    ] {
+        let Some(path) = path else { continue };
+        if path.to_str().is_none() {
+            return Err(fail!("{what} path `{}` is not valid UTF-8", path.display()));
+        }
+        let path = std::path::absolute(path)
+            .map_err(|e| fail!("cannot resolve {what} path `{}`: {e}", path.display()))?;
+        args.extend([OsString::from(flag), path.into_os_string()]);
+    }
+    Ok(args)
 }
 
 /// Installs the handler that closes the emulator's stdin — the stop
@@ -351,24 +434,20 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
     }))
 }
 
-/// Renders the boot module: starts the audit sink (appending to
-/// `audit_file` when given, stdout otherwise), registers every signature
-/// table in `table_modules`, and calls `main` with an empty
-/// handler map. With `replay` it also starts the replay cursor over that
-/// log before `main` and requires the log fully consumed after. A crash
-/// in `main` still flushes the sink before halting. Kept as
-/// generated source so the build output runs on plain `erl` without the
-/// CLI.
-fn boot_module(
-    entry: &EntryPoint,
-    table_modules: &[String],
-    audit_file: Option<&str>,
-    replay: Option<&str>,
-) -> String {
-    let sink = match audit_file {
-        Some(path) => format!("{{file, \"{}\"}}", erlang_string_escape(path)),
-        None => "stdout".to_owned(),
-    };
+/// Renders the boot module: starts the audit sink, registers every
+/// signature table in `table_modules`, and calls `main` with an empty
+/// handler map. Init arguments configure the run, so the module depends on
+/// the program alone: `-hird_audit_file <path>` appends the audit stream
+/// to that file instead of stdout, and `-hird_replay <path>` starts the
+/// replay cursor over that log before `main` and requires it fully
+/// consumed after. A crash in `main` still flushes the sink before
+/// halting. Kept as generated source so the build output runs on plain
+/// `erl` without the CLI.
+fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
+    let tables = table_modules
+        .iter()
+        .map(|module| format!("{module}:hird_tools@()"))
+        .collect::<Vec<_>>();
     let mut out = String::new();
     let _ = writeln!(out, "%% Generated by the Hir\u{f0} compiler. Do not edit.");
     let _ = writeln!(out, "-module({BOOT_MODULE}).");
@@ -376,32 +455,38 @@ fn boot_module(
     let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "%% Starts the runtime, runs the program's main function, and"
+        "%% Starts the runtime, runs the program's main function, and flushes"
     );
-    let _ = writeln!(out, "%% flushes the audit sink.");
-    let _ = writeln!(out, "main() ->");
     let _ = writeln!(
         out,
-        "    {{ok, _}} = hird_audit:start_link([{{sink, {sink}}}]),"
+        "%% the audit sink. `-hird_audit_file Path` sends the audit stream to"
     );
-    for module in table_modules {
-        let _ = writeln!(
-            out,
-            "    ok = hird_audit:register_tools({module}:hird_tools@()),"
-        );
+    let _ = writeln!(
+        out,
+        "%% Path instead of stdout; `-hird_replay Log` replays tool calls from"
+    );
+    let _ = writeln!(out, "%% Log and requires it fully consumed.");
+    let _ = writeln!(out, "main() ->");
+    let _ = writeln!(out, "    Sink = case argument(hird_audit_file) of");
+    let _ = writeln!(out, "        {{ok, Path}} -> {{file, Path}};");
+    let _ = writeln!(out, "        none -> stdout");
+    let _ = writeln!(out, "    end,");
+    let _ = writeln!(
+        out,
+        "    {{ok, _}} = hird_audit:start_link([{{sink, Sink}}]),"
+    );
+    for table in &tables {
+        let _ = writeln!(out, "    ok = hird_audit:register_tools({table}),");
     }
-    if let Some(log) = replay {
-        let tables = table_modules
-            .iter()
-            .map(|module| format!("{module}:hird_tools@()"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let _ = writeln!(
-            out,
-            "    {{ok, _}} = hird_replay:start_link(\"{}\", [{tables}]),",
-            erlang_string_escape(log)
-        );
-    }
+    let _ = writeln!(out, "    Replay = argument(hird_replay),");
+    let _ = writeln!(out, "    case Replay of");
+    let _ = writeln!(
+        out,
+        "        {{ok, Log}} -> {{ok, _}} = hird_replay:start_link(Log, [{}]);",
+        tables.join(", ")
+    );
+    let _ = writeln!(out, "        none -> ok");
+    let _ = writeln!(out, "    end,");
     let main_call = if entry.takes_map {
         format!("{}:main(#{{}})", entry.module)
     } else {
@@ -409,10 +494,21 @@ fn boot_module(
     };
     let _ = writeln!(out, "    Result = {main_call},");
     let _ = writeln!(out, "    ok = hird_audit:sync(),");
-    if replay.is_some() {
-        let _ = writeln!(out, "    ok = hird_replay:finish(),");
-    }
+    let _ = writeln!(out, "    case Replay of");
+    let _ = writeln!(out, "        {{ok, _}} -> ok = hird_replay:finish();");
+    let _ = writeln!(out, "        none -> ok");
+    let _ = writeln!(out, "    end,");
     let _ = writeln!(out, "    Result.");
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "%% The value of init argument `-Flag Value`, given at most once."
+    );
+    let _ = writeln!(out, "argument(Flag) ->");
+    let _ = writeln!(out, "    case init:get_argument(Flag) of");
+    let _ = writeln!(out, "        {{ok, [[Value]]}} -> {{ok, Value}};");
+    let _ = writeln!(out, "        error -> none");
+    let _ = writeln!(out, "    end.");
     let _ = writeln!(out);
     let _ = writeln!(
         out,
@@ -436,9 +532,4 @@ fn boot_module(
     let _ = writeln!(out, "            halt(1)");
     let _ = writeln!(out, "    end.");
     out
-}
-
-/// Escapes `\` and `"` for embedding in an Erlang string literal.
-fn erlang_string_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
 }

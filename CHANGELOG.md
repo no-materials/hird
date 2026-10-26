@@ -130,6 +130,40 @@ schedule and is not covered by these entries.
   `type`, a `type alias`, a `tool`, or an actor's message type. Each is
   now C0063.
 
+### Changed
+
+- **Builds reuse compiled modules.** Every `hird build` and `hird run`
+  handed all of a program's Erlang to `erlc` (its own modules, the nine
+  runtime modules, and the boot module), so an unchanged program paid
+  for a full compile each time, and `hird run` booted two emulators.
+  Compiled `.beam` files now go into a build cache shared by every build
+  on the machine, keyed by each module's generated Erlang and the `erlc`
+  that compiled it. A build compiles only the modules the cache lacks,
+  in one `erlc` run, and copies the rest into the output directory,
+  which still runs on plain `erl` without the CLI. A rebuild with no
+  source change starts no emulator, the runtime compiles once per Erlang
+  install, and `hird run` on a cache hit boots only the emulator that
+  runs the program. Measured side by side on the README's hello
+  program, `hird run` on a cache hit takes about 160 ms instead of
+  840 ms, and a rebuild about 6 ms instead of 650 ms; a build that finds
+  nothing cached costs what it did. The cache lives in
+  `$HIRD_CACHE_DIR`, else `hird` under `$XDG_CACHE_HOME`,
+  `%LOCALAPPDATA%`, or `~/.cache`, and deleting it is always safe.
+  `--timings` reports `modules_compiled` and `modules_reused`.
+- **`hird build` no longer takes `--audit-file` or `--replay`.** Both
+  were baked into the generated boot module, so each new path made a
+  different program to compile. The boot module now reads them from
+  init arguments at startup: `hird run` keeps both flags and passes
+  them, and a build started on plain `erl` takes
+  `-hird_audit_file <path>` and `-hird_replay <log>`.
+- **Generated Erlang names its source by file name.** The banner and
+  `%% file:line` comments carried the path the source was given by
+  (`../../demo/counter_demo.hird`), so the same module built from
+  another directory was different Erlang; they now carry the file name
+  (`counter_demo.hird`), as the effect-graph text form does. Modules
+  compile with `+deterministic`, so crash stack traces name a generated
+  file without its directory.
+
 ## [0.4.0] — 2026-09-15
 
 ### Added

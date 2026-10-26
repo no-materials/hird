@@ -222,9 +222,19 @@ const LIB: &str = "fn helper(x: Int) -> Int = x + 1";
 /// A file with a type error.
 const BAD: &str = "fn add(x: Int) -> Int = x + \"no\"";
 
+/// The `hird` binary, on the build cache every test binary shares.
+fn hird_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_hird"));
+    command.env(
+        "HIRD_CACHE_DIR",
+        Path::new(env!("CARGO_TARGET_TMPDIR")).join("hird-cache"),
+    );
+    command
+}
+
 /// Runs the `hird` binary with `args`, panicking if it cannot be spawned.
 fn hird(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_hird"))
+    hird_command()
         .args(args)
         .output()
         .expect("spawn the hird binary")
@@ -678,7 +688,7 @@ fn missing_erlang_produces_install_advice() {
     let dir = scratch("no_erlang");
     let file = write(&dir, "main.hird", PING);
     let out_dir = dir.join("out");
-    let output = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let output = hird_command()
         .args(["build", &file, "-o", &out_dir.display().to_string()])
         .env("PATH", "")
         .output()
@@ -739,7 +749,7 @@ fn run_stands_until_interrupted_then_exits_cleanly() {
     let dir = scratch("run_stands");
     let file = write(&dir, "standing.hird", STANDING);
     let audit = dir.join("audit.jsonl");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             &file,
@@ -808,7 +818,7 @@ fn run_deliberate_stop_respects_restart_dispositions() {
     let dir = scratch("run_deliberate_stop");
     let file = write(&dir, "stopping.hird", STOPPING);
     let audit = dir.join("audit.jsonl");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             &file,
@@ -910,7 +920,7 @@ fn run_group_restart(name: &str, program: &str, restarted: &str) -> String {
     let dir = scratch(name);
     let file = write(&dir, "group.hird", program);
     let audit = dir.join("audit.jsonl");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             &file,
@@ -1030,7 +1040,7 @@ fn run_exits_when_the_tree_exhausts_its_restart_budget() {
     let file = write(&dir, "exhausted.hird", EXHAUSTED);
     let audit = dir.join("audit.jsonl");
     let err_path = dir.join("stderr.txt");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             &file,
@@ -1094,7 +1104,7 @@ fn run_heartbeat_ticks_itself_until_interrupted() {
     let dir = scratch("run_heartbeat");
     let demo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/heartbeat.hird");
     let audit = dir.join("audit.jsonl");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             demo.to_str().expect("utf-8 path"),

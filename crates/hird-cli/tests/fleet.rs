@@ -19,9 +19,19 @@ fn fleet_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/agent_fleet")
 }
 
+/// The `hird` binary, on the build cache every test binary shares.
+fn hird_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_hird"));
+    command.env(
+        "HIRD_CACHE_DIR",
+        Path::new(env!("CARGO_TARGET_TMPDIR")).join("hird-cache"),
+    );
+    command
+}
+
 /// Runs the `hird` binary with `args`, panicking if it cannot be spawned.
 fn hird(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_hird"))
+    hird_command()
         .args(args)
         .output()
         .expect("spawn the hird binary")
@@ -149,7 +159,7 @@ fn fleet_stands_crashes_and_recovers() {
     }
     let dir = scratch("fleet_run");
     let audit = dir.join("audit.jsonl");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+    let mut child = hird_command()
         .args([
             "run",
             fleet_path().to_str().expect("utf-8 path"),

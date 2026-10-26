@@ -386,6 +386,20 @@ calls inside actors and `install` their implementations. Other
 effects (`Install`, `Supervise`, `Stand`, `Clock`, `Send`, `Await`, …)
 may remain on `main`.
 
+A build's output runs without the CLI:
+`erl -noshell -pa _build/hird -s hird_boot run`, adding
+`-hird_audit_file <path>` to append the audit stream to a file (what
+`hird run --audit-file` passes) and `-hird_replay <log>` to replay a
+recording (`hird run --replay`).
+
+Compiled modules are kept in a build cache shared by every build on
+the machine, keyed by each module's generated Erlang and the `erlc`
+that compiled it, so a rebuild compiles only what changed and the
+runtime compiles once per Erlang install. It lives in `$HIRD_CACHE_DIR`,
+else `hird` under `$XDG_CACHE_HOME`, `%LOCALAPPDATA%`, or `~/.cache`;
+deleting it is always safe. `--timings` reports `modules_compiled` and
+`modules_reused`.
+
 Diagnostics carry stable codes: `P####` for parse errors (catalogued
 in [`parser-diagnostics.md`](parser-diagnostics.md)) and `C####` for check errors. The wire
 format of the audit stream is specified in

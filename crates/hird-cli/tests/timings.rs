@@ -4,9 +4,9 @@
 //! `--timings`: the JSON report's counters are snapshot-tested on the demos
 //! (wall times vary run to run, so phases are checked by name only), and
 //! the text form and its `--help` documentation are checked for shape.
-//! Sources are named by relative paths, because generated Erlang embeds the
-//! path and `erl_bytes` counts it. BEAM-dependent tests are skipped (with a
-//! note) when `erlc` is not on the `PATH`.
+//! Builds start from an empty build cache of their own, so what they
+//! compile and reuse does not depend on what ran before. BEAM-dependent
+//! tests are skipped (with a note) when `erlc` is not on the `PATH`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,6 +42,15 @@ const COUNTERS: [&str; 13] = [
 /// Runs the `hird` binary with `args`, panicking if it cannot be spawned.
 fn hird(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_hird"))
+        .args(args)
+        .output()
+        .expect("spawn the hird binary")
+}
+
+/// Runs the `hird` binary with `args` on the build cache in `cache`.
+fn hird_cached(cache: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_hird"))
+        .env("HIRD_CACHE_DIR", cache)
         .args(args)
         .output()
         .expect("spawn the hird binary")
@@ -119,17 +128,26 @@ fn build_and_run_counters_on_the_counter_demo() {
         return;
     }
     let dir = scratch("timings_build_run");
+    let cache = dir.join("cache");
     let (_, path) = DEMOS[1];
     let out = dir.join("out").display().to_string();
 
-    let build = report(&hird(&["build", "--timings=json", path, "-o", &out]));
+    // Cold: everything compiles in one `erlc`. Warm: nothing does, and the
+    // run boots only its own emulator.
+    let build = report(&hird_cached(
+        &cache,
+        &["build", "--timings=json", path, "-o", &out],
+    ));
     assert_eq!(
         phases(&build),
         ["load", "parse", "check", "lower", "emit", "write", "erlc"]
     );
     insta::assert_snapshot!("build_counter_demo", counters(&build));
 
-    let run = report(&hird(&["run", "--timings=json", path, "-o", &out]));
+    let run = report(&hird_cached(
+        &cache,
+        &["run", "--timings=json", path, "-o", &out],
+    ));
     assert_eq!(
         phases(&run),
         [
