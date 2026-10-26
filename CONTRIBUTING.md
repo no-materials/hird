@@ -120,7 +120,8 @@ target/release/hird-bench tools --size 400
 the same bytes, and the program stays under `_build/hird-bench/` for
 `hird check`, the LSP, or MCP to reuse. The BEAM and CLI timings use
 the `hird` binary beside `hird-bench` (or `--hird`), so build both in
-the same profile; `--front-only` skips them.
+the same profile; `--front-only` skips them, and `--corpus-only` writes
+the program and stops.
 
 `hird check`, `build`, and `run` take `--timings` (or `--timings=json`)
 to print each phase's wall time and the pipeline's work counters —
@@ -128,6 +129,18 @@ tokens, unify calls, exhaustiveness rows and witnesses, effect-row
 merges, emulator boots, and more. Wall time is noisy; the counters are
 deterministic, so a change that moves one shows it in a diff.
 `hird check --help` defines each one.
+
+CI gates on those counters. `crates/hird-bench/counter-baselines.sh
+check` runs `hird check --timings=json` over the demos and a fixed set
+of `hird-bench` programs, and fails when a counter differs from its
+baseline in `crates/hird-bench/counter-baselines/`. A change that moves
+a counter on purpose runs `counter-baselines.sh update` and commits the
+result, so the diff shows before and after. Canaries check a shape at
+two sizes and fail when a counter grows faster than the size, the way
+exhaustiveness and effect-row work blow up; one expected to fail sits
+on the script's `known_cliffs` list until it passes, and the gate fails
+while a passing canary stays listed. The job summary shows wall time,
+which never gates. The script needs `jq`.
 
 `runtime/bench/bench.sh <scenario>` measures the Erlang runtime's hot
 paths — the audit sink, replay loading, supervised-child lookup and

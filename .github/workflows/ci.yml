@@ -322,6 +322,38 @@ jobs:
       - name: check the demo baselines
         run: demo/effect-baselines.sh check
 
+  counter-baselines:
+    name: counter baselines
+    # NOTE: Work counters are deterministic where wall time is not, so they
+    #       gate: every demo and hird-bench corpus must match its committed
+    #       counters exactly, and the canaries must grow linearly. A change
+    #       that moves a counter carries the baseline update in the same diff.
+    #       Release builds, so the wall times in the job summary mean
+    #       something; they never gate. Linux only — the counters are platform
+    #       independent.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: build hird and hird-bench
+        run: cargo build --release --locked -p hird-cli -p hird-bench
+
+      - name: check the counter baselines
+        run: crates/hird-bench/counter-baselines.sh check
+        env:
+          HIRD: target/release/hird
+          HIRD_BENCH: target/release/hird-bench
+
   # If this fails, consider changing your text or adding something to .typos.toml.
   typos:
     runs-on: ubuntu-latest

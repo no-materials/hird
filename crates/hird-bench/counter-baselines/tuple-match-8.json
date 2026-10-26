@@ -1,0 +1,15 @@
+{
+  "cst_nodes": 35,
+  "effect_row_merges": 0,
+  "emulator_boots": 0,
+  "erl_bytes": 0,
+  "exhaustiveness_rows": 16,
+  "exhaustiveness_witnesses": 20,
+  "modules": 1,
+  "modules_compiled": 0,
+  "modules_reused": 0,
+  "subst_slots": 10,
+  "tokens": 117,
+  "typed_nodes": 45,
+  "unify_calls": 38
+}

@@ -51,6 +51,9 @@ struct Args {
     /// Time only the in-process front end: no `hird` binary, no Erlang.
     #[arg(long)]
     front_only: bool,
+    /// Write the corpus, print the directory it is in, and stop: no timings.
+    #[arg(long)]
+    corpus_only: bool,
 }
 
 fn main() -> ExitCode {
@@ -84,9 +87,6 @@ fn run(args: &Args) -> Result<(), String> {
             .map_err(|e| format!("cannot locate hird-bench: {e}"))?
             .with_file_name(format!("hird{}", env::consts::EXE_SUFFIX)),
     };
-    if cfg!(debug_assertions) {
-        eprintln!("hird-bench: warning: debug build; pass --release for representative numbers");
-    }
 
     let modules = corpus::generate(args.shape, args.size, args.seed);
     let root = args.out.join(format!(
@@ -97,6 +97,13 @@ fn run(args: &Args) -> Result<(), String> {
     ));
     let src = root.join("src");
     write_corpus(&src, &modules)?;
+    if args.corpus_only {
+        println!("{}", src.display());
+        return Ok(());
+    }
+    if cfg!(debug_assertions) {
+        eprintln!("hird-bench: warning: debug build; pass --release for representative numbers");
+    }
     let lines: usize = modules.iter().map(|m| m.source.lines().count()).sum();
     let bytes: usize = modules.iter().map(|m| m.source.len()).sum();
     println!(

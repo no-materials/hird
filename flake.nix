@@ -98,6 +98,9 @@
           # evaluate grammar.js.
           tree-sitter
           nodejs
+
+          # crates/hird-bench/counter-baselines.sh reads `--timings=json`.
+          jq
         ];
 
         nightlyPkgs = [];
