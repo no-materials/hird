@@ -28,7 +28,12 @@ dispatcher.
   append-only file, in arrival order. Encoding is type-directed against
   the signature tables generated base modules expose as `hird_tools@/0`
   (every module declaring a tool or an ADT has one), registered via
-  `register_tools/1`.
+  `register_tools/1`, and runs in the calling process: the sink publishes
+  the merged table as a persistent term and only appends finished lines,
+  writing a batch once 64 KiB are buffered or 10 ms after its first line,
+  and on `sync/0`. `log/1` casts while the sink has under 8 MiB of lines
+  queued and waits in a call past that, so a burst slows its producers
+  instead of growing the sink's mailbox without bound.
 - `hird_handlers.erl` — the process-independent default-handler registry:
   `install_handler/2`, `lookup_handler/1`, `with_handlers/2`. Handler maps
   never cross the spawn boundary, so this registry is how deployments and

@@ -85,6 +85,23 @@ schedule and is not covered by these entries.
   every record logged before the VM halts is written. Exit then waits as
   long as the sink takes to drain.
 
+- **The audit sink fell behind and its queue grew without bound.** One
+  process encoded and wrote every record, a write per line: about 55,000
+  records a second with 16-byte arguments and 330 at 64 KiB, against a
+  single caller making 300,000 calls a second. Its mailbox held the
+  difference, 90,000 records and 36 MiB after a 100,000-call burst and
+  129 MiB after 2,000 calls at 64 KiB, and exit waited for all of it. Each caller now
+  encodes its own record and the sink only appends finished lines, a
+  batch per write (64 KiB, or 10 ms after the first line). A call that
+  finds 8 MiB of lines waiting at the sink waits for it, so a burst slows
+  the program instead of growing the queue. On the runtime bench (file
+  sink, 16-byte arguments) one caller writes 2.4 times as many records a
+  second as before, measured side by side, and 16 callers 1 to 1.8
+  million a second instead of about 50,000, with node memory growth under
+  20 MiB instead of 32 to 36. A record that cannot be encoded, which a
+  checked program never produces, now crashes the calling process
+  instead of the sink.
+
 - **A standing program outlived its own supervision tree.** A
   supervisor that exhausted its restart budget exited, but its signal
   sat unread in the standing process's mailbox, so the node stayed up

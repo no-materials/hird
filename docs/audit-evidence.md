@@ -31,7 +31,9 @@ that remembered to use it. Hirð's is a property of the language instead:
   fixes, so a use must fix them to known (`C0062`) and representable
   (`C0032`) types, and the call site hands them to the dispatcher. Every
   call a checked program makes encodes, and a decoded log can never mint
-  a capability.
+  a capability. The record is encoded in the calling process, so a
+  record that failed to encode anyway would crash that caller, not the
+  sink every other caller writes through.
 - **Configured at the boundary.** Where records go is decided once, where
   the program is started: the generated boot module opens the sink before
   `main` and flushes it after, on return or crash, at stdout by default
@@ -92,10 +94,13 @@ implementation does not make.
   from its own log. Crash evidence is the supervisor's business.
 - **Durability is best-effort.** Records reach the sink asynchronously and
   the generated boot module flushes it before the VM halts, whether `main`
-  returns or crashes, so neither exit loses a record. The flush waits for
-  the whole backlog, so a burst delays exit by as long as the sink takes
-  to write it. A hard halt of the VM — a kill signal, or SIGQUIT — can drop
-  records still queued.
+  returns or crashes, so neither exit loses a record. The backlog is
+  bounded: once 8 MiB of lines wait at the sink, a tool call waits for
+  the sink before it returns, so a burst slows the program down instead
+  of growing the queue, and the flush at exit waits for at most that
+  much. The sink writes in batches, each line within 10 ms of arriving.
+  A hard halt of the VM — a kill signal, or SIGQUIT — can drop records
+  still queued or buffered.
 - **Arrival order, not causal order.** The stream is ordered by arrival at
   the sink. Calls from one process appear in call order; concurrent actors
   interleave, and a record carries no ordering token beyond its
