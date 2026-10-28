@@ -3,7 +3,8 @@
 
 //! The no-argument record/replay demonstration: record one run of the
 //! embedded agent planner, then replay that one recording against variants
-//! of the program and report where each variant's decisions part from it.
+//! of the program, all at once, and report where each variant's decisions
+//! part from it.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -120,9 +121,9 @@ enum Outcome {
 }
 
 /// Records one run of the demo, replays that recording against every
-/// variant, and prints the divergence table. Everything is written under
-/// `out_dir`; nothing else on the machine is touched, and no service is
-/// contacted.
+/// variant at once, and prints the divergence table. Everything is written
+/// under `out_dir`; nothing else on the machine is touched, and no service
+/// is contacted.
 pub(crate) fn run(out_dir: &Path) -> Result<(), Failure> {
     let hird =
         std::env::current_exe().map_err(|e| fail!("cannot locate the running hird binary: {e}"))?;
@@ -154,12 +155,11 @@ pub(crate) fn run(out_dir: &Path) -> Result<(), Failure> {
         println!("  {:<NAME_WIDTH$}  {}", variant.name, variant.summary);
     }
     println!();
-    for (variant, arm) in VARIANTS.iter().zip(&arms) {
-        let outcome = replay(&hird, variant.name, arm, &recording)?;
+    for (variant, outcome) in VARIANTS.iter().zip(replay_all(&hird, &arms, &recording)) {
         println!(
             "  {:<NAME_WIDTH$}  {}",
             variant.name,
-            verdict(&outcome, calls)
+            verdict(&outcome?, calls)
         );
     }
 
@@ -193,6 +193,28 @@ fn record(hird: &Path, arm: &Arm, recording: &Path) -> Result<usize, Failure> {
     let episode = fs::read_to_string(recording)
         .map_err(|e| fail!("cannot read `{}`: {e}", recording.display()))?;
     Ok(episode.lines().count())
+}
+
+/// Replays `recording` against every arm at once, returning the outcomes
+/// in arm order. The arms share nothing but the recording, which they only
+/// read. Each replay waits on its child from a thread of its own, so no
+/// child stalls on a full output pipe while another is waited on.
+fn replay_all(hird: &Path, arms: &[Arm], recording: &Path) -> Vec<Result<Outcome, Failure>> {
+    std::thread::scope(|scope| {
+        let replays: Vec<_> = VARIANTS
+            .iter()
+            .zip(arms)
+            .map(|(variant, arm)| scope.spawn(|| replay(hird, variant.name, arm, recording)))
+            .collect();
+        replays
+            .into_iter()
+            .map(|replay| {
+                replay
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    })
 }
 
 /// Replays `recording` against `arm`, reporting where the arm's decisions

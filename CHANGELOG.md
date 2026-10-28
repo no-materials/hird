@@ -172,6 +172,14 @@ schedule and is not covered by these entries.
   compiling closes the stop channel as it does once the program runs:
   the program still starts, and a standing one stops as soon as it
   stands.
+- **`hird demo` replays its three variants at once.** After recording
+  the planner's run, the demo replayed the recording against each
+  variant one after another, although the replays share nothing but the
+  recording they read. They now run side by side, and the table still
+  prints in the same order with the same text. Measured side by side
+  (medians of 15 interleaved runs), the demo takes about 310 ms instead
+  of 560 ms with the build cache warm, and 600 ms instead of 930 ms with
+  it empty.
 - **`hird build` no longer takes `--audit-file` or `--replay`.** Both
   were baked into the generated boot module, so each new path made a
   different program to compile. The boot module now reads them from
