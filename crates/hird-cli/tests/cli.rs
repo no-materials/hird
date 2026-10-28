@@ -257,11 +257,15 @@ fn write(dir: &Path, name: &str, source: &str) -> String {
     path.display().to_string()
 }
 
-/// Whether `erlc` can be spawned (BEAM-dependent tests skip otherwise).
+/// Whether `erlc` is on `PATH` (BEAM-dependent tests skip otherwise),
+/// looked up rather than spawned: any `erlc` run boots an emulator.
 /// Setting `HIRD_REQUIRE_BEAM` refuses the skip: where Erlang is meant to
 /// be installed, a missing toolchain is a failure, not a quiet pass.
 fn erlang_available() -> bool {
-    if Command::new("erlc").arg("-version").output().is_ok() {
+    let erlc = format!("erlc{}", std::env::consts::EXE_SUFFIX);
+    let on_path = std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(&erlc).is_file()));
+    if on_path {
         return true;
     }
     assert!(
