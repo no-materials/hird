@@ -148,8 +148,10 @@ backlog_bound_blocks_the_producer_test_() ->
                 lists:seq(1, Total)),
             Self ! {produced, self()}
         end),
+        %% The producer encodes the 8 MiB it casts before it blocks, which
+        %% takes seconds on a slow host: wait up to 30 s of the 60.
         ?assert(wait_until(fun() -> lists:any(fun is_log_call/1,
-                                              queued(Sink)) end, 50)),
+                                              queued(Sink)) end, 3000)),
         Casts = length(queued(Sink)) - 1,
         ?assert(Casts < Total - 1),
         receive {produced, Producer} -> ?assert(false) after 0 -> ok end,
