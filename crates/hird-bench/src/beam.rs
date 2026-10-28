@@ -68,7 +68,8 @@ impl BuildDir {
         })
     }
 
-    /// `erlc -o <dir> <every .erl>`: the compile `hird build` runs.
+    /// `erlc -o <dir> <every .erl>`: every module compiled cold, in an
+    /// emulator of its own.
     pub(crate) fn erlc(&self) -> Result<Duration, String> {
         time(
             Command::new("erlc")

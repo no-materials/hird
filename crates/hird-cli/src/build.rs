@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Erlang emission and BEAM compilation: write generated and runtime `.erl`
-//! files into the build directory, generate the boot module, and drive
-//! `erlc`/`erl`.
+//! files into the build directory, generate the boot module, reuse `.beam`
+//! files from the build cache, and drive `erl`, whose build driver compiles
+//! the rest.
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -21,9 +22,20 @@ use crate::cache::BeamCache;
 use crate::timings::Timings;
 use crate::{Failure, fail};
 
+/// The build driver's module name: it compiles the modules a build did not
+/// find in the build cache, in the emulator that goes on to run them.
+const DRIVER_MODULE: &str = "hird_build";
+
+/// The build driver's Erlang source. It fixes the compile options, so the
+/// build cache keys every entry on it.
+const DRIVER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../runtime/hird_build.erl"
+));
+
 /// The hand-written Erlang runtime library, embedded so the compiled binary
 /// is self-contained.
-const RUNTIME: [(&str, &str); 9] = [
+const RUNTIME: [(&str, &str); 10] = [
     (
         "hird_actor",
         include_str!(concat!(
@@ -38,6 +50,7 @@ const RUNTIME: [(&str, &str); 9] = [
             "/../../runtime/hird_audit.erl"
         )),
     ),
+    (DRIVER_MODULE, DRIVER),
     (
         "hird_clock",
         include_str!(concat!(
@@ -92,12 +105,17 @@ const RUNTIME: [(&str, &str); 9] = [
 /// The generated boot module's name.
 const BOOT_MODULE: &str = "hird_boot";
 
-/// The options every `erlc` run takes: `+deterministic` keeps build paths
-/// out of a `.beam`, so one compiled in another build directory is the
-/// same file.
-const ERLC_OPTIONS: [&str; 1] = ["+deterministic"];
+/// Compiles and loads the build driver from the output directory, for a
+/// build that did not find the driver itself in the build cache: an
+/// `-eval` expression with no spaces or string literals, so no platform
+/// quotes it. It ignores `ERL_COMPILER_OPTIONS`, so options that break a
+/// compile are reported by the driver, module by module.
+const BOOTSTRAP: &str = "{ok,[[D]]}=init:get_argument(hird_out),\
+     F=filename:join(D,hird_build),\
+     {ok,M,B}=compile:noenv_file(F,[binary,deterministic]),\
+     {module,M}=code:load_binary(M,F,B)";
 
-/// The advice printed when `erlc`/`erl` are not on `PATH`.
+/// The advice printed when `erl` is not on `PATH`.
 const ERLANG_MISSING: &str =
     "Erlang/OTP not found. Install from https://www.erlang.org/ or use asdf/nix.";
 
@@ -109,19 +127,37 @@ pub(crate) struct EntryPoint {
     pub(crate) takes_map: bool,
 }
 
-/// The result of writing and compiling a build directory.
+/// A written build directory: every module's `.erl`, and the `.beam` of
+/// each the build cache held.
 pub(crate) struct BuildOutput {
     /// The build output directory.
     pub(crate) out_dir: PathBuf,
     /// The program entry point, when some module defines `fn main`.
     pub(crate) entry: Option<EntryPoint>,
+    /// The modules still to compile.
+    pending: Pending,
+    /// Modules copied from the build cache.
+    reused: u64,
+}
+
+/// The modules a build did not find in the build cache, for the build
+/// driver to compile. Paths are absolute, so none reads as an emulator
+/// flag.
+struct Pending {
+    /// The output directory the driver compiles in.
+    out_dir: PathBuf,
+    /// The modules to compile.
+    modules: Vec<String>,
+    /// The cache directory and each module's entry key, when the cache is
+    /// on.
+    cache: Option<(PathBuf, Vec<String>)>,
 }
 
 /// Emits `modules` (paired with their source paths) plus the runtime and
-/// boot module into `out_dir`, then gives every module a `.beam`: reused
-/// from the build cache when it holds one, compiled by one `erlc` run
-/// otherwise. Records the `emit`, `write`, and `erlc` phases and their
-/// counters in `timings`.
+/// boot module into `out_dir`, and copies in the `.beam` of every module
+/// the build cache holds; [`compile`] or [`run`] compiles the rest.
+/// Records the `emit`, `write`, and `reuse` phases and the module counters
+/// in `timings`.
 pub(crate) fn build(
     modules: &[(PathBuf, IrModule)],
     out_dir: &Path,
@@ -156,28 +192,15 @@ pub(crate) fn build(
         Ok(())
     })?;
 
-    let beams = timings.phase("erlc", || compile(&sources, out_dir))?;
-    timings.modules_compiled = beams.compiled;
-    timings.modules_reused = beams.reused;
-    if beams.compiled > 0 {
-        timings.emulator_boots += 1;
-    }
-
-    match beams.reused {
-        0 => eprintln!(
-            "compiled {} module(s) to {}",
-            beams.compiled,
-            out_dir.display()
-        ),
-        reused => eprintln!(
-            "compiled {} module(s) to {}, reused {reused} from the build cache",
-            beams.compiled,
-            out_dir.display()
-        ),
-    }
+    let pending = timings.phase("reuse", || reuse(&sources, out_dir))?;
+    let reused = (sources.len() - pending.modules.len()) as u64;
+    timings.modules_compiled = pending.modules.len() as u64;
+    timings.modules_reused = reused;
     Ok(BuildOutput {
         out_dir: out_dir.to_path_buf(),
         entry,
+        pending,
+        reused,
     })
 }
 
@@ -211,68 +234,116 @@ fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failur
     Ok(emitted)
 }
 
-/// How a build's modules got their `.beam` files.
-struct Beams {
-    /// Modules handed to `erlc`.
-    compiled: u64,
-    /// Modules copied from the build cache.
-    reused: u64,
+/// Copies the `.beam` of each of `sources` the build cache holds into
+/// `out_dir`, returning the rest for the build driver.
+fn reuse(sources: &[(&str, &str)], out_dir: &Path) -> Result<Pending, Failure> {
+    let cache = BeamCache::open(DRIVER);
+    let mut modules = Vec::new();
+    let mut keys = Vec::new();
+    for &(name, source) in sources {
+        let Some(cache) = &cache else {
+            modules.push(name.to_owned());
+            continue;
+        };
+        let key = cache.key(source);
+        if !cache.fetch(&key, &out_dir.join(format!("{name}.beam"))) {
+            modules.push(name.to_owned());
+            keys.push(key);
+        }
+    }
+    let cache = match cache {
+        Some(cache) => Some((absolute(cache.dir())?, keys)),
+        None => None,
+    };
+    Ok(Pending {
+        out_dir: absolute(out_dir)?,
+        modules,
+        cache,
+    })
 }
 
-/// Gives each of `sources`, already written to `out_dir`, a `.beam` there:
-/// copied from the build cache when it holds one, else compiled by a single
-/// `erlc` run and then stored in the cache.
-fn compile(sources: &[(&str, &str)], out_dir: &Path) -> Result<Beams, Failure> {
-    let cache = BeamCache::open(&ERLC_OPTIONS);
-    let beam = |name: &str| out_dir.join(format!("{name}.beam"));
-    let mut misses: Vec<(&str, Option<String>)> = Vec::new();
-    for &(name, source) in sources {
-        let key = cache.as_ref().map(|cache| cache.key(source));
-        let hit = cache
-            .as_ref()
-            .zip(key.as_deref())
-            .is_some_and(|(cache, key)| cache.fetch(key, &beam(name)));
-        if !hit {
-            misses.push((name, key));
-        }
-    }
-    let beams = Beams {
-        compiled: misses.len() as u64,
-        reused: (sources.len() - misses.len()) as u64,
-    };
-    if misses.is_empty() {
-        return Ok(beams);
-    }
+/// `path` made absolute.
+fn absolute(path: &Path) -> Result<PathBuf, Failure> {
+    std::path::absolute(path).map_err(|e| fail!("cannot resolve `{}`: {e}", path.display()))
+}
 
-    let output = Command::new("erlc")
-        .args(ERLC_OPTIONS)
-        .arg("-o")
-        .arg(out_dir)
-        .args(
-            misses
-                .iter()
-                .map(|(name, _)| out_dir.join(format!("{name}.erl"))),
-        )
-        .output()
-        .map_err(erlang_unavailable)?;
-    io::Write::write_all(&mut io::stderr(), &output.stdout)
-        .and_then(|()| io::Write::write_all(&mut io::stderr(), &output.stderr))
-        .map_err(|e| fail!("cannot write erlc output: {e}"))?;
-    if !output.status.success() {
-        return Err(fail!("erlc failed with {}", output.status));
+/// Compiles the modules `build` did not find in the build cache: the build
+/// driver compiles them in one emulator, in parallel, storing each in the
+/// cache. Starts no emulator when nothing is pending. Records the `compile`
+/// phase in `timings`.
+pub(crate) fn compile(build: &BuildOutput, timings: &mut Timings) -> Result<(), Failure> {
+    let pending = !build.pending.modules.is_empty();
+    if pending {
+        timings.emulator_boots += 1;
     }
-    if let Some(cache) = &cache {
-        for (name, key) in &misses {
-            if let Some(key) = key {
-                cache.store(key, &beam(name));
-            }
+    timings.phase("compile", || -> Result<(), Failure> {
+        if !pending {
+            return Ok(());
         }
+        // The emulator starts as erlc starts its own: only the kernel
+        // processes a compile needs, and the boot script that skips the
+        // user's `.erlang`, spelled as erlc spells it (init expands `$ROOT`;
+        // a bare name would be looked up in the working directory first).
+        // The driver writes the compiler's reports to stderr; anything the
+        // emulator prints to stdout belongs there too, as erlc's did.
+        let status = Command::new("erl")
+            .args(["+sbtu", "+A0", "-noinput", "-mode", "minimal"])
+            .args(["-boot", "$ROOT/no_dot_erlang"])
+            .arg("-pa")
+            .arg(&build.out_dir)
+            .args(driver_args(&build.pending, "build"))
+            .stdin(Stdio::null())
+            .stdout(io::stderr())
+            .status()
+            .map_err(erlang_unavailable)?;
+        if !status.success() {
+            return Err(fail!("compiling the generated Erlang failed with {status}"));
+        }
+        Ok(())
+    })?;
+    report_build(build);
+    Ok(())
+}
+
+/// The init arguments that have the build driver compile `pending`, then
+/// call its `function` (`build` halts, `run` runs the program). The driver
+/// is compiled and loaded first when it is pending itself.
+fn driver_args(pending: &Pending, function: &str) -> Vec<OsString> {
+    let mut args: Vec<OsString> = Vec::new();
+    if pending.modules.iter().any(|name| name == DRIVER_MODULE) {
+        args.extend(["-eval", BOOTSTRAP].map(OsString::from));
     }
-    Ok(beams)
+    args.extend(["-s", DRIVER_MODULE, function].map(OsString::from));
+    args.extend([OsString::from("-hird_out"), pending.out_dir.clone().into()]);
+    args.push("-hird_compile".into());
+    args.extend(pending.modules.iter().map(OsString::from));
+    if let Some((dir, keys)) = &pending.cache {
+        args.extend([OsString::from("-hird_cache"), dir.clone().into()]);
+        args.extend(keys.iter().map(OsString::from));
+    }
+    args
+}
+
+/// Prints what the build compiled and reused.
+fn report_build(build: &BuildOutput) {
+    let compiled = build.pending.modules.len();
+    match build.reused {
+        0 => eprintln!(
+            "compiled {compiled} module(s) to {}",
+            build.out_dir.display()
+        ),
+        reused => eprintln!(
+            "compiled {compiled} module(s) to {}, reused {reused} from the build cache",
+            build.out_dir.display()
+        ),
+    }
 }
 
 /// Runs a built program on BEAM through the generated boot module, returning
-/// the emulator's exit status.
+/// the emulator's exit status. Modules the build cache did not hold compile
+/// first in the same emulator, through the build driver, so a run boots one
+/// emulator whatever it compiles; a module that fails to compile exits it
+/// with status 1 before the program starts.
 ///
 /// `hird run` owns the program's stop channel: it keeps the emulator's stdin
 /// as a pipe, tells the runtime so (`-hird_stop stdin`), and closes the pipe
@@ -288,24 +359,25 @@ pub(crate) fn run(
     boot_args: &[OsString],
     timings: &mut Timings,
 ) -> Result<i32, Failure> {
-    let entry_module = match &build.entry {
-        Some(_) => BOOT_MODULE,
-        None => {
-            return Err(fail!(
-                "no `fn main` found: `hird run` needs a module defining `fn main() \u{2192} ()`"
-            ));
-        }
-    };
+    if build.entry.is_none() {
+        return Err(fail!(
+            "no `fn main` found: `hird run` needs a module defining `fn main() \u{2192} ()`"
+        ));
+    }
+    report_build(build);
     timings.emulator_boots += 1;
     let status = timings.phase("run", || -> Result<_, Failure> {
-        let mut child = Command::new("erl")
-            .arg("+Bi")
+        let mut erl = Command::new("erl");
+        erl.arg("+Bi")
             .arg("-noshell")
             .arg("-pa")
-            .arg(&build.out_dir)
-            .arg("-s")
-            .arg(entry_module)
-            .arg("run")
+            .arg(&build.out_dir);
+        if build.pending.modules.is_empty() {
+            erl.args(["-s", BOOT_MODULE, "run"]);
+        } else {
+            erl.args(driver_args(&build.pending, "run"));
+        }
+        let mut child = erl
             .arg("-hird_stop")
             .arg("stdin")
             .args(boot_args)

@@ -38,11 +38,11 @@ pub(crate) struct Timings {
     /// Bytes of Erlang generated from the program; the runtime and the boot
     /// module are not counted.
     pub(crate) erl_bytes: u64,
-    /// Erlang modules handed to `erlc`.
+    /// Erlang modules compiled.
     pub(crate) modules_compiled: u64,
     /// Erlang modules reused from an earlier build instead of compiled.
     pub(crate) modules_reused: u64,
-    /// Emulators started: each `erlc` and each `erl` boots one.
+    /// Emulators started.
     pub(crate) emulator_boots: u64,
 }
 

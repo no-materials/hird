@@ -68,6 +68,16 @@ dispatcher.
   `erlang:send_after` into the destination's cast path. The clock value
   carries its implementation; a scheduled message is not cancellable,
   and one aimed at an exited pid is dropped.
+- `hird_build.erl` — the build driver: compiles the modules a build did
+  not find in the build cache inside the emulator that goes on to run
+  them, so `hird run` boots one emulator (`run/0` then calls
+  `hird_boot:run/0`; `build/0`, for `hird build`, halts instead). The
+  launcher passes the output directory, the modules, and the cache
+  directory with one entry key per module as init arguments. Modules
+  compile in parallel, one worker per scheduler; each is written to the
+  output directory and stored in the cache aside-then-rename, and the
+  compiler's reports go to standard error in module order, never to the
+  program's standard output. Generated programs do not call it.
 
 ## Tests
 

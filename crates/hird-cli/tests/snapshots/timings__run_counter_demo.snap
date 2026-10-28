@@ -11,7 +11,7 @@ expression: counters(&run)
   "exhaustiveness_witnesses": 0,
   "modules": 1,
   "modules_compiled": 0,
-  "modules_reused": 13,
+  "modules_reused": 14,
   "subst_slots": 11,
   "tokens": 276,
   "typed_nodes": 73,

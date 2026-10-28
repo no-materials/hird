@@ -62,9 +62,10 @@ enum Command {
     /// stream to a file and `-hird_replay <LOG>` to replay a recording.
     ///
     /// Compiled modules are kept in a build cache shared by every build,
-    /// keyed by their Erlang source and the `erlc` that compiled them:
-    /// ``, else `hird` under ``,
-    /// `%LOCALAPPDATA%`, or `~/.cache`. Deleting it is always safe.
+    /// keyed by their Erlang source and the Erlang install that compiled
+    /// them: `$HIRD_CACHE_DIR`, else `hird` under `$XDG_CACHE_HOME`,
+    /// `%LOCALAPPDATA%`, or `~/.cache`. Deleting it is always safe. The
+    /// modules it lacks compile in parallel in one emulator.
     Build {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,
@@ -77,8 +78,9 @@ enum Command {
     },
     /// Build, then run on BEAM (requires a module defining `fn main`).
     ///
-    /// Builds as `hird build` does, sharing its build cache, then boots one
-    /// emulator to run the program.
+    /// Builds as `hird build` does, sharing its build cache, except that
+    /// the modules the cache lacks compile in the emulator that then runs
+    /// the program: a run boots one emulator.
     Run {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,
@@ -154,8 +156,10 @@ struct TimingsArg {
     ///
     /// Phases, in the order a command runs them: `load` (read the sources),
     /// `parse` (lexing included), `check`, `lower`, `emit` (generate
-    /// Erlang), `write` (the `.erl` files), `erlc` (the `.beam` files,
-    /// reused from the build cache or compiled), and `run` (the emulator).
+    /// Erlang), `write` (the `.erl` files), `reuse` (the `.beam` files the
+    /// build cache holds, copied out), `compile` (`build` only: the rest,
+    /// in an emulator of their own), and `run` (the emulator; it compiles
+    /// what `reuse` did not find before running the program).
     ///
     /// Counters depend only on the sources and the paths they are named by:
     /// `modules`, `tokens`, `cst_nodes`, `typed_nodes`, `unify_calls`
@@ -164,8 +168,8 @@ struct TimingsArg {
     /// `exhaustiveness_witnesses` (witness rows built), `effect_row_merges`
     /// (effects visited merging call rows into body rows), `erl_bytes`
     /// (generated Erlang; the runtime and boot module excluded),
-    /// `modules_compiled` and `modules_reused` (Erlang modules handed to
-    /// `erlc`, and copied from the build cache), and `emulator_boots`.
+    /// `modules_compiled` and `modules_reused` (Erlang modules compiled,
+    /// and copied from the build cache), and `emulator_boots`.
     #[arg(
         long,
         value_name = "FORMAT",
@@ -215,7 +219,8 @@ fn dispatch(command: Command) -> Result<ExitCode, Failure> {
             timings: report,
         } => {
             let mut timings = Timings::default();
-            build_input(&input, &out_dir, &mut timings)?;
+            let output = build_input(&input, &out_dir, &mut timings)?;
+            build::compile(&output, &mut timings)?;
             report.report(&timings);
             Ok(ExitCode::SUCCESS)
         }

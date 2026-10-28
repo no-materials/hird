@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! The build cache: compiled `.beam` files addressed by a hash of their
-//! Erlang source, the compiler that built them, and its options, shared by
-//! every build on the machine.
+//! Erlang source, the Erlang install and build driver that compiled them,
+//! and the compiler environment, shared by every build on the machine.
 
 use std::env;
 use std::ffi::OsString;
@@ -12,27 +12,30 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 /// Bumped when an entry's meaning changes, orphaning every older entry.
-const FORMAT: &str = "hird beam cache 1";
+const FORMAT: &str = "hird beam cache 2";
 
-/// Environment variables that change what `erlc` produces.
-const COMPILER_ENV: [&str; 2] = ["ERL_COMPILER_OPTIONS", "ERLC_EMULATOR"];
+/// Environment variables that change what the Erlang compiler produces.
+const COMPILER_ENV: [&str; 1] = ["ERL_COMPILER_OPTIONS"];
 
 /// The cache directory, its compiler fingerprint folded into a hash prefix.
 #[derive(Debug)]
 pub(crate) struct BeamCache {
     /// Where entries live: `<root>/beam`.
     dir: PathBuf,
-    /// The hash state after the format, `erlc` fingerprint, options, and
-    /// compiler environment; each key continues it with a module's source.
+    /// The hash state after the format, `erl` fingerprint, build driver,
+    /// and compiler environment; each key continues it with a module's
+    /// source.
     prefix: Fnv128,
 }
 
 impl BeamCache {
-    /// The cache for `erlc` run with `options`, created if missing. `None`
-    /// when no cache directory or `erlc` can be found; a directory that
-    /// cannot be created is warned about.
-    pub(crate) fn open(options: &[&str]) -> Option<Self> {
-        let erlc = fingerprint(&find_on_path("erlc")?)?;
+    /// The cache for modules compiled in the `erl` on `PATH` by the build
+    /// driver whose Erlang source is `driver` (it fixes the compile
+    /// options), created if missing. `None` when no cache directory or
+    /// `erl` can be found; a directory that cannot be created is warned
+    /// about.
+    pub(crate) fn open(driver: &str) -> Option<Self> {
+        let erl = fingerprint(&find_on_path("erl")?)?;
         let dir = root()?.join("beam");
         if let Err(e) = fs::create_dir_all(&dir) {
             eprintln!(
@@ -43,10 +46,8 @@ impl BeamCache {
         }
         let mut prefix = Fnv128::new();
         prefix.field(FORMAT.as_bytes());
-        prefix.field(&erlc);
-        for option in options {
-            prefix.field(option.as_bytes());
-        }
+        prefix.field(&erl);
+        prefix.field(driver.as_bytes());
         for var in COMPILER_ENV {
             prefix.field(env::var_os(var).unwrap_or_default().as_encoded_bytes());
         }
@@ -65,17 +66,10 @@ impl BeamCache {
         fs::copy(self.entry(key), beam).is_ok()
     }
 
-    /// Stores the compiled `beam` as entry `key`, best effort: written
-    /// aside and renamed into place, so a reader never sees half an entry.
-    pub(crate) fn store(&self, key: &str, beam: &Path) {
-        let entry = self.entry(key);
-        if entry.exists() {
-            return;
-        }
-        let staged = self.dir.join(format!("{key}.{}.tmp", std::process::id()));
-        if fs::copy(beam, &staged).is_err() || fs::rename(&staged, &entry).is_err() {
-            let _ = fs::remove_file(&staged);
-        }
+    /// Where entries live. The build driver stores each module it compiles
+    /// here as `<key>.beam`, written aside and renamed into place.
+    pub(crate) fn dir(&self) -> &Path {
+        &self.dir
     }
 
     /// The path of entry `key`.
@@ -107,10 +101,10 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
-/// What identifies the Erlang install behind `erlc` without booting it:
+/// What identifies the Erlang install behind `erl` without booting it:
 /// the resolved executable's path, size, and modification time.
-fn fingerprint(erlc: &Path) -> Option<Vec<u8>> {
-    let resolved = fs::canonicalize(erlc).ok()?;
+fn fingerprint(erl: &Path) -> Option<Vec<u8>> {
+    let resolved = fs::canonicalize(erl).ok()?;
     let meta = fs::metadata(&resolved).ok()?;
     let mtime = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
     let mut out = OsString::from(resolved).into_encoded_bytes();
@@ -151,11 +145,12 @@ impl Fnv128 {
 mod tests {
     use super::*;
 
-    /// A cache in `dir` with a fixed fingerprint.
-    fn cache(dir: &Path, erlc: &[u8]) -> BeamCache {
+    /// A cache in `dir` with a fixed fingerprint and build driver.
+    fn cache(dir: &Path, erl: &[u8], driver: &str) -> BeamCache {
         let mut prefix = Fnv128::new();
         prefix.field(FORMAT.as_bytes());
-        prefix.field(erlc);
+        prefix.field(erl);
+        prefix.field(driver.as_bytes());
         BeamCache {
             dir: dir.to_path_buf(),
             prefix,
@@ -176,12 +171,14 @@ mod tests {
     }
 
     #[test]
-    fn keys_follow_source_and_compiler() {
+    fn keys_follow_source_compiler_and_driver() {
         let dir = Path::new("unused");
-        let a = cache(dir, b"/otp-27/bin/erlc");
+        let a = cache(dir, b"/otp-27/bin/erl", "-module(hird_build).");
         assert_eq!(a.key("-module(m)."), a.key("-module(m)."));
         assert_ne!(a.key("-module(m)."), a.key("-module(n)."));
-        let b = cache(dir, b"/otp-28/bin/erlc");
+        let b = cache(dir, b"/otp-28/bin/erl", "-module(hird_build).");
         assert_ne!(a.key("-module(m)."), b.key("-module(m)."));
+        let c = cache(dir, b"/otp-27/bin/erl", "-module(hird_build). %% edited");
+        assert_ne!(a.key("-module(m)."), c.key("-module(m)."));
     }
 }

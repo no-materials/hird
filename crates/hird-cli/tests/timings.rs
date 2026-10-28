@@ -136,15 +136,17 @@ fn build_and_run_counters_on_the_counter_demo() {
     let (_, path) = DEMOS[1];
     let out = dir.join("out").display().to_string();
 
-    // Cold: everything compiles in one `erlc`. Warm: nothing does, and the
-    // run boots only its own emulator.
+    // Cold: everything compiles in one emulator. Warm: nothing does, and
+    // the run boots only its own emulator.
     let build = report(&hird_cached(
         &cache,
         &["build", "--timings=json", path, "-o", &out],
     ));
     assert_eq!(
         phases(&build),
-        ["load", "parse", "check", "lower", "emit", "write", "erlc"]
+        [
+            "load", "parse", "check", "lower", "emit", "write", "reuse", "compile"
+        ]
     );
     insta::assert_snapshot!("build_counter_demo", counters(&build));
 
@@ -155,7 +157,7 @@ fn build_and_run_counters_on_the_counter_demo() {
     assert_eq!(
         phases(&run),
         [
-            "load", "parse", "check", "lower", "emit", "write", "erlc", "run"
+            "load", "parse", "check", "lower", "emit", "write", "reuse", "run"
         ]
     );
     insta::assert_snapshot!("run_counter_demo", counters(&run));

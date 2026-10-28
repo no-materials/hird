@@ -372,8 +372,8 @@ restart makes sense, it is a crash. The normative treatment is in
 | Command | What it does |
 |---|---|
 | `hird check <input>` | Parse and type-check; print diagnostics. |
-| `hird build <input>` | Check, emit Erlang source, compile with `erlc` into `_build/hird/`. |
-| `hird run <input>` | Build, then run on BEAM via the boot module. |
+| `hird build <input>` | Check, emit Erlang source, compile it to `.beam` files in `_build/hird/`. |
+| `hird run <input>` | Build, then run on BEAM via the boot module, compiling in the same emulator. |
 | `hird emit-ast <input> [--json]` | Dump the typed IR of one file. |
 | `hird emit-effect-graph <input> [--json]` | Dump the actor/effect graph: actors, mailboxes, per-handler rows, supervisors, tools, function rows. JSON is keyed by module; see [`effect-graph.md`](effect-graph.md). |
 | `hird effect-diff <baseline> <input> [--json] [--exact]` | Diff the effect graph against a committed baseline; exit nonzero when effect reach widens, or with `--exact` on any drift. See [`effect-graph.md`](effect-graph.md). |
@@ -393,9 +393,11 @@ A build's output runs without the CLI:
 recording (`hird run --replay`).
 
 Compiled modules are kept in a build cache shared by every build on
-the machine, keyed by each module's generated Erlang and the `erlc`
-that compiled it, so a rebuild compiles only what changed and the
-runtime compiles once per Erlang install. It lives in `$HIRD_CACHE_DIR`,
+the machine, keyed by each module's generated Erlang and the Erlang
+install that compiled it, so a rebuild compiles only what changed and
+the runtime compiles once per Erlang install. `hird run` compiles what
+the cache lacks in the emulator that then runs the program, so an
+edit-and-run boots one emulator. It lives in `$HIRD_CACHE_DIR`,
 else `hird` under `$XDG_CACHE_HOME`, `%LOCALAPPDATA%`, or `~/.cache`;
 deleting it is always safe. `--timings` reports `modules_compiled` and
 `modules_reused`.

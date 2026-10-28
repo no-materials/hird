@@ -18,12 +18,12 @@ const HELLO: &str = "tool Say : { message: String } -> ()\n\
      fn main() -> () ! {} =\n\
        handle { Tool<Say> -> quiet_say } in say({ message: \"hello\" })\n";
 
-/// Modules a build of [`HELLO`] produces: its base module, the 9 runtime
-/// modules, and the boot module.
-const HELLO_MODULES: u64 = 11;
+/// Modules a build of [`HELLO`] produces: its base module, the 10 runtime
+/// modules (the build driver among them), and the boot module.
+const HELLO_MODULES: u64 = 12;
 
 /// The runtime modules every build carries.
-const RUNTIME_MODULES: u64 = 9;
+const RUNTIME_MODULES: u64 = 10;
 
 /// A fresh scratch directory for one test, holding an empty `cache`.
 fn scratch(name: &str) -> PathBuf {
@@ -93,7 +93,7 @@ fn utf8(p: &Path) -> &str {
 }
 
 #[test]
-fn a_second_build_spawns_no_erlc() {
+fn a_second_build_boots_no_emulator() {
     if !erlang_available() {
         eprintln!("skipping: erlc not found on PATH");
         return;
@@ -171,9 +171,10 @@ fn an_edit_recompiles_only_its_module() {
         (HELLO_MODULES, 0, 1)
     );
 
+    // The run compiles the edited module in the emulator that runs it.
     write(&dir, "hello.hird", &HELLO.replace("hello", "goodbye"));
     let edited = hird(&dir, &["run", &file, "-o", utf8(&out)]);
-    assert_eq!(counts(&edited), (1, HELLO_MODULES - 1, 2));
+    assert_eq!(counts(&edited), (1, HELLO_MODULES - 1, 1));
     assert!(
         String::from_utf8_lossy(&edited.stdout).contains("\"message\":\"goodbye\""),
         "the run must load the recompiled module: {}",
@@ -219,7 +220,7 @@ fn recording_and_replaying_reuse_one_build() {
             utf8(&recording),
         ],
     );
-    assert_eq!(counts(&record), (HELLO_MODULES, 0, 2));
+    assert_eq!(counts(&record), (HELLO_MODULES, 0, 1));
     let replay = hird(
         &dir,
         &[
@@ -294,4 +295,52 @@ fn an_unusable_cache_builds_everything() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+#[test]
+fn a_module_that_fails_to_compile_fails_the_command() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let dir = scratch("cache_compile_error");
+    let file = write(&dir, "hello.hird", HELLO);
+    // A parse transform that does not exist fails every module's compile.
+    let failing = |command: &str| {
+        Command::new(env!("CARGO_BIN_EXE_hird"))
+            .env("HIRD_CACHE_DIR", dir.join("cache"))
+            .env(
+                "ERL_COMPILER_OPTIONS",
+                "[{parse_transform,no_such_transform}]",
+            )
+            .current_dir(&dir)
+            .args([command, &file, "-o", utf8(&dir.join("out"))])
+            .output()
+            .expect("spawn the hird binary")
+    };
+
+    for (command, message) in [
+        ("run", None),
+        ("build", Some("compiling the generated Erlang failed")),
+    ] {
+        let output = failing(command);
+        let err = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{command}: {err}");
+        assert!(output.stdout.is_empty(), "{command}: stdout stays clean");
+        assert!(
+            err.contains("hird_hello.erl: undefined parse transform 'no_such_transform'"),
+            "{command}: stderr: {err}"
+        );
+        if let Some(message) = message {
+            assert!(err.contains(message), "{command}: stderr: {err}");
+        }
+    }
+    let cached = fs::read_dir(dir.join("cache").join("beam"))
+        .expect("list the cache")
+        .count();
+    assert_eq!(cached, 0, "a module that failed to compile is not cached");
+    assert!(
+        !dir.join("erl_crash.dump").exists(),
+        "the driver reports the failure itself"
+    );
 }

@@ -137,10 +137,10 @@ schedule and is not covered by these entries.
   runtime modules, and the boot module), so an unchanged program paid
   for a full compile each time, and `hird run` booted two emulators.
   Compiled `.beam` files now go into a build cache shared by every build
-  on the machine, keyed by each module's generated Erlang and the `erlc`
-  that compiled it. A build compiles only the modules the cache lacks,
-  in one `erlc` run, and copies the rest into the output directory,
-  which still runs on plain `erl` without the CLI. A rebuild with no
+  on the machine, keyed by each module's generated Erlang and the Erlang
+  install that compiled it. A build compiles only the modules the cache
+  lacks and copies the rest into the output directory, which still runs
+  on plain `erl` without the CLI. A rebuild with no
   source change starts no emulator, the runtime compiles once per Erlang
   install, and `hird run` on a cache hit boots only the emulator that
   runs the program. Measured side by side on the README's hello
@@ -150,6 +150,28 @@ schedule and is not covered by these entries.
   `$HIRD_CACHE_DIR`, else `hird` under `$XDG_CACHE_HOME`,
   `%LOCALAPPDATA%`, or `~/.cache`, and deleting it is always safe.
   `--timings` reports `modules_compiled` and `modules_reused`.
+- **`hird run` boots one emulator, even when it compiles.** A run with
+  anything to compile booted an emulator for `erlc` and then another for
+  the program, so every edit-and-run paid for two boots although only
+  the edited module missed the build cache. A build driver in the
+  runtime, `hird_build`, now compiles the missing modules inside the
+  emulator that then runs the program, in parallel across schedulers,
+  and stores them in the cache; `hird build` starts the same driver in
+  an emulator of its own and halts. `erlc` is no longer run at all.
+  Compiler warnings and errors still go to stderr, in module order,
+  never into the program's stdout, and a module that fails to compile
+  ends the run with status 1 before the program starts. Measured side
+  by side (medians of 15 interleaved runs): an edit-and-run of the
+  README's hello program takes 362 ms instead of 528 ms, and of the demo
+  planner 379 ms instead of 543 ms; a run with nothing cached takes
+  about 630 ms instead of 860 ms. A one-module `hird build` costs 10 to
+  20 ms more than `erlc` did, the difference in how the two emulators
+  are launched. `--timings` replaces the `erlc` phase with `reuse`
+  (copying from the cache) and, for `hird build`, `compile`; under
+  `hird run`, compiling counts toward `run`. Ctrl-C while a run is still
+  compiling closes the stop channel as it does once the program runs:
+  the program still starts, and a standing one stops as soon as it
+  stands.
 - **`hird build` no longer takes `--audit-file` or `--replay`.** Both
   were baked into the generated boot module, so each new path made a
   different program to compile. The boot module now reads them from

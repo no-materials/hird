@@ -10,7 +10,7 @@ expression: counters(&build)
   "exhaustiveness_rows": 3,
   "exhaustiveness_witnesses": 0,
   "modules": 1,
-  "modules_compiled": 13,
+  "modules_compiled": 14,
   "modules_reused": 0,
   "subst_slots": 11,
   "tokens": 276,
