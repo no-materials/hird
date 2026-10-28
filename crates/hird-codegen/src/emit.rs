@@ -31,7 +31,8 @@
 //!   of a generic tool's type parameters (`[]` for any other tool), matched
 //!   out of the use's instantiated type. `Caller` is a binary literal naming
 //!   the enclosing form (`"Module.function"`, `"Actor.init"`, or
-//!   `"Actor.handle_msg/Ctor"`), statically known at every dispatch site.
+//!   `"Actor.handle_msg/Ctor"`), statically known at every dispatch site. The
+//!   dispatcher qualifies it with the calling process's identity.
 //! - A module declaring a tool or an ADT also emits a `hird_tools@/0`
 //!   signature table — wire names, type-parameter counts, and value shapes
 //!   for its tools (a generic tool's parameters as `{param, N}`), and
@@ -48,19 +49,23 @@
 //! `ok`. `match` becomes `case`; `let` becomes a match expression, wrapped in
 //! `begin … end` when it sits in expression position. The messaging
 //! primitives lower per the actor mapping: `spawn` to the actor module's
-//! `start_link`, `send` to `gen_server:cast`, `request` to `gen_server:call`
+//! `start_link`, given the identity `hird_process:spawned/1` names the child
+//! by, `send` to `gen_server:cast`, `request` to `gen_server:call`
 //! with its timeout (5000 ms unless given), `reply` to `gen_server:reply`,
 //! `clock` to `hird_clock:real`, `schedule` to `hird_clock:schedule` (a
 //! delayed cast), `self` to `self()`, and `crash!` to `erlang:error`.
 //!
 //! # Actor modules
 //!
-//! An actor emits a `gen_server` behaviour module exporting `start_link` (at
-//! the init arity) and the three required callbacks. Dispatch is per message
-//! constructor: a constructor whose declaration carries a `ReplyTo` field is
-//! received by a `handle_call` clause — the payload is the bare constructor
-//! atom, the reply channel binds `From` — and every other constructor by a
-//! `handle_cast` clause matching its ADT wire shape. Every clause hands the
+//! An actor emits a `gen_server` behaviour module exporting `start_link` (the
+//! new process's identity, then the init parameters) and the three required
+//! callbacks; `init` names the process (`hird_process:name/1`) before the
+//! init body runs, so every tool call it makes is recorded under that
+//! identity. Dispatch is per message constructor: a constructor whose
+//! declaration carries a `ReplyTo` field is received by a `handle_call`
+//! clause — the payload is the bare constructor atom, the reply channel binds
+//! `From` — and every other constructor by a `handle_cast` clause matching
+//! its ADT wire shape. Every clause hands the
 //! body's `Next` outcome to `hird_actor:outcome/2` with the incoming state
 //! (aliased in the head): `Continue(next)` becomes `{noreply, Next}`,
 //! `Stop` becomes `{stop, normal, State}` — reason `normal`, so a deliberate
@@ -76,10 +81,10 @@
 //! `start_link/0` — registering the process as `{local, Module}` — and
 //! `init/1`, which builds the flags map (strategy rendered verbatim,
 //! intensity, period) and one child-spec map per child: id, a start MFA
-//! through the actor module's `start_link/1`, the restart disposition, and an
-//! explicit `worker` type (`shutdown` is left to the OTP default). Children
-//! stay unregistered; `start_args` is pure, so it renders against no in-scope
-//! handler map.
+//! through the actor module's `start_link` with the child's identity
+//! (`"Sup/id"`), the restart disposition, and an explicit `worker` type
+//! (`shutdown` is left to the OTP default). Children stay unregistered;
+//! `start_args` is pure, so it renders against no in-scope handler map.
 
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -657,7 +662,7 @@ impl<'a> Emitter<'a> {
         out.push_str("-behaviour(gen_server).\n");
         out.push_str(&format!(
             "-export([start_link/{}]).\n",
-            actor.init.params.len()
+            actor.init.params.len() + 1
         ));
         out.push_str("-export([init/1, handle_call/3, handle_cast/2]).\n");
         self.start_link_form(actor, &mut out);
@@ -668,7 +673,8 @@ impl<'a> Emitter<'a> {
         out
     }
 
-    /// The `start_link` form: the init parameters at surface arity, passed to
+    /// The `start_link` form: the new process's identity (`hird_process`)
+    /// and the init parameters at surface arity, passed to
     /// `gen_server:start_link` packed as the single `init/1` argument.
     fn start_link_form(&self, actor: &IrActorDef, out: &mut String) {
         let mut cx = FnCx::default();
@@ -678,15 +684,20 @@ impl<'a> Emitter<'a> {
             .iter()
             .map(|p| cx.fresh_var(&p.name))
             .collect();
+        let identity = cx.fresh_internal("Process");
+        let heads: Vec<&str> = core::iter::once(identity.as_str())
+            .chain(params.iter().map(String::as_str))
+            .collect();
         out.push_str(&format!(
-            "\nstart_link({}) ->\n{}gen_server:start_link(?MODULE, {}, []).\n",
-            params.join(", "),
+            "\nstart_link({}) ->\n{}gen_server:start_link(?MODULE, {{{identity}, {}}}, []).\n",
+            heads.join(", "),
             ind(1),
             init_arg(&params)
         ));
     }
 
-    /// The `init/1` callback: unpack the init parameters, run the Hirð init
+    /// The `init/1` callback: name the process with the identity its
+    /// `start_link` was given, unpack the init parameters, run the Hirð init
     /// body, and wrap the initial state in `{ok, _}`.
     fn init_form(&self, actor: &IrActorDef, out: &mut String) {
         let mut cx = FnCx::default();
@@ -708,10 +719,11 @@ impl<'a> Emitter<'a> {
         }
         let body = self.expr(&actor.init.body, &env, &mut cx, 1, Ctx::Expr);
         let heads: Vec<String> = params.iter().map(|p| cx.head_var(p)).collect();
+        let identity = cx.fresh_internal("Process");
         out.push_str(&format!(
-            "\ninit({}) ->\n{}{{ok, {body}}}.\n",
+            "\ninit({{{identity}, {}}}) ->\n{i}ok = hird_process:name({identity}),\n{i}{{ok, {body}}}.\n",
             init_arg(&heads),
-            ind(1)
+            i = ind(1)
         ));
     }
 
@@ -859,10 +871,10 @@ impl<'a> Emitter<'a> {
     }
 
     /// One child-spec map: id, a start MFA through the actor module's
-    /// `start_link/1` (`start_args` is pure, so it renders against no
-    /// in-scope handler map), the restart disposition, and an explicit
-    /// `worker` type (`shutdown` is left to the OTP default). Children stay
-    /// unregistered.
+    /// `start_link/2` with the child's identity `Sup/id` (`start_args` is
+    /// pure, so it renders against no in-scope handler map), the restart
+    /// disposition, and an explicit `worker` type (`shutdown` is left to the
+    /// OTP default). Children stay unregistered.
     fn child_spec(&self, sup: &str, child: &IrChildSpec, cx: &mut FnCx) -> String {
         let env = Env {
             caller: format!("{sup}.init"),
@@ -872,12 +884,13 @@ impl<'a> Emitter<'a> {
         format!(
             "#{{\n\
              {i}id => {},\n\
-             {i}start => {{{}, start_link, [{arg}]}},\n\
+             {i}start => {{{}, start_link, [{}, {arg}]}},\n\
              {i}restart => {},\n\
              {i}type => worker\n\
              {}}}",
             atom(&child.id),
             erlang_module_name(&child.actor),
+            identity_literal(&format!("{sup}/{}", child.id)),
             atom(&child.restart),
             ind(2),
             i = ind(3),
@@ -905,12 +918,20 @@ impl<'a> Emitter<'a> {
                     .map(|a| self.expr(a, env, cx, indent, Ctx::Expr))
                     .collect();
                 let pid = cx.fresh_internal("Pid");
+                let identity = cx.fresh_internal("Process");
+                let name = format!(
+                    "{identity} = hird_process:spawned({}),",
+                    identity_literal(&spawn.actor)
+                );
                 let start = format!(
                     "{{ok, {pid}}} = {}:start_link({}),",
                     erlang_module_name(&spawn.actor),
-                    args.join(", ")
+                    core::iter::once(identity)
+                        .chain(args)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
-                sequence(&[start, pid], indent, ctx)
+                sequence(&[name, start, pid], indent, ctx)
             }
             IrExpr::Supervise(supervise) => {
                 let start = format!(
@@ -1721,6 +1742,13 @@ fn type_atom(ty: &Type) -> String {
 /// need escaping inside a string literal.
 fn caller_literal(env: &Env) -> String {
     format!("<<\"{}\"/utf8>>", env.caller)
+}
+
+/// A process identity, or the actor-name part of one, as an Erlang binary
+/// literal. Like caller ids, identities are built from Hirð identifiers
+/// and `/`, none of which need escaping.
+fn identity_literal(identity: &str) -> String {
+    format!("<<\"{identity}\"/utf8>>")
 }
 
 /// The in-scope handler map, or the empty map in a pure context.

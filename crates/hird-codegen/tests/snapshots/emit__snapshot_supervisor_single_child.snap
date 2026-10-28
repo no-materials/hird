@@ -21,7 +21,7 @@ init([]) ->
     ChildSpecs = [
         #{
             id => planner,
-            start => {hird_planner, start_link, [hird_solo:default_config()]},
+            start => {hird_planner, start_link, [<<"PlannerSup/planner"/utf8>>, hird_solo:default_config()]},
             restart => permanent,
             type => worker
         }

@@ -3,12 +3,15 @@
 
 //! Replay-driver integration tests: the golden planner log replayed green
 //! against the demo tool signatures, divergence reports rendered
-//! actionably, and the property that any recorded run replays green
-//! against itself.
+//! actionably, and the properties that any recorded run replays green
+//! against itself, and that a run of concurrent processes does so in any
+//! interleaving that keeps each process's calls in order.
+
+use std::collections::VecDeque;
 
 use hird_ast::{AstNode, SourceFile};
 use hird_check::CheckedFile;
-use hird_check::replay::{ReplayCursor, ToolTable, load_log};
+use hird_check::replay::{ReplayCursor, ToolTable, load_log, process_of};
 use hird_check::wire::{
     AdtTable, AuditSink, InvocationRecord, JsonLinesSink, ToolResult, WireValue,
 };
@@ -60,7 +63,7 @@ fn the_golden_log_replays_green() {
     let mut cursor = ReplayCursor::new(&log);
     for record in &log {
         let result = cursor
-            .offer(&record.tool, &record.args)
+            .offer(process_of(&record.caller), &record.tool, &record.args)
             .expect("in-order replay is green");
         assert_eq!(result, &record.result);
     }
@@ -75,7 +78,7 @@ fn cursor_at(log: &[InvocationRecord], consumed: usize) -> ReplayCursor<'_> {
     let mut cursor = ReplayCursor::new(log);
     for record in &log[..consumed] {
         cursor
-            .offer(&record.tool, &record.args)
+            .offer(process_of(&record.caller), &record.tool, &record.args)
             .expect("the prefix replays green");
     }
     cursor
@@ -87,7 +90,7 @@ fn an_exhausted_log_renders_the_offered_call() {
     let log = load_log(GOLDEN_LOG, &tools, &adts).expect("the golden log loads");
     let mut cursor = cursor_at(&log, log.len());
     let report = cursor
-        .offer("ReadRepo", &log[0].args)
+        .offer(None, "ReadRepo", &log[0].args)
         .expect_err("the log is exhausted");
     insta::assert_snapshot!(report);
 }
@@ -102,7 +105,7 @@ fn a_tool_mismatch_renders_expected_and_offered_calls() {
         ("title", WireValue::string("Flaky CI")),
     ]);
     let report = cursor
-        .offer("CreateTicket", &args)
+        .offer(None, "CreateTicket", &args)
         .expect_err("the log expects ReadRepo");
     insta::assert_snapshot!(report);
 }
@@ -114,7 +117,7 @@ fn an_args_mismatch_renders_both_args() {
     let mut cursor = cursor_at(&log, 0);
     let args = WireValue::record([("path", WireValue::string("/other/repo"))]);
     let report = cursor
-        .offer("ReadRepo", &args)
+        .offer(None, "ReadRepo", &args)
         .expect_err("the args differ");
     insta::assert_snapshot!(report);
 }
@@ -208,9 +211,48 @@ proptest! {
         prop_assert_eq!(&log, &records);
         let mut cursor = ReplayCursor::new(&log);
         for record in &records {
-            match cursor.offer(&record.tool, &record.args) {
+            match cursor.offer(process_of(&record.caller), &record.tool, &record.args) {
                 Ok(result) => prop_assert_eq!(result, &record.result),
                 Err(report) => prop_assert!(false, "in-order replay diverged: {}", report),
+            }
+        }
+        prop_assert_eq!(cursor.remaining(), 0);
+    }
+}
+
+/// The number of processes the concurrent-run property spreads calls over.
+const PROCESSES: usize = 3;
+
+proptest! {
+    /// A run of concurrent processes replays green in any interleaving
+    /// that keeps each process's own calls in order: streams are matched
+    /// separately, so how the log orders calls across processes is not
+    /// part of what replay checks. `picks` steers which process offers
+    /// next, falling through to the next one with calls left.
+    #[test]
+    fn concurrent_runs_replay_green_in_any_interleaving(
+        calls in prop::collection::vec((arb_record(), 0..PROCESSES), 0..12),
+        picks in prop::collection::vec(0..PROCESSES, 12),
+    ) {
+        let mut streams = vec![VecDeque::new(); PROCESSES];
+        let mut records = Vec::new();
+        for (position, (call, process)) in calls.into_iter().enumerate() {
+            streams[process].push_back(position);
+            records.push(InvocationRecord {
+                caller: format!("Planner.plan_repo@Sup/p{process}"),
+                ..call
+            });
+        }
+        let mut cursor = ReplayCursor::new(&records);
+        for pick in picks.into_iter().take(records.len()) {
+            let stream = (0..PROCESSES)
+                .map(|k| (pick + k) % PROCESSES)
+                .find(|&p| !streams[p].is_empty())
+                .expect("a call is left while picks remain");
+            let record = &records[streams[stream].pop_front().expect("non-empty")];
+            match cursor.offer(process_of(&record.caller), &record.tool, &record.args) {
+                Ok(result) => prop_assert_eq!(result, &record.result),
+                Err(report) => prop_assert!(false, "interleaved replay diverged: {}", report),
             }
         }
         prop_assert_eq!(cursor.remaining(), 0);

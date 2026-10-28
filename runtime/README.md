@@ -19,9 +19,10 @@ dispatcher.
   While a replay cursor is running, the dispatcher instead consults it for
   every call — no handler in the program can shadow the log. Every
   invocation — mocked, real, or replayed — is captured as an invocation
-  record and sent to the audit sink. A handler signals a domain failure
-  by throwing `{hird_exn, Error}`: the dispatcher records an
-  `{err, Error}` result and rethrows; any other exception is a crash,
+  record and sent to the audit sink, its caller id qualified with the
+  calling process's identity (`Caller@Process`). A handler signals a
+  domain failure by throwing `{hird_exn, Error}`: the dispatcher records
+  an `{err, Error}` result and rethrows; any other exception is a crash,
   propagated untouched and unrecorded.
 - `hird_audit.erl` — the audit log sink: a `gen_server` writing canonical
   JSON lines (the wire format of `docs/tool-effects.md`) to stdout or an
@@ -45,10 +46,18 @@ dispatcher.
   the decoder round-trips them.
 - `hird_replay.erl` — the replay cursor: a `gen_server` holding a recorded
   audit log, decoded type-directedly at startup — a generic tool's
-  records when their call is offered, at its type arguments — and matched
-  strict-sequentially against the program's tool dispatches. Any mismatch
-  is a structured divergence the dispatcher raises as a crash;
-  `finish/0` reports a log the run did not fully consume.
+  records when their call is offered, at its type arguments — and split
+  into one stream per process, the identity each record's caller names.
+  `offer/4` matches a process's dispatch strict-sequentially against its
+  own stream; streams interleave freely. Any mismatch is a structured
+  divergence the dispatcher raises as a crash; `finish/0` reports a log
+  the run did not fully consume.
+- `hird_process.erl` — process identity: the run-stable name the
+  dispatcher records and replay matches by — `main`, `Sup/child` for a
+  supervised child, `Spawner/Actor#N` for a spawned actor. Generated code
+  names each process once, before its first tool call (`name/1`: the
+  boot module names `main`, an actor's `init` the identity its
+  `start_link` was given), and `spawned/1` names a spawn's child.
 - `hird_sup_util.erl` — supervisor utilities: `child_pid/2` looks up an
   unregistered supervised child's pid. Generated supervisor modules carry
   their child specs inline, so nothing more is needed here.

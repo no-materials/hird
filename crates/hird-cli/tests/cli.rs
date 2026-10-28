@@ -5,6 +5,7 @@
 //! entry-point and Erlang-detection error paths. BEAM-dependent tests are
 //! skipped (with a note) when `erlc` is not on the `PATH`.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -392,7 +393,10 @@ fn run_executes_on_beam_and_audits_tool_calls() {
         out.contains("\"result\":{\"ok\":\"pong\"}"),
         "stdout: {out}"
     );
-    assert!(out.contains("\"caller\":\"Main.main\""), "stdout: {out}");
+    assert!(
+        out.contains("\"caller\":\"Main.main@main\""),
+        "stdout: {out}"
+    );
 }
 
 #[test]
@@ -609,6 +613,158 @@ fn run_replay_rejects_a_tampered_log() {
     assert!(err.contains("replay_divergence"), "stderr: {err}");
     assert!(err.contains("args_mismatch"), "stderr: {err}");
     assert!(err.contains("position => 0"), "stderr: {err}");
+}
+
+/// Two supervised instances of one actor whose calls finish out of start
+/// order: `main` sets the slow child working first, but the fast child's
+/// call is logged first. Both inits call the tool too, so dispatch is
+/// warm before the race and does not hold either worker back.
+const RACE: &str = "type St = St(Int)\n\
+     tool Work : { n: Int } -> Int\n\
+     fn spin(n: Int, acc: Int) -> Int = if n == 0 then acc else spin(n - 1, acc + 1)\n\
+     fn do_work(args: { n: Int }) -> Int = spin(args.n, 0)\n\
+     actor Worker {\n\
+       state: St,\n\
+       message: WorkerMsg = | Go | Done(ReplyTo<Int>),\n\
+       init: fn(c: St) ! {Tool<Work>} = match work({ n: 0 }) { _ -> c },\n\
+       handle Go, St(n) ! {Tool<Work>} = Continue(St(work({ n: n }))),\n\
+       handle Done(r), St(n) ! {Send<Int>} = let sent = reply(r, n) in Continue(St(n)),\n\
+     } ! {Tool<Work>, Send<Int>}\n\
+     supervisor WorkSup {\n\
+       strategy: one_for_one,\n\
+       intensity: 5,\n\
+       period: 60,\n\
+       children: [\n\
+         { id: slow, actor: Worker, start_args: St(20000000), restart: permanent },\n\
+         { id: fast, actor: Worker, start_args: St(1), restart: permanent },\n\
+       ]\n\
+     }\n\
+     fn main() -> () ! {Install, Supervise, Send<WorkerMsg>, Await<Int>} =\n\
+       install { Tool<Work> -> do_work } in\n\
+       let u = supervise(WorkSup) in\n\
+       let a = send(child(WorkSup, slow), Go) in\n\
+       let b = send(child(WorkSup, fast), Go) in\n\
+       match request(child(WorkSup, slow), Done) {\n\
+         s -> match request(child(WorkSup, fast), Done) { f -> () },\n\
+       }";
+
+/// A log's lines, timestamps blanked, grouped by the process their caller
+/// names (the part after `@`), each group in log order.
+fn by_process(log: &str) -> BTreeMap<String, Vec<String>> {
+    let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for line in strip_timestamps(log).lines() {
+        let caller = line
+            .split("\"caller\":\"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("a caller field");
+        let process = caller.split_once('@').map_or("", |(_, process)| process);
+        groups
+            .entry(String::from(process))
+            .or_default()
+            .push(String::from(line));
+    }
+    groups
+}
+
+/// [`RACE`] with spawned workers in place of supervised ones.
+const SPAWNED_RACE: &str = "type St = St(Int)\n\
+     tool Work : { n: Int } -> Int\n\
+     fn spin(n: Int, acc: Int) -> Int = if n == 0 then acc else spin(n - 1, acc + 1)\n\
+     fn do_work(args: { n: Int }) -> Int = spin(args.n, 0)\n\
+     actor Worker {\n\
+       state: St,\n\
+       message: WorkerMsg = | Go | Done(ReplyTo<Int>),\n\
+       init: fn(c: St) ! {Tool<Work>} = match work({ n: 0 }) { _ -> c },\n\
+       handle Go, St(n) ! {Tool<Work>} = Continue(St(work({ n: n }))),\n\
+       handle Done(r), St(n) ! {Send<Int>} = let sent = reply(r, n) in Continue(St(n)),\n\
+     } ! {Tool<Work>, Send<Int>}\n\
+     fn main() -> () ! {Install, Spawn<WorkerMsg>, Send<WorkerMsg>, Await<Int>} =\n\
+       install { Tool<Work> -> do_work } in\n\
+       let slow = spawn(Worker, St(20000000)) in\n\
+       let fast = spawn(Worker, St(1)) in\n\
+       let a = send(slow, Go) in\n\
+       let b = send(fast, Go) in\n\
+       match request(slow, Done) {\n\
+         s -> match request(fast, Done) { f -> () },\n\
+       }";
+
+/// Records `program` with `--audit-file`, then replays that recording
+/// with `--audit-file` again, both runs required to succeed: the recorded
+/// and the replayed log, in that order.
+fn record_and_replay(name: &str, program: &str) -> (String, String) {
+    let dir = scratch(name);
+    let file = write(&dir, "main.hird", program);
+
+    let recorded = dir.join("recorded.jsonl");
+    let record = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_record").display().to_string(),
+        "--audit-file",
+        &recorded.display().to_string(),
+    ]);
+    assert!(record.status.success(), "stderr: {}", stderr(&record));
+    let recorded_log = fs::read_to_string(&recorded).expect("read the recorded log");
+
+    let replayed = dir.join("replayed.jsonl");
+    let replay = hird(&[
+        "run",
+        &file,
+        "-o",
+        &dir.join("out_replay").display().to_string(),
+        "--replay",
+        &recorded.display().to_string(),
+        "--audit-file",
+        &replayed.display().to_string(),
+    ]);
+    assert!(replay.status.success(), "stderr: {}", stderr(&replay));
+    let replayed_log = fs::read_to_string(&replayed).expect("read the replayed log");
+    (recorded_log, replayed_log)
+}
+
+/// A recording of concurrent actors replays green whatever order their
+/// calls finished in: each process matches its own calls in order, and
+/// the replayed run audits the same calls per process.
+#[test]
+fn run_replay_matches_concurrent_actors_per_process() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let (recorded, replayed) = record_and_replay("run_replay_race", RACE);
+    let streams = by_process(&recorded);
+    assert_eq!(
+        streams.keys().collect::<Vec<_>>(),
+        ["WorkSup/fast", "WorkSup/slow"],
+        "each child's calls must name its process: {recorded}"
+    );
+    assert_eq!(by_process(&replayed), streams);
+}
+
+/// Spawned actors are named by their spawner and spawn order, so the same
+/// race between spawned workers replays green too.
+#[test]
+fn run_replay_matches_spawned_actors_per_process() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not found on PATH");
+        return;
+    }
+    let (recorded, replayed) = record_and_replay("run_replay_spawned_race", SPAWNED_RACE);
+    let streams = by_process(&recorded);
+    assert_eq!(
+        streams.keys().collect::<Vec<_>>(),
+        ["main/Worker#1", "main/Worker#2"],
+        "each spawned worker's calls must name its process: {recorded}"
+    );
+    assert!(
+        streams["main/Worker#1"]
+            .iter()
+            .any(|l| l.contains("20000000")),
+        "the first spawn is the slow worker: {recorded}"
+    );
+    assert_eq!(by_process(&replayed), streams);
 }
 
 #[test]

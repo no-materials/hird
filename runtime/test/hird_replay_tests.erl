@@ -2,9 +2,10 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% Cursor semantics: strict-sequential matching over a decoded log file,
-%% divergences that never advance, the whole-log finish check,
-%% structured load failures, and a generic tool's records decoded at the
-%% type arguments of the call offered against them.
+%% one stream per process, interleaving freely; divergences that never
+%% advance, the whole-log finish check, structured load failures, and a
+%% generic tool's records decoded at the type arguments of the call
+%% offered against them.
 -module(hird_replay_tests).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -18,12 +19,20 @@ table() ->
                            error => {adt, ping_error, []}}},
       types => #{ping_error => [{ping_error, <<"PingError">>, [string]}]}}.
 
-%% One encoded log line for a `ping` invocation.
+%% One encoded log line for a `ping` invocation by `main`.
 line(N, Result) ->
+    line(<<"M.f@main">>, N, Result).
+
+%% One encoded log line for a `ping` invocation from `Caller`.
+line(Caller, N, Result) ->
     hird_types:encode_invocation(
         #{tool => ping, type_args => [], args => #{n => N}, result => Result,
-          timestamp => 0, caller => <<"M.f">>},
+          timestamp => 0, caller => Caller},
         table()).
+
+%% Offers a call as the process named `main`.
+offer(Tool, TypeArgs, Args) ->
+    hird_replay:offer(<<"main">>, Tool, TypeArgs, Args).
 
 %% Writes `Lines` as a log file under _build, returning its path.
 log_file(Name, Lines) ->
@@ -50,9 +59,9 @@ matches_yield_logged_results_in_order_test() ->
     Lines = [line(1, {ok, 10}),
              line(2, {err, {ping_error, <<"down">>}})],
     with_cursor("replay_order.jsonl", Lines, fun() ->
-        ?assertEqual({ok, 10}, hird_replay:offer(ping, [], #{n => 1})),
+        ?assertEqual({ok, 10}, offer(ping, [], #{n => 1})),
         ?assertEqual({err, {ping_error, <<"down">>}},
-                     hird_replay:offer(ping, [], #{n => 2})),
+                     offer(ping, [], #{n => 2})),
         ?assertEqual(ok, hird_replay:finish())
     end).
 
@@ -61,32 +70,82 @@ a_divergence_does_not_advance_the_cursor_test() ->
         ?assertMatch({diverged, #{kind := args_mismatch, position := 0,
                                   expected := #{tool := ping, args := #{n := 1}},
                                   offered := #{tool := ping, args := #{n := 9}}}},
-                     hird_replay:offer(ping, [], #{n => 9})),
-        ?assertEqual({ok, 10}, hird_replay:offer(ping, [], #{n => 1}))
+                     offer(ping, [], #{n => 9})),
+        ?assertEqual({ok, 10}, offer(ping, [], #{n => 1}))
     end).
 
 a_wrong_tool_is_a_tool_mismatch_test() ->
     with_cursor("replay_tool_mismatch.jsonl", [line(1, {ok, 10})], fun() ->
         ?assertMatch({diverged, #{kind := tool_mismatch, position := 0,
                                   log_size := 1}},
-                     hird_replay:offer(pong, [], #{n => 1}))
+                     offer(pong, [], #{n => 1}))
     end).
 
 an_exhausted_log_is_a_divergence_test() ->
     with_cursor("replay_exhausted.jsonl", [line(1, {ok, 10})], fun() ->
-        ?assertEqual({ok, 10}, hird_replay:offer(ping, [], #{n => 1})),
+        ?assertEqual({ok, 10}, offer(ping, [], #{n => 1})),
         ?assertMatch({diverged, #{kind := log_exhausted, position := 1,
                                   log_size := 1}},
-                     hird_replay:offer(ping, [], #{n => 2}))
+                     offer(ping, [], #{n => 2}))
     end).
 
 finish_reports_unconsumed_records_test() ->
     Lines = [line(1, {ok, 10}), line(2, {ok, 20})],
     with_cursor("replay_incomplete.jsonl", Lines, fun() ->
-        ?assertEqual({ok, 10}, hird_replay:offer(ping, [], #{n => 1})),
+        ?assertEqual({ok, 10}, offer(ping, [], #{n => 1})),
         ?assertEqual({error, {replay_incomplete,
                               #{consumed => 1, log_size => 2}}},
                      hird_replay:finish())
+    end).
+
+%% Streams -----------------------------------------------------------------
+
+%% Each process matches its own records in order, whatever order the
+%% processes reach the cursor in: here the reverse of the log's.
+streams_interleave_freely_test() ->
+    Lines = [line(<<"M.f@a">>, 1, {ok, 10}), line(<<"M.f@b">>, 2, {ok, 20}),
+             line(<<"M.f@a">>, 3, {ok, 30}), line(<<"M.f@b">>, 4, {ok, 40})],
+    with_cursor("replay_streams.jsonl", Lines, fun() ->
+        ?assertEqual({ok, 20}, hird_replay:offer(<<"b">>, ping, [], #{n => 2})),
+        ?assertEqual({ok, 40}, hird_replay:offer(<<"b">>, ping, [], #{n => 4})),
+        ?assertEqual({ok, 10}, hird_replay:offer(<<"a">>, ping, [], #{n => 1})),
+        ?assertEqual({ok, 30}, hird_replay:offer(<<"a">>, ping, [], #{n => 3})),
+        ?assertEqual(ok, hird_replay:finish())
+    end).
+
+%% Within a stream, order is still strict: another process's next record
+%% is not a match, and the divergence names the offering process and the
+%% log position its stream expected.
+a_divergence_names_its_process_and_log_position_test() ->
+    Lines = [line(<<"M.f@a">>, 1, {ok, 10}), line(<<"M.f@b">>, 2, {ok, 20}),
+             line(<<"M.f@b">>, 3, {ok, 30})],
+    with_cursor("replay_stream_divergence.jsonl", Lines, fun() ->
+        ?assertMatch({diverged, #{kind := args_mismatch, process := <<"b">>,
+                                  position := 1, log_size := 3,
+                                  expected := #{args := #{n := 2}}}},
+                     hird_replay:offer(<<"b">>, ping, [], #{n => 3})),
+        ?assertMatch({diverged, #{kind := args_mismatch, process := <<"a">>,
+                                  position := 0}},
+                     hird_replay:offer(<<"a">>, ping, [], #{n => 2})),
+        ?assertMatch({diverged, #{kind := log_exhausted, process := <<"c">>,
+                                  position := 3}},
+                     hird_replay:offer(<<"c">>, ping, [], #{n => 1}))
+    end).
+
+%% Records whose caller names no process form one anonymous stream, which
+%% an unnamed process offers against, in log order; a named one does not
+%% see it.
+unnamed_callers_share_the_anonymous_stream_test() ->
+    Lines = [line(<<"M.f">>, 1, {ok, 10}), line(<<"M.g">>, 2, {ok, 20})],
+    with_cursor("replay_anonymous.jsonl", Lines, fun() ->
+        ?assertMatch({diverged, #{kind := log_exhausted, process := <<"main">>}},
+                     offer(ping, [], #{n => 1})),
+        ?assertMatch({diverged, #{kind := args_mismatch, process := undefined,
+                                  position := 0}},
+                     hird_replay:offer(undefined, ping, [], #{n => 2})),
+        ?assertEqual({ok, 10}, hird_replay:offer(undefined, ping, [], #{n => 1})),
+        ?assertEqual({ok, 20}, hird_replay:offer(undefined, ping, [], #{n => 2})),
+        ?assertEqual(ok, hird_replay:finish())
     end).
 
 %% Load-failure tests trap exits: a failed `init` exits the linked
@@ -123,7 +182,7 @@ generic_table() ->
 echo_line(TypeArgs, V) ->
     hird_types:encode_invocation(
         #{tool => echo, type_args => TypeArgs, args => #{v => V},
-          result => {ok, V}, timestamp => 0, caller => <<"M.f">>},
+          result => {ok, V}, timestamp => 0, caller => <<"M.f@main">>},
         generic_table()).
 
 %% Runs `Fun` against a cursor over `Lines` under the generic table.
@@ -142,11 +201,21 @@ generic_records_decode_at_the_offered_type_arguments_test() ->
     Lines = [echo_line([int], 1), line(2, {ok, 20}),
              echo_line([{list, string}], [<<"a">>])],
     with_generic_cursor("replay_generic.jsonl", Lines, fun() ->
-        ?assertEqual({ok, 1}, hird_replay:offer(echo, [int], #{v => 1})),
-        ?assertEqual({ok, 20}, hird_replay:offer(ping, [], #{n => 2})),
+        ?assertEqual({ok, 1}, offer(echo, [int], #{v => 1})),
+        ?assertEqual({ok, 20}, offer(ping, [], #{n => 2})),
         ?assertEqual({ok, [<<"a">>]},
-                     hird_replay:offer(echo, [{list, string}],
-                                       #{v => [<<"a">>]})),
+                     offer(echo, [{list, string}], #{v => [<<"a">>]})),
+        ?assertEqual(ok, hird_replay:finish())
+    end).
+
+%% A generic record joins its process's stream at load, though its values
+%% wait for the offer: `b`'s echo replays before `main`'s earlier ping.
+a_generic_record_joins_its_process_s_stream_test() ->
+    Echo = binary:replace(echo_line([int], 1), <<"M.f@main">>, <<"M.f@b">>),
+    with_generic_cursor("replay_generic_stream.jsonl", [line(2, {ok, 20}), Echo],
+                        fun() ->
+        ?assertEqual({ok, 1}, hird_replay:offer(<<"b">>, echo, [int], #{v => 1})),
+        ?assertEqual({ok, 20}, offer(ping, [], #{n => 2})),
         ?assertEqual(ok, hird_replay:finish())
     end).
 
@@ -158,15 +227,15 @@ another_instantiation_is_an_args_mismatch_test() ->
         ?assertMatch({diverged, #{kind := args_mismatch, position := 0,
                                   expected := #{tool := echo},
                                   offered := #{tool := echo}}},
-                     hird_replay:offer(echo, [string], #{v => <<"1">>})),
+                     offer(echo, [string], #{v => <<"1">>})),
         {diverged, #{expected := Expected}} =
-            hird_replay:offer(echo, [string], #{v => <<"1">>}),
+            offer(echo, [string], #{v => <<"1">>}),
         ?assertNot(maps:is_key(args, Expected)),
         ?assertMatch({diverged, #{kind := args_mismatch,
                                   expected := #{tool := echo,
                                                 args := #{v := 1}}}},
-                     hird_replay:offer(echo, [int], #{v => 2})),
-        ?assertEqual({ok, 1}, hird_replay:offer(echo, [int], #{v => 1}))
+                     offer(echo, [int], #{v => 2})),
+        ?assertEqual({ok, 1}, offer(echo, [int], #{v => 1}))
     end).
 
 %% Another tool offered over a generic record: a tool mismatch, the
@@ -177,7 +246,7 @@ another_tool_over_a_generic_record_is_a_tool_mismatch_test() ->
         ?assertMatch({diverged, #{kind := tool_mismatch, position := 0,
                                   expected := #{tool := echo},
                                   offered := #{tool := ping}}},
-                     hird_replay:offer(ping, [], #{n => 1}))
+                     offer(ping, [], #{n => 1}))
     end).
 
 %% A generic record's envelope still fails the load, with its line number.

@@ -11,7 +11,7 @@
 
 %% Dispatches one tool call. When a replay cursor is running
 %% (hird_replay), every dispatch consults it instead of resolving a
-%% handler — see replayed/4. Otherwise the handler is `{tool, ToolName}`
+%% handler — see replayed/5. Otherwise the handler is `{tool, ToolName}`
 %% in the threaded handler map, falling back to the process-independent
 %% default registry (hird_handlers) on a miss; a miss in both raises
 %% `{unhandled_tool, ToolName}` — a crash for the supervisor, never a value
@@ -21,7 +21,9 @@
 %% dropped there when no sink is running. `TypeArgs` is the call site's
 %% instantiation of a generic tool's type parameters, one wire shape each
 %% (`[]` for any other tool), and `Caller` the codegen-supplied caller id
-%% (`<<"Module.function">>` or the actor form).
+%% (`<<"Module.function">>` or the actor form), to which the dispatcher
+%% appends `@Process`, the calling process's identity (hird_process),
+%% when it has one.
 %%
 %% A handler signals a domain failure by throwing `{hird_exn, Error}`,
 %% where `Error` is a value of the tool's declared error type. The
@@ -31,11 +33,17 @@
 %% and unrecorded.
 -spec call(atom(), [hird_types:shape()], binary(), #{term() => fun()},
            term()) -> term().
-call(ToolName, TypeArgs, Caller, Handlers, Args) ->
+call(ToolName, TypeArgs, Site, Handlers, Args) ->
+    Process = hird_process:identity(),
+    Caller = caller(Site, Process),
     case hird_replay:active() of
-        true -> replayed(ToolName, TypeArgs, Caller, Args);
+        true -> replayed(ToolName, TypeArgs, Caller, Process, Args);
         false -> live(ToolName, TypeArgs, Caller, Handlers, Args)
     end.
+
+%% The recorded caller id: the call site's, qualified by the process.
+caller(Site, undefined) -> Site;
+caller(Site, Process) -> <<Site/binary, $@, Process/binary>>.
 
 %% Live dispatch: resolves and invokes the handler, auditing the outcome.
 live(ToolName, TypeArgs, Caller, Handlers, Args) ->
@@ -53,11 +61,13 @@ live(ToolName, TypeArgs, Caller, Handlers, Args) ->
 %% Replayed dispatch: the cursor is the only authority — the threaded map
 %% and the registry are never consulted, so no handler in the program can
 %% shadow the log. Audit capture is unchanged: a replayed run emits the
-%% same tool/args/result stream a live one does. A logged failure replays
-%% as the `{hird_exn, Error}` throw the live handler raised; a mismatch
-%% crashes with the structured divergence, unrecorded.
-replayed(ToolName, TypeArgs, Caller, Args) ->
-    case hird_replay:offer(ToolName, TypeArgs, Args) of
+%% same tool/args/result stream a live one does. The call is offered as
+%% the calling process's next one, so concurrent processes replay in
+%% whatever order they reach it. A logged failure replays as the
+%% `{hird_exn, Error}` throw the live handler raised; a mismatch crashes
+%% with the structured divergence, unrecorded.
+replayed(ToolName, TypeArgs, Caller, Process, Args) ->
+    case hird_replay:offer(Process, ToolName, TypeArgs, Args) of
         {ok, Result} ->
             audit(ToolName, TypeArgs, Caller, Args, {ok, Result}),
             Result;

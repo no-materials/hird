@@ -768,7 +768,8 @@ only modules handed to the checker.
 ## ADR-016: Audit-log wire format and strict-sequential replay
 
 **Date**: 2026-07-02
-**Status**: Accepted (resolves OD3 and OD4)
+**Status**: Accepted (resolves OD3 and OD4; §3's single global match order
+superseded by ADR-030, which also extends §2's caller id)
 
 ### Context
 
@@ -1275,7 +1276,8 @@ site.
 
 **Date**: 2026-07-10
 **Status**: Accepted (mechanises ADR-013's parameter threading; fixes the
-call-site contract the runtime library implements)
+call-site contract the runtime library implements; the recorded caller id
+gains a process identity per ADR-030)
 
 ### Context
 
@@ -2127,6 +2129,144 @@ say where it sits between those two kinds and what it does to the wire.
   name; preserving the name is additive and deferred.
 - ADR-009 is untouched: an alias declaration is a declaration, and a record
   literal with a `..base` is an expression form, not a block.
+
+---
+
+## ADR-030: Replay matches per process, by a run-stable process identity
+
+**Date**: 2026-10-28
+**Status**: Accepted (supersedes ADR-016 §3's single global match order;
+extends ADR-016 §2's caller id and ADR-022 §2's call-site caller literal)
+
+### Context
+
+ADR-016 §3 matches a replay strict-sequentially against the log as one
+sequence. That sequence is the order records reach the audit sink — the
+order calls *complete*, across every process — while a replayed call is
+matched when it *starts*, and returns at once. With two processes calling
+tools concurrently the two orders differ: actor A starts a slow call,
+actor B a fast one after it, the log reads B then A, and the replay offers
+A first and diverges on a faithful recording. Two supervised instances of
+one actor, one with a slow handler and one with a fast one, diverge this
+way on nearly every replay.
+
+Three routes were on the table: strict-sequential streams per caller, a
+recorded start-order sequence number to match on, or replay restricted to
+single-process programs. A start-order number moves the dependence from
+latency to scheduling — which of two ready processes reaches the
+dispatcher first is still the scheduler's choice — so it would pass most
+runs and fail under load. Restricting replay gives up the flagship
+programs, whose supervised actors call tools concurrently. That leaves
+per-caller streams, and the question of what a caller is. The recorded
+caller id names a code location (`Worker.handle_msg/Go`), shared by every
+instance of an actor and by every process that runs a helper function, so
+it cannot tell the two workers above apart. The process can, but a pid
+differs from run to run.
+
+### Decision
+
+1. **Strict-sequential matching per process.** A log is split into one
+   stream per process, each in log order. A call is matched against the
+   next record of its own process's stream by ADR-016 §3's rule, otherwise
+   unchanged: same tool and byte-identical args, the logged result —
+   `ok` or `err` — returned, any mismatch a hard error carrying a
+   structured divergence, and a log not read to the end a failed run. How
+   the streams interleave is not matched. The pure core
+   `(log, position, tool, args)` is unchanged; `position` is the log
+   position of the stream's next record (the log's length once the stream
+   is exhausted), and a divergence names the process. Keyed matching and
+   live fall-through stay rejected: the process selects a stream, never a
+   record.
+
+2. **A process identity names how the program started the process**, so
+   it is the same in every run:
+   - `main` — the process running `main`;
+   - `Sup/child` — the child `child` of supervisor `Sup`. A supervisor is a
+     registered singleton (ADR-024) and its child ids are distinct. A
+     restarted child keeps the identity, so its incarnations' calls form
+     one stream, in order;
+   - `Spawner/Actor#N` — the N-th `spawn` of `Actor` by the process named
+     `Spawner`, counted from 1 per actor.
+
+   Supervisor processes make no tool calls (`start_args` is pure), so they
+   need no identity. Generated code names every process before its first
+   tool call: the boot module names `main`; an actor's `start_link` takes
+   the identity as its first argument and its `init` sets it before the
+   init body runs; a child spec passes `"Sup/child"` as a literal; `spawn`
+   takes the next `Spawner/Actor#N` from the runtime. A process no
+   generated code started — a test harness — has no identity, and neither
+   do the processes it spawns.
+
+3. **The identity rides in `caller`, after `@`.** A recorded caller id is
+   the call site's, `@`, and the calling process's identity:
+   `"Worker.handle_msg/Go@WorkSup/slow"`. Wire decoders keep treating
+   `caller` as an opaque string — the wire-format stability policy's
+   sanctioned path for a new caller form — so `schema_version` stays `1`;
+   replay is the one reader of the identity. A caller without `@` belongs
+   to one anonymous stream, which is ADR-016's single sequence for logs
+   written without identities, such as harness logs and the conformance
+   goldens. A log recorded by a generated program before this decision
+   carries no identities and no longer matches one; it is re-recorded.
+
+4. **The identity is per-process state, set once.** ADR-022 §2 rejected
+   process-dictionary context for the caller id because the call site is
+   statically known at every dispatch site, so a literal is strictly
+   better. An identity is not static: one function runs in many
+   processes. Threading it explicitly would put it in every actor's state
+   and every handler map, and thread spawn counts back out of every
+   expression that spawns. It is therefore stored in the process
+   dictionary — set once at process start from an explicit `start_link`
+   argument, never changed — beside the per-actor spawn counters that
+   `spawn` advances.
+
+### Determinism argument
+
+ADR-016 rejects keyed matching because replay must not guess. Per-process
+streams guess nothing. Under ADR-005 semantics a process's tool calls are
+a function of its start arguments, the tool results it receives, and the
+messages it receives, in order. Replay supplies the recorded results. A
+process that receives the same messages in the same order therefore makes
+the recorded calls in the recorded order and matches its stream exactly;
+the interleaving the sink happened to see across processes was never
+something the program's behavior depended on.
+
+Replay does not fix the order in which messages from independent senders
+arrive. A process whose calls depend on that order can diverge from a
+faithful recording — honestly, since it did make different calls. Messages
+from one sender, or from senders on one causal chain, keep their order, so
+those programs replay exactly. Recording message order would close the
+remaining gap; it is a separate stream and not part of this decision.
+
+### Alternatives considered
+
+- **A new envelope field for the process.** Explicit, but a field a
+  decoder must understand needs a `schema_version` bump, breaking every
+  version-1 log and decoder for information ADR-015 already assigns to the
+  caller ("caller identity"). A later envelope version may split them.
+- **The existing caller id as the stream key.** Two instances of one actor
+  share every call site, so the motivating race still diverges; it would
+  also stop checking the order of one process's calls across call sites.
+- **Parking an offer until its record heads the global log.** That
+  replays the recorded completion order as a schedule, but a parked offer
+  cannot tell a call that is yet to come from one that never will without
+  detecting quiescence, which the BEAM does not offer.
+
+### Consequences
+
+- Concurrent supervised and spawned actors replay green whatever order
+  their calls completed in when recorded.
+- Every caller a generated program records gains its identity, and the
+  planner golden log is re-recorded; its calls and their order are
+  unchanged. Single-process programs replay exactly as before, and their
+  divergence positions are unchanged.
+- The replay essay's single axis of positions holds per process: a
+  divergence at position K says the process it names made its own
+  recorded calls before K, not how far the others had got.
+- `hird_replay:offer` takes the offering process; actor `start_link`
+  takes an identity first; a new runtime module, `hird_process`, holds the
+  identity.
+- The arrival order of messages from independent senders is the
+  documented limit of replay's determinism.
 
 ---
 

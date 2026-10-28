@@ -130,6 +130,23 @@ schedule and is not covered by these entries.
   `type`, a `type alias`, a `tool`, or an actor's message type. Each is
   now C0063.
 
+- **Replay diverged on faithful recordings of concurrent actors.** The
+  log orders calls by when they completed, across every process, and
+  replay matched it as one sequence while serving each call instantly.
+  When one actor started a slow call and another a fast one after it,
+  the log held the fast call first, the replay offered the slow one
+  first, and the run crashed with a `replay_divergence`. Replay now
+  matches each process's calls against that process's records, in order,
+  and lets processes interleave freely. Every recorded `caller` names its
+  process after `@` — `main`, `Sup/child` for a supervised actor,
+  `Spawner/Actor#N` for a spawned one — as in
+  `"Worker.handle_msg/Go@WorkSup/slow"`, and a divergence names the
+  process. The wire format is unchanged, but a log recorded before this
+  change carries no process names and no longer replays: re-record it.
+  The planner golden log is re-recorded. A process's calls still depend
+  on the order its messages arrive in, which replay does not fix, so a
+  process fed by independent senders can still diverge.
+
 ### Changed
 
 - **Builds reuse compiled modules.** Every `hird build` and `hird run`

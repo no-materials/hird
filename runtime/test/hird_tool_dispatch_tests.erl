@@ -247,3 +247,60 @@ crashes_propagate_unrecorded_test() ->
     ok = hird_audit:sync(),
     gen_server:stop(Sink),
     ?assertEqual({ok, <<>>}, file:read_file(Path)).
+
+%% Process identity --------------------------------------------------------
+%%
+%% These tests name the process they run in, so each runs in its own.
+
+%% A named process's records carry its identity after the call site's
+%% caller id; an unnamed one's carry the call site's alone.
+a_named_process_qualifies_its_caller_test_() ->
+    {spawn, fun a_named_process_qualifies_its_caller/0}.
+
+a_named_process_qualifies_its_caller() ->
+    Path = filename:join("_build", "dispatch_identity.jsonl"),
+    _ = file:delete(Path),
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}},
+                                        {tools, probe_table()}]),
+    Handlers = #{{tool, probe} => fun(#{n := N}, _Handlers) -> N end},
+    1 = hird_tool_dispatch:call(probe, [], <<"M.f">>, Handlers, #{n => 1}),
+    ok = hird_process:name(<<"Sup/worker">>),
+    2 = hird_tool_dispatch:call(probe, [], <<"W.init">>, Handlers, #{n => 2}),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    {ok, Bytes} = file:read_file(Path),
+    [Unnamed, Named, <<>>] = binary:split(Bytes, <<"\n">>, [global]),
+    ?assertMatch({match, _}, re:run(Unnamed, <<"\"caller\":\"M\\.f\"">>)),
+    ?assertMatch({match, _},
+                 re:run(Named, <<"\"caller\":\"W\\.init@Sup/worker\"">>)).
+
+%% Under replay each process offers against its own stream: `b` replays
+%% its call while `a`, whose call the log holds first, has not started.
+replay_offers_against_the_calling_process_s_stream_test_() ->
+    {spawn, fun replay_offers_against_the_calling_process_s_stream/0}.
+
+replay_offers_against_the_calling_process_s_stream() ->
+    Path = filename:join("_build", "dispatch_replay_streams.jsonl"),
+    Lines = [hird_types:encode_invocation(
+                 #{tool => probe, type_args => [], args => #{n => N},
+                   result => {ok, N * 10}, timestamp => 0,
+                   caller => <<"M.f@", Process/binary>>},
+                 probe_table())
+             || {Process, N} <- [{<<"a">>, 1}, {<<"b">>, 2}]],
+    ok = file:write_file(Path, [[L, $\n] || L <- Lines]),
+    {ok, Pid} = hird_replay:start_link(Path, [probe_table()]),
+    try
+        ok = hird_process:name(<<"b">>),
+        ?assertEqual(20, hird_tool_dispatch:call(probe, [], <<"M.f">>, #{},
+                                                 #{n => 2})),
+        Self = self(),
+        spawn_link(fun() ->
+            ok = hird_process:name(<<"a">>),
+            Self ! {a, hird_tool_dispatch:call(probe, [], <<"M.f">>, #{},
+                                               #{n => 1})}
+        end),
+        ?assertEqual(10, receive {a, Result} -> Result end),
+        ?assertEqual(ok, hird_replay:finish())
+    after
+        gen_server:stop(Pid)
+    end.

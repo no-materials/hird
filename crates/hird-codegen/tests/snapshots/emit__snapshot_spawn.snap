@@ -8,7 +8,8 @@ expression: "emit(program(\"Boot\"), \"Boot\")"
 
 %% src/boot.hird:8
 boot(S, _Handlers@) ->
-    {ok, Pid@1} = hird_counter:start_link(S),
+    Process@2 = hird_process:spawned(<<"Counter"/utf8>>),
+    {ok, Pid@1} = hird_counter:start_link(Process@2, S),
     Pid@1.
 
 hird_tools@() ->

@@ -12,7 +12,8 @@
 %% format lives in docs/tool-effects.md.
 -module(hird_types).
 
--export([encode_invocation/2, decode_invocation/3, decode_tool/2]).
+-export([encode_invocation/2, decode_invocation/3, decode_tool/2,
+         decode_caller/2]).
 
 -type shape() ::
     unit | int | float | string | bool
@@ -287,6 +288,18 @@ decode_invocation(Line, TypeArgs, #{tools := Tools, types := Types}) ->
 decode_tool(Line, #{tools := Tools}) ->
     {Tool, _Sig, _Rest} = denvelope(Line, Tools),
     Tool.
+
+%% The caller id an audit-log line records, read past its args and result
+%% without their shapes — enough to place a generic tool's line before
+%% the call that supplies its type arguments decodes it.
+-spec decode_caller(binary(), table()) -> binary().
+decode_caller(Line, #{tools := Tools}) ->
+    {_Tool, _Sig, R3} = denvelope(Line, Tools),
+    {_Args, R4} = dmeta_value(dkey(<<"args">>, dtok($,, R3))),
+    {_Result, R5} = dmeta_value(dkey(<<"result">>, dtok($,, R4))),
+    {_Ts, R6} = dstring(dkey(<<"timestamp">>, dtok($,, R5))),
+    {Caller, _Rest} = dstring(dkey(<<"caller">>, dtok($,, R6))),
+    Caller.
 
 %% The `{"schema_version":1,"tool":Name` prefix: the tool atom, its
 %% signature, and the rest of the line.

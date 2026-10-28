@@ -2,28 +2,36 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% The replay cursor: a gen_server holding a recorded audit log, matched
-%% strict-sequentially against the program's tool dispatches. Every line is
-%% validated at startup and decoded type-directedly then, except a generic
-%% tool's record: its shapes depend on the type arguments its call fixes,
-%% so it is decoded when that call is offered. While the cursor is running
-%% the dispatcher routes every tool call here instead of resolving a
-%% handler, so no `handle` or `install` block in the program can shadow the
-%% log. Each offer must name the tool and args of the record at the cursor,
-%% which then yields its logged result — failures included; any mismatch
-%% is a divergence the dispatcher raises as a crash, never a value Hirð
-%% code sees.
+%% strict-sequentially against the program's tool dispatches, one stream
+%% per process. A record's process is the identity its caller id names
+%% after `@` (hird_process); records naming none form one anonymous
+%% stream. Every line is validated at startup and decoded type-directedly
+%% then, except a generic tool's record: its shapes depend on the type
+%% arguments its call fixes, so it is decoded when that call is offered.
+%% While the cursor is running the dispatcher routes every tool call here
+%% instead of resolving a handler, so no `handle` or `install` block in the
+%% program can shadow the log. Each offer must name the tool and args of
+%% the next record in the offering process's stream, which then yields its
+%% logged result — failures included; any mismatch is a divergence the
+%% dispatcher raises as a crash, never a value Hirð code sees. How the
+%% streams interleave is free: concurrent processes reach the cursor in
+%% whatever order the scheduler runs them, not the order the log holds.
 -module(hird_replay).
 -behaviour(gen_server).
 
--export([start_link/2, active/0, offer/3, finish/0]).
+-export([start_link/2, active/0, offer/4, finish/0]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
-%% Where and how a replay diverged: the 0-based position and total log
-%% size, what the log holds there (absent when exhausted; without `args`
-%% when they do not decode, as a generic tool's record under an offer that
-%% does not supply its type arguments), and what the program offered.
+%% Where and how a replay diverged: the offering process (`undefined` for
+%% the anonymous stream), the 0-based log position of the record its
+%% stream expected (the log size when the stream is exhausted) and the
+%% total log size, what the log holds there (absent when exhausted;
+%% without `args` when they do not decode, as a generic tool's record
+%% under an offer that does not supply its type arguments), and what the
+%% program offered.
 -type divergence() :: #{
     kind := log_exhausted | tool_mismatch | args_mismatch,
+    process := binary() | undefined,
     position := non_neg_integer(),
     log_size := non_neg_integer(),
     expected => #{tool := atom(), args => term()},
@@ -48,18 +56,19 @@ start_link(Path, Tables) ->
 active() ->
     whereis(?MODULE) =/= undefined.
 
-%% Offers the program's next tool call, a generic tool's type arguments
-%% included. A match yields the logged result — `{ok, Value}` or
-%% `{err, Error}` — and advances the cursor; a mismatch yields
-%% `{diverged, Divergence}` without advancing.
--spec offer(atom(), [hird_types:shape()], term()) ->
+%% Offers the next tool call of `Process` (`undefined` for an unnamed
+%% process, which offers against the anonymous stream), a generic tool's
+%% type arguments included. A match yields the logged result —
+%% `{ok, Value}` or `{err, Error}` — and advances that process's stream; a
+%% mismatch yields `{diverged, Divergence}` without advancing.
+-spec offer(binary() | undefined, atom(), [hird_types:shape()], term()) ->
     {ok, term()} | {err, term()} | {diverged, divergence()}.
-offer(Tool, TypeArgs, Args) ->
-    gen_server:call(?MODULE, {offer, Tool, TypeArgs, Args}, infinity).
+offer(Process, Tool, TypeArgs, Args) ->
+    gen_server:call(?MODULE, {offer, Process, Tool, TypeArgs, Args}, infinity).
 
-%% Checks the run consumed the whole log: `ok` when nothing remains,
-%% `{error, {replay_incomplete, …}}` otherwise — a truncated replay is
-%% not a faithful one.
+%% Checks the run consumed the whole log: `ok` when no stream has a record
+%% left, `{error, {replay_incomplete, …}}` otherwise — a truncated replay
+%% is not a faithful one.
 -spec finish() -> ok | {error, term()}.
 finish() ->
     gen_server:call(?MODULE, finish, infinity).
@@ -73,8 +82,8 @@ init({Path, Tables}) ->
         {ok, Bytes} ->
             try load(lines(Bytes), Table, 1) of
                 Log ->
-                    {ok, #{log => Log, position => 0, size => length(Log),
-                           table => Table}}
+                    {ok, #{streams => streams(Log), consumed => 0,
+                           size => length(Log), table => Table}}
             catch
                 error:{replay_load_error, _} = Reason ->
                     {stop, Reason}
@@ -84,25 +93,30 @@ init({Path, Tables}) ->
     end.
 
 %% @private
-handle_call({offer, Tool, TypeArgs, Args}, _From,
-            #{log := Log, position := P, table := Table} = State) ->
-    case Log of
-        [Entry | Rest] ->
+handle_call({offer, Process, Tool, TypeArgs, Args}, _From,
+            #{streams := Streams, consumed := C, size := Size,
+              table := Table} = State) ->
+    case maps:get(Process, Streams, []) of
+        [{Position, Entry} | Rest] ->
             case recorded(Entry, Tool, TypeArgs, Table) of
                 #{tool := Tool, args := Logged, result := Result}
                         when Logged == Args ->
-                    {reply, Result, State#{log := Rest, position := P + 1}};
+                    {reply, Result, State#{streams := Streams#{Process := Rest},
+                                           consumed := C + 1}};
                 Expected ->
-                    {reply, {diverged, divergence(Expected, Tool, Args, State)},
+                    {reply, {diverged, divergence(Expected, Process, Position,
+                                                  Tool, Args, Size)},
                      State}
             end;
         [] ->
-            {reply, {diverged, divergence(none, Tool, Args, State)}, State}
+            {reply, {diverged, divergence(none, Process, Size, Tool, Args,
+                                          Size)},
+             State}
     end;
-handle_call(finish, _From, #{log := Log, position := P, size := Size} = State) ->
-    Reply = case Log of
-        [] -> ok;
-        _ -> {error, {replay_incomplete, #{consumed => P, log_size => Size}}}
+handle_call(finish, _From, #{consumed := C, size := Size} = State) ->
+    Reply = case C of
+        Size -> ok;
+        _ -> {error, {replay_incomplete, #{consumed => C, log_size => Size}}}
     end,
     {reply, Reply, State}.
 
@@ -110,8 +124,8 @@ handle_call(finish, _From, #{log := Log, position := P, size := Size} = State) -
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% The record at the cursor, as far as the offer lets it decode: a loaded
-%% record in full; a generic tool's line decoded at the offered type
+%% The record a stream expects, as far as the offer lets it decode: a
+%% loaded record in full; a generic tool's line decoded at the offered type
 %% arguments when the offer names its tool; otherwise the recorded tool
 %% alone.
 recorded({decoded, Record}, _Tool, _TypeArgs, _Table) ->
@@ -125,10 +139,11 @@ recorded({pending, Tool, Line}, Tool, TypeArgs, Table) ->
 recorded({pending, Logged, _Line}, _Tool, _TypeArgs, _Table) ->
     #{tool => Logged}.
 
-%% The divergence for an offer the record at the cursor (`none` when the
-%% log is exhausted) does not match.
-divergence(Expected, Tool, Args, #{position := P, size := Size}) ->
-    Base = #{position => P, log_size => Size,
+%% The divergence for an offer from `Process` that the record its stream
+%% expects at `Position` (`none` when the stream is exhausted) does not
+%% match.
+divergence(Expected, Process, Position, Tool, Args, Size) ->
+    Base = #{process => Process, position => Position, log_size => Size,
              offered => #{tool => Tool, args => Args}},
     case Expected of
         none ->
@@ -140,6 +155,19 @@ divergence(Expected, Tool, Args, #{position := P, size := Size}) ->
             end,
             Base#{kind => Kind, expected => maps:with([tool, args], Expected)}
     end.
+
+%% The loaded log split into per-process streams: each process's
+%% `{Position, Entry}` pairs in log order.
+streams(Log) ->
+    {_, Reversed} = lists:foldl(
+        fun({Process, Entry}, {Position, Acc}) ->
+            Item = {Position, Entry},
+            {Position + 1,
+             maps:update_with(Process, fun(Q) -> [Item | Q] end, [Item], Acc)}
+        end,
+        {0, #{}},
+        Log),
+    maps:map(fun(_, Q) -> lists:reverse(Q) end, Reversed).
 
 %% The log's lines, without the trailing empty split a final newline
 %% leaves. Blank lines elsewhere fail loading, as they should.
@@ -161,13 +189,26 @@ load([Line | Rest], Table, N) ->
     end,
     [Entry | load(Rest, Table, N + 1)].
 
-%% One line's log entry: decoded now unless its tool is generic, whose
-%% line waits for the offer that supplies its type arguments.
+%% One line's process and log entry: decoded now unless its tool is
+%% generic, whose line waits for the offer that supplies its type
+%% arguments.
 entry(Line, #{tools := Tools} = Table) ->
     Tool = hird_types:decode_tool(Line, Table),
     case maps:get(Tool, Tools) of
-        #{params := 0} -> {decoded, hird_types:decode_invocation(Line, [], Table)};
-        #{} -> {pending, Tool, Line}
+        #{params := 0} ->
+            #{caller := Caller} = Record =
+                hird_types:decode_invocation(Line, [], Table),
+            {process(Caller), {decoded, Record}};
+        #{} ->
+            {process(hird_types:decode_caller(Line, Table)),
+             {pending, Tool, Line}}
+    end.
+
+%% The process a caller id names after `@`, `undefined` when it names none.
+process(Caller) ->
+    case binary:split(Caller, <<"@">>) of
+        [_Site, Process] -> Process;
+        [_Site] -> undefined
     end.
 
 %% Merges signature tables the way the audit sink does.

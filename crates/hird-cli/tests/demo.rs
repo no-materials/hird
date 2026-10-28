@@ -193,11 +193,11 @@ fn demo_runs_on_beam_and_audits_the_planning_round() {
         "stdout: {out}"
     );
     assert!(
-        out.contains("\"caller\":\"Planner.handle_msg/PlanRepo\""),
+        out.contains("\"caller\":\"Planner.handle_msg/PlanRepo@PlannerSup/planner\""),
         "stdout: {out}"
     );
     assert!(
-        out.contains("\"caller\":\"AgentPlanner.file_tickets\""),
+        out.contains("\"caller\":\"AgentPlanner.file_tickets@PlannerSup/planner\""),
         "stdout: {out}"
     );
     // The priority-0 task is analyzed away: no ticket, no log line.

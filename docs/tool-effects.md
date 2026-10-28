@@ -180,11 +180,11 @@ Fields appear in exactly this order:
 | `args`           | value           | the input record, encoded as below       |
 | `result`         | tagged object   | `{"ok":…}` or `{"err":…}`                |
 | `timestamp`      | string          | RFC 3339 UTC, millisecond precision      |
-| `caller`         | string          | `"Module.function"`                      |
+| `caller`         | string          | `"Module.function@process"`              |
 | `meta`           | object          | optional; omitted entirely when absent   |
 
 ```json
-{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo","meta":{"duration_ms":42}}
+{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo@main","meta":{"duration_ms":42}}
 ```
 
 - **`result` is tagged.** Failed invocations are first-class:
@@ -193,9 +193,18 @@ Fields appear in exactly this order:
 - **`timestamp` and `caller` are injected.** There is no ambient clock;
   the recording handler supplies both. The timestamp form is exactly
   `2026-05-22T12:00:00.000Z` (millisecond precision, `Z` offset). The
-  caller is `Module.function`; inside generated actor callbacks it takes
-  the actor form (`"Planner.init"`, `"Planner.handle_msg/PlanRepo"`).
-  Decoders treat `caller` as an opaque string; no other form is defined.
+  caller names the call site, `Module.function`, or the actor form inside
+  generated actor callbacks (`"Planner.init"`,
+  `"Planner.handle_msg/PlanRepo"`), followed by `@` and the identity of
+  the process that made the call:
+  `"Planner.handle_msg/PlanRepo@PlannerSup/planner"`. An identity names a
+  process by how the program started it, so it is the same in every run:
+  `main` for the process running `main`, `Sup/child` for a supervised
+  child (kept across restarts), and `Spawner/Actor#N` for the N-th
+  `spawn` of `Actor` by the process `Spawner`. A process no Hirð code
+  started — a test harness's — has no identity, and its records carry
+  the call site alone. Decoders treat `caller` as an opaque string; only
+  replay reads the identity, to match each process's calls separately.
 - **`meta` is observer-populated.** Transport metadata (`duration_ms`,
   retries, trace ids) belongs to whoever recorded the invocation, not to
   the compiler-derived record, whose five fields are `tool`, `args`,
@@ -252,20 +261,42 @@ The core of replay is a pure function:
 (log, position, tool, args) → Result<result, Divergence>
 ```
 
-Matching is **strict sequential**: the record at `position` must have the
-same tool and byte-identical arguments as the request, and its logged
-result — `ok` or `err` — is returned; the caller advances the position by
-one. Any mismatch is a hard error carrying a structured `Divergence`
-value: the log is exhausted, the tool differs, or the args differ.
+Matching is **strict sequential per process**. A log holds one stream per
+process: the records whose caller names that process, in log order
+(records naming no process form one anonymous stream). A call is matched
+against the next record of its own process's stream, at that record's
+`position` in the log: the record must have the same tool and
+byte-identical arguments as the request, and its logged result — `ok` or
+`err` — is returned; the stream advances by one. Any mismatch is a hard
+error carrying a structured `Divergence` value: the process's stream is
+exhausted, the tool differs, or the args differ.
+
+How the streams interleave is not matched. The log orders records by
+when calls *completed*, across every process; a replay serves each call
+at once, so concurrent processes reach the cursor in whatever order the
+scheduler runs them, which is rarely that one. Within one process the
+order is the program's own: given the same tool results and the same
+messages in the same order, a process makes the same calls. That is the
+determinism replay relies on, and it does not extend across processes —
+see what a replay does not fix, below.
 
 Keyed matching (find a record by tool and args anywhere in the log) and
 live fall-through (execute for real on a miss) are deliberately excluded:
-both reintroduce the nondeterminism replay exists to remove. If a program
-diverges from its log, the honest answer is an error, not a guess.
+both reintroduce the nondeterminism replay exists to remove. The process
+selects a stream, never a record. If a program diverges from its log, the
+honest answer is an error, not a guess.
+
+*What a replay does not fix.* The log records tool calls, not messages.
+A process whose calls depend on the order messages from *independent*
+senders arrive in — two workers reporting to one collector, say — may
+receive them in another order under replay, and then diverges: honestly,
+since its calls did change, but on a faithful recording. Messages from
+one sender, or from senders in one causal chain, arrive in the same order
+every run, and those programs replay exactly.
 
 *Provisional*: the shape of divergence reporting (what context a
 `Divergence` carries and how it renders) may be refined after experience
-with real runs; strict-sequential matching itself is settled.
+with real runs; strict-sequential matching within a process is settled.
 
 ### Recording and replaying a run
 
@@ -291,11 +322,13 @@ wins over every `handle` and `install` block in the program: no tool runs,
 no service is contacted, and each call receives its logged result —
 `err`-tagged records rethrow the failure the recorded handler raised. A
 replayed run audits the same stream it consumed (fresh timestamps), so
-`--replay` and `--audit-file` combine into a round trip. Two conditions
-fail the run: a call the log does not match at the cursor, which crashes
-with a `replay_divergence` naming the position, the recorded call, and
-the offered one; and a log the run did not read to the end, since a
-truncated replay is not a faithful one.
+`--replay` and `--audit-file` combine into a round trip (each process's
+records in the same order; across processes, in the order the replay ran
+them). Two conditions fail the run: a call its process's stream does not
+match, which crashes with a `replay_divergence` naming the process, the
+log position its stream expected, the recorded call, and the offered
+one; and a log the run did not read to the end, since a truncated replay
+is not a faithful one.
 
 The log loads before `main` runs: a line of another `schema_version`, or
 one naming a tool the program does not declare, fails the load, as does a
@@ -319,7 +352,8 @@ Widening the demo's actionability rule from `priority > 0` to
 and the fifth call diverges:
 
 ```
-{replay_divergence, #{kind => args_mismatch, position => 4, log_size => 7,
+{replay_divergence, #{kind => args_mismatch, process => <<"PlannerSup/planner">>,
+  position => 4, log_size => 7,
   expected => #{tool => create_ticket, args => #{title => <<"Fuzz the parser">>, …}},
   offered  => #{tool => create_ticket, args => #{title => <<"Tidy whitespace">>, …}}}}
 ```
@@ -338,11 +372,15 @@ whatever the arms do differently is attributable to the programs alone.
 
 Strict-sequential matching then puts every arm on one axis — the
 recording's own positions. An arm that replays green made exactly the
-recorded decisions. An arm that crashes at position K made the episode's
-first K calls, in order, with the same arguments, and then offered
-something else. That makes arms comparable with each other and not only
-with the recording: two arms that part at different positions agree with
-each other up to the earlier of the two.
+recorded decisions. In the planner, every call is made by one process,
+so an arm that crashes at position K made the episode's first K calls,
+in order, with the same arguments, and then offered something else. That
+makes arms comparable with each other and not only with the recording:
+two arms that part at different positions agree with each other up to
+the earlier of the two. In a recording of several processes the axis is
+per process: a divergence at position K says the process it names made
+its own recorded calls before K, and says nothing about how far the
+others had got.
 
 Fan the planner recording out over the demo and two variants of it, each
 one edit away: an *eager* arm that files a ticket for every task
@@ -449,7 +487,7 @@ headline output, one line per invocation (this is
 `conformance/v1/planner_log.jsonl`):
 
 ```json
-{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo","meta":{"duration_ms":42}}
+{"schema_version":1,"tool":"ReadRepo","args":{"path":"/home/user/repo"},"result":{"ok":{"files":[],"status":"clean"}},"timestamp":"2026-05-22T12:00:00.000Z","caller":"Planner.plan_repo@main","meta":{"duration_ms":42}}
 {"schema_version":1,"tool":"CreateTicket","args":{"body":"Investigate flaky CI on main","title":"Flaky CI"},"result":{"ok":{"ctor":"TicketId","args":["TCK-42"]}},"timestamp":"2026-05-22T12:00:01.250Z","caller":"Planner.plan_repo"}
 {"schema_version":1,"tool":"HttpGet","args":{"url":"https://ci.example/status"},"result":{"err":{"ctor":"HttpError","args":[503,"service unavailable"]}},"timestamp":"2026-05-22T12:00:02.000Z","caller":"Planner.check_ci","meta":{"duration_ms":1200}}
 ```

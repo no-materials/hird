@@ -86,7 +86,7 @@ hird run hello.hird
 ```
 
 ```json
-{"schema_version":1,"tool":"Say","args":{"message":"hello, world"},"result":{"ok":null},"timestamp":"…","caller":"Hello.main"}
+{"schema_version":1,"tool":"Say","args":{"message":"hello, world"},"result":{"ok":null},"timestamp":"…","caller":"Hello.main@main"}
 ```
 
 Three things happened. Declaring `tool Say` created the effect
@@ -129,11 +129,11 @@ hird run demo/agent_fleet
 ```
 
 ```json
-{"schema_version":1,"tool":"RunErrand","args":{"errand":"mend the palisade","round":2},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry"}
-{"schema_version":1,"tool":"Chronicle","args":{"note":"done","round":2},"result":{"ok":null},"timestamp":"…","caller":"Auditor.handle_msg/Record"}
-{"schema_version":1,"tool":"Log","args":{"level":"info","message":"executor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Executor.init"}
-{"schema_version":1,"tool":"Log","args":{"level":"info","message":"auditor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Auditor.init"}
-{"schema_version":1,"tool":"RunErrand","args":{"errand":"scout the border","round":4},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry"}
+{"schema_version":1,"tool":"RunErrand","args":{"errand":"mend the palisade","round":2},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry@FleetSup/executor"}
+{"schema_version":1,"tool":"Chronicle","args":{"note":"done","round":2},"result":{"ok":null},"timestamp":"…","caller":"Auditor.handle_msg/Record@FleetSup/auditor"}
+{"schema_version":1,"tool":"Log","args":{"level":"info","message":"executor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Executor.init@FleetSup/executor"}
+{"schema_version":1,"tool":"Log","args":{"level":"info","message":"auditor takes its post"},"result":{"ok":null},"timestamp":"…","caller":"Auditor.init@FleetSup/auditor"}
+{"schema_version":1,"tool":"RunErrand","args":{"errand":"scout the border","round":4},"result":{"ok":"done"},"timestamp":"…","caller":"Executor.handle_msg/Carry@FleetSup/executor"}
 ```
 
 Round 3 never beats — the crash consumed its order — and the two
@@ -154,7 +154,7 @@ Every tool invocation — mocked or real — lands on the audit stream, one
 canonical JSON line per call:
 
 ```json
-{"schema_version":1,"tool":"CreateTicket","args":{"body":"The parser has no fuzz harness.","title":"Fuzz the parser"},"result":{"ok":{"ctor":"TicketId","args":["Fuzz the parser"]}},"timestamp":"2026-07-28T06:44:42.893Z","caller":"AgentPlanner.file_tickets"}
+{"schema_version":1,"tool":"CreateTicket","args":{"body":"The parser has no fuzz harness.","title":"Fuzz the parser"},"result":{"ok":{"ctor":"TicketId","args":["Fuzz the parser"]}},"timestamp":"2026-07-28T06:44:42.893Z","caller":"AgentPlanner.file_tickets@PlannerSup/planner"}
 ```
 
 Because the stream is complete — every call, full arguments, tagged

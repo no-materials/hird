@@ -18,12 +18,12 @@ const HELLO: &str = "tool Say : { message: String } -> ()\n\
      fn main() -> () ! {} =\n\
        handle { Tool<Say> -> quiet_say } in say({ message: \"hello\" })\n";
 
-/// Modules a build of [`HELLO`] produces: its base module, the 10 runtime
+/// Modules a build of [`HELLO`] produces: its base module, the 11 runtime
 /// modules (the build driver among them), and the boot module.
-const HELLO_MODULES: u64 = 12;
+const HELLO_MODULES: u64 = 13;
 
 /// The runtime modules every build carries.
-const RUNTIME_MODULES: u64 = 10;
+const RUNTIME_MODULES: u64 = 11;
 
 /// A fresh scratch directory for one test, holding an empty `cache`.
 fn scratch(name: &str) -> PathBuf {

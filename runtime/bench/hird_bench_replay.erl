@@ -2,8 +2,8 @@
 %% SPDX-License-Identifier: Apache-2.0 OR MIT
 %%
 %% Replay scenario: start a cursor over an N-record audit log, then offer
-%% every record in order. Logs are written once per size under _build and
-%% reused; remove them to regenerate.
+%% every record in order as `main`. Logs are written once per size under
+%% _build and reused; remove them to regenerate.
 -module(hird_bench_replay).
 
 -export([replay/1]).
@@ -55,13 +55,13 @@ offer(Seq, N, _Hist) when Seq > N ->
 offer(Seq, N, Hist) ->
     Args = args(Seq),
     {ok, Seq} = hird_bench:timed(Seq, Hist, fun() ->
-        hird_replay:offer(echo, [], Args)
+        hird_replay:offer(<<"main">>, echo, [], Args)
     end),
     offer(Seq + 1, N, Hist).
 
 %% The path of the `N`-record log, written first when missing.
 log(N) ->
-    Path = "_build/replay_" ++ integer_to_list(N) ++ ".jsonl",
+    Path = "_build/replay_main_" ++ integer_to_list(N) ++ ".jsonl",
     case filelib:is_regular(Path) of
         true ->
             Path;
@@ -80,7 +80,8 @@ write_lines(_Fd, Seq, N) when Seq > N ->
 write_lines(Fd, Seq, N) ->
     Line = hird_types:encode_invocation(
         #{tool => echo, type_args => [], args => args(Seq),
-          result => {ok, Seq}, timestamp => Seq, caller => <<"Bench.main">>},
+          result => {ok, Seq}, timestamp => Seq,
+          caller => <<"Bench.main@main">>},
         table()),
     ok = file:write(Fd, [Line, $\n]),
     write_lines(Fd, Seq + 1, N).

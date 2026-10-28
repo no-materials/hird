@@ -9,7 +9,8 @@ expression: "emit_joined(program(\"Duo\"), \"Duo\")"
 
 %% src/duo.hird:8
 boot(_Handlers@) ->
-    {ok, Pid@1} = hird_pair:start_link(1, 2),
+    Process@2 = hird_process:spawned(<<"Pair"/utf8>>),
+    {ok, Pid@1} = hird_pair:start_link(Process@2, 1, 2),
     Pid@1.
 
 hird_tools@() ->
@@ -23,13 +24,14 @@ hird_tools@() ->
 %% src/duo.hird:2
 -module(hird_pair).
 -behaviour(gen_server).
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
-start_link(A, B) ->
-    gen_server:start_link(?MODULE, {A, B}, []).
+start_link(Process@1, A, B) ->
+    gen_server:start_link(?MODULE, {Process@1, {A, B}}, []).
 
-init({A, B}) ->
+init({Process@1, {A, B}}) ->
+    ok = hird_process:name(Process@1),
     {ok, {st, A + B}}.
 
 handle_call(Request, _From, _State) ->

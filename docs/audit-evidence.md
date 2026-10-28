@@ -70,10 +70,13 @@ runtime, or in both.
 - **The sink appends.** A file sink opens the log for append, so no restart
   and no second run truncates an existing one. Re-recording over a log
   means removing it first, deliberately.
-- **Replay is exact and total.** A recorded log replays by strict
-  sequential matching; any mismatch is a hard error carrying a structured
-  divergence, and a log the run did not read to the end fails the run.
-  There is no keyed matching and no live fall-through.
+- **Replay is exact and total, per process.** A recorded log replays by
+  strict sequential matching within each process: every process's calls
+  must match that process's records, in order, while processes running
+  concurrently may reach the log in any order. Any mismatch is a hard
+  error carrying a structured divergence, and a log the run did not read
+  to the end fails the run. There is no keyed matching and no live
+  fall-through.
 
 ## What it does not guarantee
 
@@ -105,7 +108,15 @@ implementation does not make.
 - **Arrival order, not causal order.** The stream is ordered by arrival at
   the sink. Calls from one process appear in call order; concurrent actors
   interleave, and a record carries no ordering token beyond its
-  millisecond timestamp.
+  millisecond timestamp. Its caller names the process, so each process's
+  own order can be read back, and is what replay matches.
+- **Replay does not fix message order.** A process's calls follow from
+  the tool results and the messages it receives. Replay reproduces the
+  results, not the order in which messages from independent senders
+  arrive, so a process whose calls depend on that order can diverge from
+  a faithful recording. Divergence is the honest outcome: the run did
+  something else. Messages from one sender, or along one causal chain,
+  keep their order, and such programs replay exactly.
 - **Timestamps are not attested.** They are injected at the recording site
   from the runtime's system clock at millisecond precision. There is no
   trusted time source, no monotonicity guarantee across a clock
@@ -129,7 +140,7 @@ implementation does not make.
 
 One thing is provisional rather than absent: the shape of a divergence
 report — what context it carries and how it renders — may be refined with
-experience. Strict-sequential matching itself is settled.
+experience. Strict-sequential matching within a process is settled.
 
 ## Recording, retaining, replaying
 
@@ -155,7 +166,9 @@ the same workflow read as an evidence chain.
 4. **Compare.** A replayed run audits the stream it consumed, with fresh
    timestamps, so `--replay` and `--audit-file` together are a round trip.
    Compare a replayed log to its original with the timestamp values
-   blanked — the one field a replay cannot reproduce.
+   blanked — the one field a replay cannot reproduce — and, for a program
+   of concurrent processes, process by process: across processes the
+   replayed stream is in the order the replay ran them.
 5. **Regress.** A checked-in recording is a behavioral test with no oracle
    to maintain. The demo suite replays `demo/agent_planner.golden.jsonl` in
    the CI job that installs Erlang, so the build fails the moment the
@@ -176,9 +189,9 @@ the field exists.
 A change needs no bump when version 1 already describes it: a new tool or
 type (records are derived from declarations, and decoding is directed by
 the signature); a new `caller` string form, since decoders treat `caller`
-as opaque — this is how the actor form arrived; new `meta` keys, which are
-observer-populated and unvalidated; and a new golden covering a case the
-existing files do not reach.
+as opaque — this is how the actor form and the process identity after `@`
+arrived; new `meta` keys, which are observer-populated and unvalidated;
+and a new golden covering a case the existing files do not reach.
 
 Two consequences are worth naming. A decoder for version 1 must *reject*
 any other version, so a bump is a hard break by design: old readers refuse

@@ -21,7 +21,7 @@ init([]) ->
     ChildSpecs = [
         #{
             id => heart,
-            start => {hird_heart, start_link, [{cfg, hird_clock:real(), 1000}]},
+            start => {hird_heart, start_link, [<<"HeartSup/heart"/utf8>>, {cfg, hird_clock:real(), 1000}]},
             restart => permanent,
             type => worker
         }

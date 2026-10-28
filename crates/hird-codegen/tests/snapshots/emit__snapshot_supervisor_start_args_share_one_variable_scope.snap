@@ -21,7 +21,7 @@ init([]) ->
     ChildSpecs = [
         #{
             id => planner,
-            start => {hird_planner, start_link, [begin
+            start => {hird_planner, start_link, [<<"NestSup/planner"/utf8>>, begin
                 Base = 1,
                 {st, Base}
             end]},
@@ -30,7 +30,7 @@ init([]) ->
         },
         #{
             id => worker,
-            start => {hird_worker, start_link, [begin
+            start => {hird_worker, start_link, [<<"NestSup/worker"/utf8>>, begin
                 Base@1 = 2,
                 {st, Base@1 + 1}
             end]},

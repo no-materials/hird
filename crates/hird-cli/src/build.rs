@@ -35,7 +35,7 @@ const DRIVER: &str = include_str!(concat!(
 
 /// The hand-written Erlang runtime library, embedded so the compiled binary
 /// is self-contained.
-const RUNTIME: [(&str, &str); 10] = [
+const RUNTIME: [(&str, &str); 11] = [
     (
         "hird_actor",
         include_str!(concat!(
@@ -63,6 +63,13 @@ const RUNTIME: [(&str, &str); 10] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../runtime/hird_handlers.erl"
+        )),
+    ),
+    (
+        "hird_process",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../runtime/hird_process.erl"
         )),
     ),
     (
@@ -507,14 +514,15 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 }
 
 /// Renders the boot module: starts the audit sink, registers every
-/// signature table in `table_modules`, and calls `main` with an empty
-/// handler map. Init arguments configure the run, so the module depends on
-/// the program alone: `-hird_audit_file <path>` appends the audit stream
-/// to that file instead of stdout, and `-hird_replay <path>` starts the
-/// replay cursor over that log before `main` and requires it fully
-/// consumed after. A crash in `main` still flushes the sink before
-/// halting. Kept as generated source so the build output runs on plain
-/// `erl` without the CLI.
+/// signature table in `table_modules`, names its process `main`
+/// (`hird_process`), and calls `main` with an empty handler map. Init
+/// arguments configure the run, so the module depends on the program
+/// alone: `-hird_audit_file <path>` appends the audit stream to that file
+/// instead of stdout, and `-hird_replay <path>` starts the replay cursor
+/// over that log before `main` and requires it fully consumed after. A
+/// crash in `main` still flushes the sink before halting. Kept as
+/// generated source so the build output runs on plain `erl` without the
+/// CLI.
 fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     let tables = table_modules
         .iter()
@@ -559,6 +567,7 @@ fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     );
     let _ = writeln!(out, "        none -> ok");
     let _ = writeln!(out, "    end,");
+    let _ = writeln!(out, "    ok = hird_process:name(<<\"main\">>),");
     let main_call = if entry.takes_map {
         format!("{}:main(#{{}})", entry.module)
     } else {

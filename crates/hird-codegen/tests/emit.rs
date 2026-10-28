@@ -852,7 +852,10 @@ fn imported_tool_calls_dispatch_like_local_ones() {
     assert!(!app.contains("hird_worker:run"), "{app}");
     assert!(!app.contains("hird_w:run"), "{app}");
     assert!(!app.contains("hird_tools@"), "{app}");
-    assert!(app.contains("hird_runner:start_link(0)"), "{app}");
+    assert!(
+        app.contains("hird_runner:start_link(Process@2, 0)"),
+        "{app}"
+    );
     insta::assert_snapshot!(app);
 }
 

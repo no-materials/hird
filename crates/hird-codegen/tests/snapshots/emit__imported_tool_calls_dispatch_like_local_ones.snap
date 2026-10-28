@@ -30,7 +30,8 @@ dry(J) ->
 %% src/app.hird:8
 start(J, _Handlers@) ->
     P = begin
-        {ok, Pid@1} = hird_runner:start_link(0),
+        Process@2 = hird_process:spawned(<<"Runner"/utf8>>),
+        {ok, Pid@1} = hird_runner:start_link(Process@2, 0),
         Pid@1
     end,
     gen_server:cast(P, {do, J}).

@@ -21,7 +21,7 @@ init([]) ->
     ChildSpecs = [
         #{
             id => planner,
-            start => {hird_planner, start_link, [{st, 0}]},
+            start => {hird_planner, start_link, [<<"DriftSup/planner"/utf8>>, {st, 0}]},
             restart => permanent,
             type => worker
         }

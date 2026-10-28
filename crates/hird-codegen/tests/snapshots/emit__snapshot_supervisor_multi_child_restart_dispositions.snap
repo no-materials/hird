@@ -21,19 +21,19 @@ init([]) ->
     ChildSpecs = [
         #{
             id => planner,
-            start => {hird_planner, start_link, [hird_fleet:planner_config()]},
+            start => {hird_planner, start_link, [<<"RootSup/planner"/utf8>>, hird_fleet:planner_config()]},
             restart => permanent,
             type => worker
         },
         #{
             id => worker,
-            start => {hird_worker, start_link, [{st, 1}]},
+            start => {hird_worker, start_link, [<<"RootSup/worker"/utf8>>, {st, 1}]},
             restart => transient,
             type => worker
         },
         #{
             id => logger,
-            start => {hird_logger, start_link, [{st, 2}]},
+            start => {hird_logger, start_link, [<<"RootSup/logger"/utf8>>, {st, 2}]},
             restart => temporary,
             type => worker
         }
