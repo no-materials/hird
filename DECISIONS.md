@@ -879,7 +879,8 @@ pure data and the future runtime is only one of its producers.
 
 **Date**: 2026-07-06
 **Status**: Accepted (closes the handler-signature gap ADR-013 §1 deferred,
-using the operation signatures ADR-015 introduced)
+using the operation signatures ADR-015 introduced; an extern arm's `Exn` is
+checked against the tool's row per ADR-031)
 
 ### Context
 
@@ -1457,7 +1458,8 @@ so that promise is currently unimplementable as stated.
 
 **Date**: 2026-07-27
 **Status**: Accepted (gives ADR-022 §3's registry a Hirð-level surface;
-complements ADR-020 §6's no-snapshot rule)
+complements ADR-020 §6's no-snapshot rule; §1 admits an extern's `Exn` per
+ADR-031)
 
 ### Context
 
@@ -2267,6 +2269,193 @@ remaining gap; it is a separate stream and not part of this decision.
   identity.
 - The arrival order of messages from independent senders is the
   documented limit of replay's determinism.
+
+---
+
+## ADR-031: Erlang-bound externs, usable only as tool handlers
+
+**Date**: 2026-11-02
+**Status**: Accepted (gives ADR-023's "if FFI lands" its form; amends
+ADR-023 §1's pure-handler rule and ADR-017's row-free match for extern
+arms)
+
+### Context
+
+No Hirð program can reach a real service. An `extern fn` names no foreign
+function and compiles to a stub that raises `{unbound_extern, Name}`.
+Installed handlers must be pure Hirð functions (ADR-023 §1), and ADR-023
+rejected a `--handlers <erlang-module>` flag, so the only way to bind a
+tool to Erlang is `hird_handlers:install_handler/2`, called from Erlang.
+Every tool in every demo is a mock, and the standard tools ADR-015 §4
+lists (`llm_call`, `http_get`, `read_file`, …) cannot have real
+implementations.
+
+Whatever reaches Erlang must keep three promises the language makes. The
+effect row is the checked list of what a function can do (ADR-021). Every
+tool call is recorded, because every call site goes through the
+dispatcher (ADR-022 §2). And a replay serves every tool result from the
+log (ADR-016, ADR-030). A foreign function callable from Hirð code breaks
+all three: it does I/O behind an empty row, the dispatcher never sees it,
+and a replay runs it for real.
+
+### Decision
+
+1. **An extern names an Erlang function and is used only as a tool's
+   handler.**
+
+   ```
+   extern module "files.erl"
+
+   type FileError = Missing(String) | Unreadable(String)
+   tool ReadFile : { path: String } → String ! {Exn<FileError>}
+
+   extern fn erl_read_file(args: { path: String }) → String ! {Exn<FileError>}
+     = "files":"read"
+
+   fn main() → () ! {Install, …} =
+     install { Tool<ReadFile> → erl_read_file } in run()
+   ```
+
+   The binding `= "module":"function"` is required (C0064); both names
+   are plain Erlang atoms (a lowercase letter, then letters, digits, and
+   `_`). An extern's name may appear only as the whole handler of a
+   `Tool<…>` arm, in `install` or in `handle` (C0066). A call, a `let`,
+   an argument, or a lambda body that mentions it is an error. The arm
+   checks the extern's type against the tool's operation signature as it
+   checks any handler (ADR-017, C0034), so a generic tool takes a generic
+   extern. An extern cannot share a name with the function its tool
+   declares (`read_file` above; C0017). The phrasebook convention is the
+   tool function's name with an `erl_` prefix, which marks the foreign
+   handler at the install site.
+
+2. **The program declares its Erlang sources.** `extern module "path"`
+   names a hand-written Erlang file, relative to the declaring `.hird`
+   file's directory, with `/` separators and a `.erl` extension. The file
+   name without the extension is the Erlang module. It must be a plain
+   atom that does not start with `hird_`, which generated and runtime
+   modules use, and a file declares each module once (C0065). A binding
+   names only a module its own file declares (C0065), so every piece of
+   foreign code a program runs is listed in its source. `hird build` reads
+   each declared file and compiles it with the generated modules, through
+   the same build cache and build driver. A missing or unreadable file and
+   one module declared at two paths are build errors; the reserved prefix
+   keeps a declared module from colliding with a generated one. The
+   checker has no file system, so `hird check`, the LSP, and the MCP
+   tools validate the declaration but not the file. Erlang libraries
+   outside OTP are out of scope; OTP's applications are on the emulator's
+   code path.
+
+3. **An extern's row is at most one `Exn<E>`, and its tool must declare
+   it.** Externs take an effect annotation. The row must be closed and
+   contain nothing but a single `Exn<…>` entry (C0067): an Erlang
+   function performs no Hirð effects, and its I/O is the tool effect it
+   implements. An extern arm for `Tool<X>` requires `X`'s declared row to
+   contain the extern's `Exn<E>` (C0068). The Erlang side raises the
+   error as every handler does (ADR-022 §2, amended 2026-08-12):
+   `throw({hird_exn, Error})` with `Error` a value of `E`. The dispatcher
+   records it as an `err` result and rethrows it, and a replay rethrows
+   the logged error. One error type matches the single `err` shape a
+   tool's record has.
+
+   This amends ADR-023 §1: an installed handler's row is closed and
+   empty, or, for an extern, the one `Exn` its tool declares. Purity's
+   argument survives. The error reaches the caller of the tool, whose row
+   already holds that `Exn` through the tool's declared row (ADR-015 §1),
+   so the install promises nothing about an eventual call site that the
+   call site's row does not already say. It also amends ADR-017: rows are
+   still not part of a handler's match, except that an extern arm's `Exn`
+   is checked against the tool's row.
+
+4. **The trust boundary is the audit record.** The checker cannot read
+   Erlang, so an extern's declared type is a promise. The dispatcher
+   already walks every live result against the tool's shapes, in the
+   calling process, to encode its record (ADR-022 §2). A value that does
+   not fit is a value that cannot be recorded. In that case the dispatcher
+   raises `{handler_result, Tool, Mismatch}` before returning, or
+   `{handler_error, Tool, Mismatch}` for a thrown error outside the
+   tool's error type. That second case includes any `hird_exn` thrown
+   under a tool that declares no `Exn`. An ill-typed value therefore
+   never reaches Hirð code. The foreign call itself has happened; its
+   record is not written, and the caller crashes (ADR-021). A live
+   record's arguments come from checked Hirð code, so a record that fails
+   to encode is attributed to the handler. The check covers every handler,
+   including ones installed from Erlang with
+   `hird_handlers:install_handler/2`. The encoder reports every
+   shape/value mismatch as `unencodable`, as its contract states. Without
+   an audit sink nothing is encoded, so nothing is checked: dispatch
+   without a sink is unaudited (ADR-022) and now also unchecked. Every
+   program `hird` builds starts its sink before `main`, and a replay calls
+   no handler.
+
+5. **Emission.** An extern compiles to a function at its type's emitted
+   arity: the declared parameters, plus the trailing handler map when its
+   row is non-empty (ADR-022 §1). It calls the bound function with the
+   declared parameters, so `erl_read_file(Args, _Handlers) ->
+   files:read(Args).` Arm normalisation is unchanged. The IR's extern
+   carries its module and function, and the IR module lists its declared
+   Erlang sources.
+
+### Audit and replay argument
+
+An extern runs only as a handler, and a handler runs only when the
+dispatcher invokes it, inside `hird_tool_dispatch:call`. On a live run the
+dispatcher records each foreign call (tool, args, and the `ok` or `err`
+result) exactly as it records a mocked one, and no other path reaches the
+Erlang function. On a replay the dispatcher consults only the replay
+cursor and never resolves a handler (ADR-030), so the Erlang function is
+not called and its result comes from the log, decoded against the tool's
+shapes. A recorded run's foreign effects are therefore exactly the tool
+calls in its log, and a replay contacts no service. ADR-030's determinism
+argument needs nothing new: a foreign result is a tool result. The
+Erlang code may keep state, spawn processes, or read the clock; the
+program sees none of that except through results, which are recorded.
+Erlang code that reaches back into the program, by sending messages to
+its processes or calling generated functions, is outside this guarantee:
+those effects are not tool calls and are not in the log.
+
+### Relation to effectful installed handlers
+
+A wrapper written in Hirð around an extern, such as a retry, a meter, or a
+cache, is not expressible: the extern cannot be called, and an installed
+handler cannot perform effects. That belongs to the open question of
+effectful and stateful installed handlers. A decision there can let such a
+handler call an extern without revisiting this one, because the extern
+would still run only inside a dispatched tool call.
+
+### Alternatives considered
+
+- **Externs callable anywhere, as with Gleam's `@external`.** The
+  simplest binding, but the row of every caller lies, the call is never
+  recorded, and a replay performs the I/O.
+- **An Erlang install module named on the command line.** Rejected again
+  for ADR-023's reasons: the wiring is outside the program and unchecked,
+  and running a program needs two artifacts in two languages.
+- **Sources found next to the program by module name.** No new
+  declaration, but which files belong to the program would depend on
+  what sits in its directory.
+- **A command-line flag listing Erlang sources.** Explicit, but every
+  invocation needs it, including the language servers.
+- **Trusting the declared type.** Free at run time, but a bad value
+  surfaces far from its cause: in a pattern match, or as an encoding
+  failure that names neither the tool nor the handler.
+- **A separate check in the emitted extern.** It names the extern, but it
+  needs the merged type table outside the sink and walks every result a
+  second time.
+- **Errors as returned `{error, E}` values.** Indistinguishable from a
+  two-field constructor (ADR-022 §2, amended 2026-08-12).
+
+### Consequences
+
+- A Hirð program can call real services, and every call is recorded and
+  replays offline.
+- Externs written before this decision gain a required binding, and a
+  direct call to one is an error. They compiled to a stub that always
+  crashed, so no working program changes behaviour.
+- The checker gains C0064–C0068.
+- The IR's extern `module` becomes a string beside a new `function`, and
+  a module lists its `extern_modules`.
+- Foreign code runs unsandboxed in the program's emulator. Rows bound what
+  Hirð code does, not what the Erlang code does.
 
 ---
 
