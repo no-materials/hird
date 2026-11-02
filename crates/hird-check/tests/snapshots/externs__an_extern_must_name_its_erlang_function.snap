@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(\"extern module \\\"files.erl\\\"\\n\\\n         extern fn unbound(path: String) -> String\\n\\\n         extern fn shouting(path: String) -> String = \\\"files\\\":\\\"Read\\\"\\n\\\n         extern fn escaped(path: String) -> String = \\\"files\\\":\\\"re\\\\\\\\ad\\\"\")"
+---
+escaped : String → String
+shouting : String → String
+unbound : String → String
+error[C0064] 36..43: extern `unbound` must name the Erlang function it binds: `= "module":"function"`
+error[C0064] 121..127: extern `shouting` binds "Read", which is not a plain Erlang function name (a lowercase letter, then letters, digits, and `_`)
+error[C0064] 180..188: extern `escaped` binds "re\\ad", which is not a plain Erlang function name (a lowercase letter, then letters, digits, and `_`)

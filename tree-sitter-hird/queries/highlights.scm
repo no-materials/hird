@@ -57,6 +57,13 @@
 (extern_declaration
   name: (identifier) @function)
 
+(extern_module_declaration
+  path: (string) @string.special.path)
+
+(extern_binding
+  module: (string) @module
+  function: (string) @function)
+
 (type_declaration
   name: (type_identifier) @type.definition)
 

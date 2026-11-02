@@ -87,6 +87,13 @@ the body's row). Handler maps never cross a process boundary: a
 `handle` block wrapped around `spawn`/`supervise` does nothing for
 the spawned actor — use `install`.
 
+**Real implementations are Erlang externs.** `extern module "x.erl"`
+declares a hand-written Erlang source next to the program, and
+`extern fn erl_f(args: A) → R ! {Exn<E>} = "x":"f"` binds one of its
+functions. An extern is only ever the whole handler of a `Tool<…>` arm;
+never call, bind, or pass it. Its row is at most the one `Exn` its tool
+declares.
+
 **Entry point.** `hird run` requires exactly one `fn main() → ()`
 with no parameters and no residual `Tool<…>` in its row. `Install`,
 `Supervise`, `Stand`, `Clock`, `Send`, `Await` may remain. A program halts when
@@ -202,6 +209,11 @@ against a draft with five typical mistakes and pins it as a test.
 | `Tool<X>` arm where `X` is not a declared tool | C0033 |
 | Handler whose type does not match the tool's signature | C0034 (non-function handler: C0031) |
 | Effectful handler in an `install` block | C0051 — installed handlers must be pure |
+| An extern without `= "module":"function"`, or with a function name that is not a plain atom | C0064 |
+| A binding to a module no `extern module` in the file declares, or a bad `extern module` path | C0065 — a relative `.erl` path whose file name is a plain, non-`hird_` module |
+| Calling an extern, binding it with `let`, or passing it to a function | C0066 — install it as a tool's handler instead |
+| An extern row with anything but one `Exn<…>` | C0067 |
+| An extern's `Exn<E>` that its tool does not declare | C0068 — add it to the tool's row |
 | `stand()` inside an actor's `init` or handler | C0054 — it would park the actor's process; stand from `main` |
 | `self()` outside an actor's `init` or handler | C0055 — only an actor has an own pid |
 | Effectful `start_args` other than `clock()` | C0049 — start arguments run in the supervisor; acquiring the clock is the one exception |

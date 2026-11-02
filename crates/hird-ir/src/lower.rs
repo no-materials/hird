@@ -32,10 +32,10 @@ use alloc::vec::Vec;
 
 use hird_ast::{
     ActorDecl, ActorField, ActorHandler, AppExpr, AstNode, BinOpExpr, ChildExpr, CrashExpr, Decl,
-    Expr, ExternDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock, LambdaExpr, LetExpr,
-    Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr, RequestExpr, ScheduleExpr,
-    SendExpr, SeqExpr, SourceFile, SpawnExpr, SuperviseExpr, SupervisorDecl, SupervisorField,
-    ToolDecl, TupleLit, TypeDecl,
+    Expr, ExternDecl, ExternModuleDecl, FieldExpr, FnDecl, HandleBlock, IfExpr, InstallBlock,
+    LambdaExpr, LetExpr, Literal, MatchExpr, Pattern, RecordField, RecordLit, ReplyExpr,
+    RequestExpr, ScheduleExpr, SendExpr, SeqExpr, SourceFile, SpawnExpr, SuperviseExpr,
+    SupervisorDecl, SupervisorField, ToolDecl, TupleLit, TypeDecl,
 };
 use hird_check::{CheckedFile, NodeKey};
 use hird_parse::SyntaxKind;
@@ -44,11 +44,11 @@ use hird_types::{Effect, EffectRow, Type};
 use crate::ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
     IrClock, IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr,
-    IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
-    IrListPat, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord,
-    IrRecordField, IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand,
-    IrSupervise, IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar,
-    IrWildcardPat, LiteralValue,
+    IrExternModule, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda,
+    IrLet, IrList, IrListPat, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
+    IrRecord, IrRecordField, IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn,
+    IrStand, IrSupervise, IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef,
+    IrVar, IrWildcardPat, LiteralValue,
 };
 
 /// Lowers one checked module into IR.
@@ -69,8 +69,10 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
         newlines: newline_offsets(file),
     };
     let mut declarations = Vec::new();
+    let mut extern_modules = Vec::new();
     for decl in file.declarations() {
         match decl {
+            Decl::ExternModule(d) => extern_modules.extend(lower_extern_module(&d)),
             Decl::Fn(d) => declarations.extend(lowerer.lower_fn(&d).map(IrDecl::Fn)),
             Decl::Type(d) => declarations.extend(lowerer.lower_type(&d).map(IrDecl::Type)),
             Decl::Extern(d) => declarations.extend(lowerer.lower_extern(&d).map(IrDecl::Extern)),
@@ -99,6 +101,7 @@ pub fn lower_module(file: &SourceFile, checked: &CheckedFile, name: &str) -> IrM
         name: String::from(name),
         declarations,
         imported_tools,
+        extern_modules,
     }
 }
 
@@ -348,11 +351,12 @@ impl Lowerer<'_> {
             .checked
             .type_at(NodeKey::of_node(decl.syntax()))?
             .clone();
+        let binding = decl.binding()?;
         Some(IrExternRef {
             name: String::from(name),
             ty,
-            // The surface syntax does not yet name a backing FFI module.
-            module: None,
+            module: String::from(string_contents(binding.module_token()?.text())),
+            function: String::from(string_contents(binding.function_token()?.text())),
             span: self.span(decl.syntax()),
         })
     }
@@ -964,6 +968,25 @@ fn application_args(app: &AppExpr) -> Vec<Expr> {
         Some(other) => Vec::from([other]),
         None => Vec::new(),
     }
+}
+
+/// An `extern module` declaration's source: the path as written and the
+/// Erlang module its file name names.
+fn lower_extern_module(decl: &ExternModuleDecl) -> Option<IrExternModule> {
+    let path = string_contents(decl.path_token()?.text());
+    let file = path.rsplit('/').next()?;
+    Some(IrExternModule {
+        name: String::from(file.strip_suffix(".erl")?),
+        path: String::from(path),
+    })
+}
+
+/// A string literal's text without its quotes; the checker admits no
+/// escapes in extern bindings and paths.
+fn string_contents(text: &str) -> &str {
+    text.strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .unwrap_or(text)
 }
 
 /// A literal's value, tagged by its token kind and carrying its source text.

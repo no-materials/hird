@@ -31,6 +31,15 @@
 %% rethrows, so the failure propagates exactly as it would unaudited. Any
 %% other exception is a crash, not a domain error: it propagates untouched
 %% and unrecorded.
+%%
+%% The record is the trust boundary for handlers the checker cannot see:
+%% an Erlang-bound extern, or a handler installed from Erlang. A result or
+%% thrown error the tool's declared types cannot encode crashes the caller
+%% with `{handler_result, ToolName, Mismatch}` or
+%% `{handler_error, ToolName, Mismatch}` instead of reaching it. A live
+%% call's arguments come from checked Hirð code, so the mismatch is the
+%% handler's. Without an audit sink nothing is encoded, so nothing is
+%% checked.
 -spec call(atom(), [hird_types:shape()], binary(), #{term() => fun()},
            term()) -> term().
 call(ToolName, TypeArgs, Site, Handlers, Args) ->
@@ -50,12 +59,25 @@ live(ToolName, TypeArgs, Caller, Handlers, Args) ->
     Handler = resolve(ToolName, Handlers),
     try Handler(Args, Handlers) of
         Result ->
-            audit(ToolName, TypeArgs, Caller, Args, {ok, Result}),
+            checked(handler_result, ToolName, fun() ->
+                audit(ToolName, TypeArgs, Caller, Args, {ok, Result})
+            end),
             Result
     catch
         throw:{hird_exn, Error}:Stacktrace ->
-            audit(ToolName, TypeArgs, Caller, Args, {err, Error}),
+            checked(handler_error, ToolName, fun() ->
+                audit(ToolName, TypeArgs, Caller, Args, {err, Error})
+            end),
             erlang:raise(throw, {hird_exn, Error}, Stacktrace)
+    end.
+
+%% Runs `Audit`, attributing a value it cannot encode to the handler as a
+%% `Kind` crash.
+checked(Kind, ToolName, Audit) ->
+    try Audit()
+    catch
+        error:{unencodable, Shape, Value} ->
+            erlang:error({Kind, ToolName, {unencodable, Shape, Value}})
     end.
 
 %% Replayed dispatch: the cursor is the only authority — the threaded map

@@ -1,0 +1,18 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(&with_tool(\"effect Log\\n\\\n         extern fn erl_read_file(args: { path: String }) -> String = \\\"files\\\":\\\"read\\\"\\n\\\n         fn apply(f: { path: String } -> String) -> String = f({ path: \\\"a\\\" })\\n\\\n         fn call() -> String = erl_read_file({ path: \\\"a\\\" })\\n\\\n         fn bind() -> Int = let f = erl_read_file in 1\\n\\\n         fn pass() -> String = apply(erl_read_file)\\n\\\n         fn wrap() -> String ! {Exn<Missing>} =\\n\\\n           handle { Tool<ReadFile> -> \\\\a -> erl_read_file(a) } in read_file({ path: \\\"a\\\" })\\n\\\n         fn bare() -> Int = handle { Log -> erl_read_file } in 1\"))"
+---
+Missing : String → Missing
+apply : ({ path: String } → String) → String
+bare : () → Int
+bind : () → Int
+call : () → String
+erl_read_file : { path: String } → String
+pass : () → String
+read_file : { path: String } → String ! {Exn<Missing>, Tool<ReadFile>}
+wrap : () → String ! {Exn<Missing>}
+error[C0066] 298..311: extern `erl_read_file` can only be the handler of a tool arm (`Tool<…> → erl_read_file` in `install` or `handle`); it cannot be called or used as a value
+error[C0066] 354..367: extern `erl_read_file` can only be the handler of a tool arm (`Tool<…> → erl_read_file` in `install` or `handle`); it cannot be called or used as a value
+error[C0066] 401..414: extern `erl_read_file` can only be the handler of a tool arm (`Tool<…> → erl_read_file` in `install` or `handle`); it cannot be called or used as a value
+error[C0066] 488..501: extern `erl_read_file` can only be the handler of a tool arm (`Tool<…> → erl_read_file` in `install` or `handle`); it cannot be called or used as a value
+error[C0066] 570..583: extern `erl_read_file` can only be the handler of a tool arm (`Tool<…> → erl_read_file` in `install` or `handle`); it cannot be called or used as a value

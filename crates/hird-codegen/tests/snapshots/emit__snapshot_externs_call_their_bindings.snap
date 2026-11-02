@@ -1,0 +1,43 @@
+---
+source: crates/hird-codegen/tests/emit.rs
+expression: "emit(program(\"Ffi\"), \"Ffi\")"
+---
+%% Generated from src/ffi.hird by the Hirð compiler. Do not edit.
+-module(hird_ffi).
+-export([erl_read_file/2, erl_size/1, main/1, hird_tools@/0]).
+
+%% src/ffi.hird:5
+erl_read_file(P0, _Handlers) ->
+    files:read(P0).
+
+%% src/ffi.hird:7
+erl_size(P0) ->
+    files:'receive'(P0).
+
+%% src/ffi.hird:8
+main(_Handlers@) ->
+    hird_handlers:with_handlers(
+        [
+            {{tool, read_file}, fun(Args@1, Handlers@2) -> erl_read_file(Args@1, Handlers@2) end},
+            {{tool, size}, fun(Args@3, _Handlers@4) -> erl_size(Args@3) end}
+        ],
+        fun() ->
+            ok
+        end).
+
+hird_tools@() ->
+    #{tools => #{
+            read_file => #{
+                name => <<"ReadFile"/utf8>>,
+                params => 0,
+                args => {record, [{path, string}]},
+                result => string,
+                error => {adt, missing, []}},
+            size => #{
+                name => <<"Size"/utf8>>,
+                params => 0,
+                args => {record, [{path, string}]},
+                result => int,
+                error => dynamic}},
+        types => #{
+            missing => [{missing, <<"Missing"/utf8>>, [string]}]}}.

@@ -138,6 +138,16 @@ unknown_tool_is_an_error_test() ->
 dynamic_shape_is_an_error_test() ->
     ?assertError({unencodable, dynamic, 1}, encode(dynamic, 1)).
 
+%% A value of the wrong form is `unencodable` whatever the shape: a record
+%% missing a label, an ADT given something no constructor builds.
+mismatched_values_are_unencodable_test() ->
+    ?assertError({unencodable, {record, [{n, int}]}, #{m := 1}},
+                 encode({record, [{n, int}]}, #{m => 1})),
+    ?assertError({unencodable, {adt, option, [int]}, <<"some">>},
+                 encode({adt, option, [int]}, <<"some">>)),
+    ?assertError({unencodable, {adt, option, [int]}, {1, 2}},
+                 encode({adt, option, [int]}, {1, 2})).
+
 %% Decoding ----------------------------------------------------------------
 
 %% Every golden line decodes to the record the runtime assembled, and

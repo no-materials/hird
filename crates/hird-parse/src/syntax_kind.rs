@@ -235,6 +235,10 @@ pub enum SyntaxKind {
     TOOL_DECL,
     /// Extern function declaration.
     EXTERN_DECL,
+    /// Extern binding (`= "module":"function"`).
+    EXTERN_BINDING,
+    /// Extern module declaration (`extern module "path.erl"`).
+    EXTERN_MODULE_DECL,
     /// `let ... = ... in ...` expression.
     LET_EXPR,
     /// `first; rest`.

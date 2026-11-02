@@ -181,6 +181,7 @@ fn normalize(module: &IrModule) -> IrModule {
         name: module.name.clone(),
         declarations: module.declarations.iter().map(normalize_decl).collect(),
         imported_tools: module.imported_tools.clone(),
+        extern_modules: module.extern_modules.clone(),
     }
 }
 
@@ -251,6 +252,7 @@ fn normalize_decl(decl: &IrDecl) -> IrDecl {
                 name: e.name.clone(),
                 ty: canon_type(&e.ty, &mut map),
                 module: e.module.clone(),
+                function: e.function.clone(),
                 span: IrSpan::default(),
             })
         }
@@ -585,12 +587,27 @@ fn record_update_round_trips() {
 
 #[test]
 fn extern_reference() {
-    assert_roundtrips("extern fn sqrt(x: Float) -> Float");
+    assert_roundtrips(
+        "extern module \"ffi/math.erl\"\n\
+         extern fn sqrt(x: Float) -> Float = \"math\":\"sqrt\"",
+    );
 }
 
 #[test]
 fn polymorphic_extern() {
-    assert_roundtrips("extern fn identity(x: a) -> a");
+    assert_roundtrips(
+        "extern module \"ffi.erl\"\n\
+         extern fn identity(x: a) -> a = \"ffi\":\"identity\"",
+    );
+}
+
+#[test]
+fn extern_with_an_exn_row() {
+    assert_roundtrips(
+        "type Missing = Missing(String)\n\
+         extern module \"ffi.erl\"\n\
+         extern fn read(path: String) -> String ! {Exn<Missing>} = \"ffi\":\"read\"",
+    );
 }
 
 #[test]
@@ -774,7 +791,8 @@ fn snapshot_let_lambda_and_operators() {
 #[test]
 fn snapshot_polymorphic_and_extern() {
     let module = lower_src(
-        "extern fn map(f: a -> b, xs: List<a>) -> List<b>\n\
+        "extern module \"ffi.erl\"\n\
+         extern fn map(f: a -> b, xs: List<a>) -> List<b> = \"ffi\":\"map\"\n\
          fn snd(x: b, y: a) -> a = y",
         "Poly",
     );

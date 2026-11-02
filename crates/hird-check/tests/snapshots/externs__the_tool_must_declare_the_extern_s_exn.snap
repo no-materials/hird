@@ -1,0 +1,13 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(&with_tool(\"type Other = Other(String)\\n\\\n         tool Plain : { path: String } -> String\\n\\\n         extern fn raises(args: { path: String }) -> String ! {Exn<Missing>} = \\\"files\\\":\\\"a\\\"\\n\\\n         extern fn raises_other(args: { path: String }) -> String ! {Exn<Other>} = \\\"files\\\":\\\"b\\\"\\n\\\n         fn main() -> () ! {Install} =\\n\\\n           install {\\n\\\n             Tool<Plain> -> raises,\\n\\\n             Tool<ReadFile> -> raises_other,\\n\\\n           } in ()\"))"
+---
+Missing : String → Missing
+Other : String → Other
+main : () → () ! {Install}
+plain : { path: String } → String ! {Tool<Plain>}
+raises : { path: String } → String ! {Exn<Missing>}
+raises_other : { path: String } → String ! {Exn<Other>}
+read_file : { path: String } → String ! {Exn<Missing>, Tool<ReadFile>}
+error[C0068] 411..417: extern `raises` may raise `Exn<Missing>`, but tool `Plain` does not declare it; add `Exn<Missing>` to the tool's row
+error[C0068] 437..449: extern `raises_other` may raise `Exn<Other>`, but tool `ReadFile` does not declare it; add `Exn<Other>` to the tool's row

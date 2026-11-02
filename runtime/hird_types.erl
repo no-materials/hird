@@ -125,10 +125,12 @@ value({list, Elem}, Types, L) when is_list(L) ->
 value({tuple, Shapes}, Types, T)
         when is_tuple(T), tuple_size(T) =:= length(Shapes) ->
     [$[, join(zip(Shapes, tuple_to_list(T), Types)), $]];
-value({record, Fields}, Types, Map) when is_map(Map) ->
+value({record, Fields} = Shape, Types, Map) when is_map(Map) ->
+    lists:all(fun({Label, _}) -> is_map_key(Label, Map) end, Fields) orelse
+        erlang:error({unencodable, Shape, Map}),
     Encoded = [[string(atom_to_binary(Label, utf8)), $:,
-                value(Shape, Types, maps:get(Label, Map))]
-               || {Label, Shape} <- Fields],
+                value(FieldShape, Types, maps:get(Label, Map))]
+               || {Label, FieldShape} <- Fields],
     [${, join(Encoded), $}];
 value({adt, Name, Params}, Types, V) ->
     Ctors = case ctors(Name, Types) of
@@ -139,7 +141,9 @@ value({adt, Name, Params}, Types, V) ->
         Atom when is_atom(Atom) -> {Atom, []};
         Tuple when is_tuple(Tuple), tuple_size(Tuple) > 1 ->
             [T | Fs] = tuple_to_list(Tuple),
-            {T, Fs}
+            {T, Fs};
+        _ ->
+            erlang:error({unencodable, {adt, Name, Params}, V})
     end,
     case lists:keyfind(Tag, 1, Ctors) of
         {Tag, WireName, Shapes} when length(Shapes) =:= length(Fields) ->

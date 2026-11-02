@@ -720,14 +720,6 @@ fn type_argument_arity() {
 // ── externs ─────────────────────────────────────────────────────
 
 #[test]
-fn extern_signature() {
-    insta::assert_snapshot!(check_str(
-        "extern fn list_len(xs: List<a>) -> Int\n\
-         fn main() = list_len([])"
-    ));
-}
-
-#[test]
 fn extern_requires_full_signature() {
     insta::assert_snapshot!(check_str("extern fn now()"));
 }

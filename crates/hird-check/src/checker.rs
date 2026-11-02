@@ -12,8 +12,8 @@ use alloc::vec::Vec;
 use core::mem;
 
 use hird_ast::{
-    AstNode, Decl, EffectAnn, EffectDecl, ExternDecl, FnDecl, Param, SourceFile, SyntaxNode,
-    ToolDecl, TypeAliasDecl, TypeDecl,
+    AstNode, Decl, EffectAnn, EffectDecl, FnDecl, Param, SourceFile, SyntaxNode, ToolDecl,
+    TypeAliasDecl, TypeDecl,
 };
 use hird_lex::Span;
 use hird_parse::SyntaxKind;
@@ -137,6 +137,12 @@ pub(crate) struct Checker {
     /// Unqualified tool function name (`read_repo`) → tool marker, for
     /// declared and selectively imported tools.
     pub(crate) tool_fns: BTreeMap<String, Name>,
+    /// Declared extern names. An extern is not a value: it resolves only as
+    /// a tool arm's handler.
+    pub(crate) externs: BTreeSet<String>,
+    /// Erlang modules this file's `extern module` declarations name, with
+    /// the declaring path's span.
+    pub(crate) extern_modules: BTreeMap<String, Span>,
     /// Uses of generic tools, checked for known wire types once inference
     /// is done.
     tool_uses: Vec<ToolUse>,
@@ -253,6 +259,8 @@ impl Checker {
             imported_tool_signatures: BTreeMap::new(),
             imported_tools: BTreeMap::new(),
             tool_fns: BTreeMap::new(),
+            externs: BTreeSet::new(),
+            extern_modules: BTreeMap::new(),
             tool_uses: Vec::new(),
             actors: BTreeMap::new(),
             supervisors: BTreeMap::new(),
@@ -301,6 +309,7 @@ impl Checker {
         let mut alias_decls = Vec::new();
         let mut fn_decls = Vec::new();
         let mut extern_decls = Vec::new();
+        let mut extern_module_decls = Vec::new();
         let mut effect_decls = Vec::new();
         let mut tool_decls = Vec::new();
         let mut actor_decls = Vec::new();
@@ -311,6 +320,7 @@ impl Checker {
                 Decl::TypeAlias(d) => alias_decls.push(d),
                 Decl::Fn(d) => fn_decls.push(d),
                 Decl::Extern(d) => extern_decls.push(d),
+                Decl::ExternModule(d) => extern_module_decls.push(d),
                 Decl::Effect(d) => effect_decls.push(d),
                 Decl::Tool(d) => tool_decls.push(d),
                 Decl::Actor(d) => actor_decls.push(d),
@@ -384,6 +394,8 @@ impl Checker {
         for decl in &supervisor_decls {
             self.register_supervisor(decl);
         }
+        // Erlang sources first, so every binding resolves against all of them.
+        self.register_extern_modules(&extern_module_decls);
         for decl in &extern_decls {
             let _ = self.declare_extern(decl);
         }
@@ -1117,40 +1129,6 @@ impl Checker {
         }
     }
 
-    // ── externs ─────────────────────────────────────────────────
-
-    /// Elaborates an extern declaration's signature and binds it.
-    fn declare_extern(&mut self, decl: &ExternDecl) -> Checked<()> {
-        let Some(name) = decl.name() else {
-            return Ok(());
-        };
-        let params: Vec<_> = decl.params().collect();
-        let annotated = params.iter().all(|p| p.ty().is_some());
-        let Some(ret) = decl.return_type() else {
-            return Err(self.incomplete_extern(name, decl.syntax()));
-        };
-        if !annotated {
-            return Err(self.incomplete_extern(name, decl.syntax()));
-        }
-        // Externs have no effect annotation in the grammar; their row is empty.
-        let scheme = self.signature_scheme(&params, &ret, None)?;
-        self.env.insert_root(name, scheme.clone());
-        self.types
-            .push((NodeKey::of_node(decl.syntax()), scheme.clone()));
-        self.bindings.push((String::from(name), scheme));
-        Ok(())
-    }
-
-    /// Reports an extern declaration missing parts of its signature.
-    fn incomplete_extern(&mut self, name: &str, node: &SyntaxNode) -> Aborted {
-        let span = name_token_span(node, self.source_id);
-        self.error(
-            CheckCode::C0014,
-            span,
-            format!("extern `{name}` requires a fully annotated signature"),
-        )
-    }
-
     /// Elaborates a full signature — every parameter type, the return type, and
     /// the optional effect annotation — into a generalised scheme. Surface type
     /// and row variables are implicitly quantified; they share one scope, so a
@@ -1158,7 +1136,7 @@ impl Checker {
     /// same variable. Each parameter's name is recorded as a capability so the
     /// effect row may reference it (`EtsRead<t>`); callers pass fully annotated
     /// parameters, so every `ty()` is present.
-    fn signature_scheme(
+    pub(crate) fn signature_scheme(
         &mut self,
         params: &[Param],
         ret: &hird_ast::TypeExpr,

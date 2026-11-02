@@ -767,7 +767,7 @@ fn index_definitions(file: &SourceFile, source: &str) -> Vec<Definition> {
                     add(name, "supervisor", name_token_start(d.syntax()), d.syntax());
                 }
             }
-            Decl::Module(_) | Decl::Use(_) => {}
+            Decl::Module(_) | Decl::Use(_) | Decl::ExternModule(_) => {}
         }
     }
     out

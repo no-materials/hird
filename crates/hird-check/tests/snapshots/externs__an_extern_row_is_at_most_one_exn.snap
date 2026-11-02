@@ -1,0 +1,13 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(&with_tool(\"type Other = Other(String)\\n\\\n         extern fn tooly(args: { path: String }) -> String ! {Tool<ReadFile>} = \\\"files\\\":\\\"a\\\"\\n\\\n         extern fn twice(args: { path: String }) -> String ! {Exn<Missing>, Exn<Other>}\\n\\\n           = \\\"files\\\":\\\"b\\\"\\n\\\n         extern fn open(args: { path: String }) -> String ! {Exn<Missing>, e} = \\\"files\\\":\\\"c\\\"\"))"
+---
+Missing : String → Missing
+Other : String → Other
+open : ∀r. { path: String } → String ! {Exn<Missing> | r}
+read_file : { path: String } → String ! {Exn<Missing>, Tool<ReadFile>}
+tooly : { path: String } → String ! {Tool<ReadFile>}
+twice : { path: String } → String ! {Exn<Missing>, Exn<Other>}
+error[C0067] 197..216: extern `tooly` may declare at most one `Exn<…>` and nothing else (an Erlang function performs no Hirð effects), but its row is `{Tool<ReadFile>}`
+error[C0067] 280..309: extern `twice` may declare at most one `Exn<…>` and nothing else (an Erlang function performs no Hirð effects), but its row is `{Exn<Missing>, Exn<Other>}`
+error[C0067] 372..392: extern `open` may declare at most one `Exn<…>` and nothing else (an Erlang function performs no Hirð effects), but its row is `{Exn<Missing> | r}`

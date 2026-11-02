@@ -24,6 +24,10 @@ dispatcher.
   domain failure by throwing `{hird_exn, Error}`: the dispatcher records
   an `{err, Error}` result and rethrows; any other exception is a crash,
   propagated untouched and unrecorded.
+  A live result or error the tool's declared types cannot encode, as from
+  an Erlang-bound extern that breaks its promise, crashes the caller with
+  `{handler_result, ToolName, Mismatch}` or `{handler_error, ToolName,
+  Mismatch}` instead of reaching it.
 - `hird_audit.erl` — the audit log sink: a `gen_server` writing canonical
   JSON lines (the wire format of `docs/tool-effects.md`) to stdout or an
   append-only file, in arrival order. Encoding is type-directed against

@@ -1,0 +1,10 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(\"extern module \\\"/abs/files.erl\\\"\\n\\\n         extern module \\\"files.ex\\\"\\n\\\n         extern module \\\"ffi//files.erl\\\"\\n\\\n         extern module \\\"Files.erl\\\"\\n\\\n         extern module \\\"hird_files.erl\\\"\\n\\\n         extern module \\\"ok.erl\\\"\\n\\\n         extern module \\\"other/ok.erl\\\"\")"
+---
+error[C0065] 14..30: `extern module "/abs/files.erl"` must name a relative `.erl` path, `/`-separated, whose file name is a plain Erlang module name not starting with `hird_`
+error[C0065] 45..55: `extern module "files.ex"` must name a relative `.erl` path, `/`-separated, whose file name is a plain Erlang module name not starting with `hird_`
+error[C0065] 70..86: `extern module "ffi//files.erl"` must name a relative `.erl` path, `/`-separated, whose file name is a plain Erlang module name not starting with `hird_`
+error[C0065] 101..112: `extern module "Files.erl"` must name a relative `.erl` path, `/`-separated, whose file name is a plain Erlang module name not starting with `hird_`
+error[C0065] 127..143: `extern module "hird_files.erl"` must name a relative `.erl` path, `/`-separated, whose file name is a plain Erlang module name not starting with `hird_`
+error[C0065] 181..195: Erlang module `ok` is declared twice

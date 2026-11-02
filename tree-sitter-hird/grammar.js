@@ -68,6 +68,7 @@ module.exports = grammar({
         $.effect_declaration,
         $.tool_declaration,
         $.extern_declaration,
+        $.extern_module_declaration,
       ),
 
     use_declaration: ($) =>
@@ -214,7 +215,15 @@ module.exports = grammar({
         field('name', $.identifier),
         field('parameters', $.parameter_list),
         optional(field('return_type', $.return_type)),
+        optional(field('effects', $.effect_annotation)),
+        optional(field('binding', $.extern_binding)),
       ),
+
+    // `= "module":"function"`: the Erlang function an extern binds.
+    extern_binding: ($) =>
+      seq('=', field('module', $.string), ':', field('function', $.string)),
+
+    extern_module_declaration: ($) => seq('extern', 'module', field('path', $.string)),
 
     // ── types ───────────────────────────────────────────────────
 

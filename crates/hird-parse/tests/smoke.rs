@@ -512,6 +512,18 @@ fn extern_decl() {
     insta::assert_snapshot!(render_cst("extern fn print(s: String) -> Unit"));
 }
 
+#[test]
+fn extern_decl_with_row_and_binding() {
+    insta::assert_snapshot!(render_cst(
+        "extern fn read(p: String) -> String ! {Exn<Missing>} = \"files\":\"read\""
+    ));
+}
+
+#[test]
+fn extern_module_decl() {
+    insta::assert_snapshot!(render_cst("extern module \"ffi/files.erl\""));
+}
+
 // ── expressions ─────────────────────────────────────────────────
 
 #[test]

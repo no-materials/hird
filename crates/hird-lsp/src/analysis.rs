@@ -448,7 +448,7 @@ fn index_definitions(file: &SourceFile) -> BTreeMap<String, Vec<(u32, u32)>> {
                     add(name, name_token_range(d.syntax()));
                 }
             }
-            Decl::Module(_) | Decl::Use(_) => {}
+            Decl::Module(_) | Decl::Use(_) | Decl::ExternModule(_) => {}
         }
     }
     out

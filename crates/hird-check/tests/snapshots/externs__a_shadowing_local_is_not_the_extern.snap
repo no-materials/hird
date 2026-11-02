@@ -1,0 +1,9 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(&with_tool(\"extern fn erl_read_file(args: { path: String }) -> String = \\\"files\\\":\\\"read\\\"\\n\\\n         fn f(erl_read_file: Int) -> Int = erl_read_file + 1\"))"
+---
+Missing : String → Missing
+erl_read_file : { path: String } → String
+f : Int → Int
+read_file : { path: String } → String ! {Exn<Missing>, Tool<ReadFile>}
+warning[C0011] 201..214: binding `erl_read_file` shadows an outer binding

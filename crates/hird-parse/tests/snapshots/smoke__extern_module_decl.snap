@@ -1,0 +1,11 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"extern module \\\"ffi/files.erl\\\"\")"
+---
+SOURCE_FILE
+  EXTERN_MODULE_DECL
+    EXTERN_KW "extern"
+    WHITESPACE " "
+    MODULE_KW "module"
+    WHITESPACE " "
+    STRING "\"ffi/files.erl\""

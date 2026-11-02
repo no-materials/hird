@@ -1,0 +1,6 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(\"extern fn read(path: String) -> String = \\\"files\\\":\\\"read\\\"\")"
+---
+read : String → String
+error[C0065] 41..48: extern `read` binds a function of "files", which no `extern module` in this file declares

@@ -994,8 +994,17 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.finish_node();
     }
 
-    /// `extern fn name(params) → Ret`.
+    /// `extern fn name(params) → Ret ! {row} = "module":"function"`, or
+    /// `extern module "path.erl"`.
     fn parse_extern_decl(&mut self) {
+        if self.nth(1) == SyntaxKind::MODULE_KW {
+            self.start_node(SyntaxKind::EXTERN_MODULE_DECL);
+            self.expect(SyntaxKind::EXTERN_KW);
+            self.expect(SyntaxKind::MODULE_KW);
+            self.expect(SyntaxKind::STRING);
+            self.finish_node();
+            return;
+        }
         self.start_node(SyntaxKind::EXTERN_DECL);
         self.expect(SyntaxKind::EXTERN_KW);
         self.expect(SyntaxKind::FN_KW);
@@ -1007,6 +1016,17 @@ impl<'src, 'tok> Parser<'src, 'tok> {
         self.expect(SyntaxKind::R_PAREN);
         if self.at(SyntaxKind::ARROW) {
             self.parse_return_type();
+        }
+        if self.at(SyntaxKind::BANG) {
+            self.parse_effect_ann();
+        }
+        if self.at(SyntaxKind::EQ) {
+            self.start_node(SyntaxKind::EXTERN_BINDING);
+            self.bump();
+            self.expect(SyntaxKind::STRING);
+            self.expect(SyntaxKind::COLON);
+            self.expect(SyntaxKind::STRING);
+            self.finish_node();
         }
         self.finish_node();
     }

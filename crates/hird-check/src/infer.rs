@@ -93,6 +93,20 @@ impl Checker {
                         ),
                     ));
                 }
+                // An extern is not a value: it resolves only as a tool arm's
+                // handler, so every foreign call goes through the dispatcher.
+                if self.is_extern_ref(text) {
+                    let span = token_span(name.syntax(), self.source_id);
+                    return Err(self.error(
+                        CheckCode::C0066,
+                        span,
+                        format!(
+                            "extern `{text}` can only be the handler of a tool arm \
+                             (`Tool<…> → {text}` in `install` or `handle`); it cannot be \
+                             called or used as a value"
+                        ),
+                    ));
+                }
                 // An unshadowed use of an unqualified imported function is
                 // recorded so lowering can qualify it to its defining module.
                 if let Some(from) = self.imported_fns.get(text)
@@ -335,7 +349,7 @@ impl Checker {
             if let Some(effect) = effect {
                 handled.insert(effect);
             }
-            if let Some((handler_ty, _)) = self.check_arm_handler(&arm, tool, "a handle")? {
+            if let Some((handler_ty, _, _)) = self.check_arm_handler(&arm, tool, "a handle")? {
                 // The freshly resolved function type's row is canonical; a
                 // later arm's solving is caught by the final resolve of
                 // `handler_effects`.
@@ -382,11 +396,15 @@ impl Checker {
 
         // The purity obligation is checked after all arms, so tool-signature
         // unification has already solved what it can of each handler's row.
+        // An extern's row was checked against its tool's when its arm was.
         let mut installed: Vec<(Type, Span)> = Vec::new();
         for arm in install.arms() {
             let (_, tool) = self.check_arm_effect(&arm);
-            if let Some(checked) = self.check_arm_handler(&arm, tool, "an install")? {
-                installed.push(checked);
+            if let Some((handler_ty, span, is_extern)) =
+                self.check_arm_handler(&arm, tool, "an install")?
+                && !is_extern
+            {
+                installed.push((handler_ty, span));
             }
         }
         for (handler_ty, span) in installed {
@@ -450,26 +468,38 @@ impl Checker {
 
     /// Infers a handle/install arm's handler and applies the shared checks:
     /// the handler must be a function (C0031), and a tool arm's handler must
-    /// match the tool's operation signature (C0034). Returns the handler's
-    /// type and span when it is a function; `form` names the block form in
-    /// the C0031 message ("a handle" / "an install").
+    /// match the tool's operation signature (C0034); an extern handler's
+    /// `Exn` must be one the tool declares (C0068). Returns the handler's
+    /// type and span when it is a function, and whether it is an extern;
+    /// `form` names the block form in the C0031 message ("a handle" / "an
+    /// install").
     fn check_arm_handler(
         &mut self,
         arm: &HandleArm,
         tool: Option<Name>,
         form: &str,
-    ) -> Checked<Option<(Type, Span)>> {
+    ) -> Checked<Option<(Type, Span, bool)>> {
         let Some(handler) = arm.handler() else {
             return Ok(None);
         };
-        let handler_ty = self.infer_expr(&handler)?;
         let span = expr_span(&handler, self.source_id);
+        let extern_ty = tool
+            .as_ref()
+            .and_then(|_| self.extern_handler_type(&handler));
+        let is_extern = extern_ty.is_some();
+        let handler_ty = match extern_ty {
+            Some(ty) => ty,
+            None => self.infer_expr(&handler)?,
+        };
         match self.subst.resolve(&handler_ty) {
             Type::TyFn(..) => {
-                if let Some(tool) = tool {
-                    self.check_tool_handler(&tool, &handler_ty, span);
+                if let Some(tool) = tool
+                    && let Some(tool_row) = self.check_tool_handler(&tool, &handler_ty, span)
+                    && is_extern
+                {
+                    self.check_extern_exn(tool.as_str(), &tool_row, &handler, &handler_ty);
                 }
-                Ok(Some((handler_ty, span)))
+                Ok(Some((handler_ty, span, is_extern)))
             }
             other => {
                 let _ = self.error(
@@ -487,13 +517,17 @@ impl Checker {
     /// unified with the handler's type, so a monomorphic handler for a generic
     /// tool is accepted. The expected row is a fresh open row variable — a
     /// mock may be pure and need not carry the tool's declared trailing row.
-    /// A mismatch is reported as C0034, not a raw unification error.
-    fn check_tool_handler(&mut self, tool: &Name, handler_ty: &Type, span: Span) {
-        let Some(scheme) = self.tool_signature(tool).cloned() else {
-            return;
-        };
-        let Type::TyFn(params, ret, _) = self.subst.instantiate(&scheme) else {
-            return;
+    /// A mismatch is reported as C0034, not a raw unification error. Returns
+    /// the row of the tool instance the handler matched.
+    fn check_tool_handler(
+        &mut self,
+        tool: &Name,
+        handler_ty: &Type,
+        span: Span,
+    ) -> Option<EffectRow> {
+        let scheme = self.tool_signature(tool).cloned()?;
+        let Type::TyFn(params, ret, tool_row) = self.subst.instantiate(&scheme) else {
+            return None;
         };
         // Rendered before unifying: a failed unification may leave partial
         // bindings that would distort the displayed types.
@@ -509,7 +543,9 @@ impl Checker {
                      but this has type `{handler_disp}`"
                 ),
             );
+            return None;
         }
+        Some(tool_row)
     }
 
     /// `spawn(Actor, args…)` — starts an actor, returning a typed reference.

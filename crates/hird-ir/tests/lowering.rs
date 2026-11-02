@@ -5,7 +5,7 @@
 //! structure and the JSON projection checked directly.
 
 use hird_ast::{AstNode, SourceFile};
-use hird_ir::{IrDecl, IrExpr, IrModule, IrPattern, LiteralValue, lower_module};
+use hird_ir::{IrDecl, IrExpr, IrExternModule, IrModule, IrPattern, LiteralValue, lower_module};
 
 /// Parses, checks, and lowers `source` into a module named `name`. Panics on
 /// any parse or type error so a malformed test surfaces immediately.
@@ -431,14 +431,28 @@ fn tuple_list_unit_and_literals() {
 // ── externs ──────────────────────────────────────────────────────
 
 #[test]
-fn extern_reference_carries_its_type() {
-    let module = lower("extern fn sqrt(x: Float) -> Float", "Ffi");
+fn extern_reference_carries_its_type_and_binding() {
+    let module = lower(
+        "extern module \"ffi/math.erl\"\n\
+         extern fn sqrt(x: Float) -> Float = \"math\":\"sqrt\"",
+        "Ffi",
+    );
     let [IrDecl::Extern(ext)] = module.declarations.as_slice() else {
         panic!("expected one extern, got {:?}", module.declarations);
     };
     assert_eq!(ext.name, "sqrt");
     assert_eq!(ty_str(&ext.ty), "Float \u{2192} Float");
-    assert_eq!(ext.module, None);
+    assert_eq!(
+        (ext.module.as_str(), ext.function.as_str()),
+        ("math", "sqrt")
+    );
+    assert_eq!(
+        module.extern_modules,
+        [IrExternModule {
+            name: String::from("math"),
+            path: String::from("ffi/math.erl"),
+        }]
+    );
 }
 
 // ── JSON serialization ───────────────────────────────────────────
@@ -945,7 +959,8 @@ fn declarations_carry_source_lines() {
          \n\
          fn pick(f: Flag) -> Int =\n\
            match f { On -> 1, Off -> 0, }\n\
-         extern fn sqrt(x: Float) -> Float",
+         extern fn sqrt(x: Float) -> Float = \"m\":\"sqrt\"\n\
+         extern module \"m.erl\"",
         "Spans",
     );
     let lines: Vec<u32> = module

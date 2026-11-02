@@ -540,6 +540,9 @@ impl Printer {
         self.push("module ");
         self.push(&module.name);
         self.push("\n");
+        for source in &module.extern_modules {
+            let _ = write!(self.out, "\nextern module \"{}\"\n", source.path);
+        }
         for (head, arity) in collect_effects(module) {
             self.push("\n");
             self.effect_decl(&head, arity);
@@ -757,9 +760,9 @@ impl Printer {
         self.push("\n  ]\n}");
     }
 
-    /// `extern fn name(params) → ret`. Parameter names are synthesised (the IR
-    /// keeps only the signature type); the return annotation is mandatory, as
-    /// the surface grammar requires.
+    /// `extern fn name(params) → ret ! {row} = "module":"function"`. Parameter
+    /// names are synthesised (the IR keeps only the signature type); the return
+    /// annotation is mandatory, as the surface grammar requires.
     fn extern_ref(&mut self, e: &IrExternRef) {
         let mut vars = VarMap::new();
         let mut rows = RowMap::new();
@@ -770,8 +773,8 @@ impl Printer {
             Type::TyForall(_, _, inner) => inner.as_ref(),
             other => other,
         };
-        let ret = match body {
-            Type::TyFn(params, ret, _) => {
+        let (ret, row) = match body {
+            Type::TyFn(params, ret, row) => {
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
                         self.push(", ");
@@ -780,15 +783,20 @@ impl Printer {
                     self.push(": ");
                     self.push_type(param, &mut vars, &mut rows);
                 }
-                ret.as_ref()
+                (ret.as_ref(), Some(row))
             }
             // Defensive: a non-function extern type is not reachable from a
             // valid declaration, which always has a parameter list.
-            other => other,
+            other => (other, None),
         };
         self.push(")");
         self.push(" \u{2192} ");
         self.push_type(ret, &mut vars, &mut rows);
+        if let Some(row) = row.filter(|row| !row.is_empty()) {
+            self.push(" ! ");
+            self.push_display(&canonical_effect_row(row, &mut vars, &mut rows));
+        }
+        let _ = write!(self.out, " = \"{}\":\"{}\"", e.module, e.function);
     }
 
     /// Renders `expr`, wrapping it in parentheses when its precedence is below

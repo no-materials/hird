@@ -82,6 +82,19 @@ pub struct IrModule {
     /// codegen must know which qualified names are tools.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub imported_tools: Vec<IrToolRef>,
+    /// The hand-written Erlang sources the module declares
+    /// (`extern module "path.erl"`), in source order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub extern_modules: Vec<IrExternModule>,
+}
+
+/// A hand-written Erlang source a module declares.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IrExternModule {
+    /// The Erlang module: the file name without `.erl`.
+    pub name: String,
+    /// The path as declared, relative to the declaring source's directory.
+    pub path: String,
 }
 
 /// A tool declared by another module and called from this one.
@@ -130,7 +143,7 @@ pub enum IrDecl {
     Fn(IrFnDef),
     /// A data type definition.
     Type(IrTypeDef),
-    /// A reference to an external (FFI) function.
+    /// An extern: an Erlang function bound as a tool handler.
     Extern(IrExternRef),
     /// A tool declaration.
     Tool(IrToolDef),
@@ -311,7 +324,7 @@ pub struct IrChildSpec {
     pub restart: String,
 }
 
-/// A reference to an external (FFI) function.
+/// An extern: an Erlang function bound as a tool handler.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IrExternRef {
     /// The function's name.
@@ -319,9 +332,10 @@ pub struct IrExternRef {
     /// The function's type (a quantified scheme when polymorphic).
     #[serde(rename = "type", serialize_with = "serialize_type")]
     pub ty: Type,
-    /// The backing foreign module, if known. Always `None` in v0.1: the
-    /// surface syntax does not yet name an FFI module.
-    pub module: Option<String>,
+    /// The bound Erlang module.
+    pub module: String,
+    /// The bound Erlang function.
+    pub function: String,
     /// The declaration's source position.
     #[serde(skip)]
     pub span: IrSpan,

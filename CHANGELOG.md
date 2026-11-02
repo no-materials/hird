@@ -12,6 +12,36 @@ schedule and is not covered by these entries.
 
 ### Added
 
+- **Real tool implementations in Erlang.** Every tool had to be handled
+  by a pure Hirð function, so no program could reach a real service: an
+  `extern fn` named no foreign function and compiled to a stub that
+  crashed. An extern now binds an Erlang function,
+  `extern fn erl_read_file(args: { path: String }) → String ! {Exn<FileError>} = "files":"read"`,
+  from a hand-written source the program declares,
+  `extern module "files.erl"`, relative to the declaring file.
+  `hird build` compiles that source with the program through the build
+  cache. An extern can only be the handler of a `Tool<…>` arm, in
+  `handle` or `install`, so every foreign call is recorded on the audit
+  stream, and a replay serves it from the log without running the Erlang
+  code. Its row may hold the one `Exn` its tool declares, which the
+  Erlang side raises with `throw({hird_exn, Error})`. The new checks are
+  C0064 (no or malformed binding), C0065 (a bad `extern module` path, or
+  a binding to an undeclared module), C0066 (an extern called or used as
+  a value), C0067 (an extern row other than one `Exn`), and C0068 (an
+  `Exn` the tool does not declare). `demo/real_tool/` reads a file
+  through one. The IR's extern gains `function` beside a `module` that is
+  now always set, and a module lists its `extern_modules`.
+- **A handler's value is checked against its tool's types.** A handler
+  the checker cannot see, such as an extern or one installed from Erlang,
+  could return any term, and a wrong one went on into the program, or
+  failed while being recorded with an error naming neither the tool nor
+  the handler. The dispatcher now crashes the caller with
+  `{handler_result, Tool, Mismatch}`, or `{handler_error, Tool, Mismatch}`
+  for a thrown error, before the value reaches Hirð code. A record
+  missing a field, or an ADT given something no constructor builds,
+  failed encoding with a bare `badkey` or `case_clause`; both are now
+  `unencodable`, as the encoder's contract says.
+
 - **List patterns.** A list could be built with a literal and arrive as
   a tool result, but no pattern could take it apart: `[` in a pattern
   was a parse error, so a tool returning a list handed the program a
@@ -149,6 +179,12 @@ schedule and is not covered by these entries.
 
 ### Changed
 
+- **An extern must be bound, and is never called directly.** An
+  `extern fn` without `= "module":"function"` is C0064, and a call to one,
+  or any use other than as a tool's handler, is C0066. Unbound externs
+  compiled to a stub that always crashed, so no working program changes.
+  A failed compile now reads "compiling the Erlang modules failed", since
+  a program's own Erlang sources compile with it.
 - **Builds reuse compiled modules.** Every `hird build` and `hird run`
   handed all of a program's Erlang to `erlc` (its own modules, the nine
   runtime modules, and the boot module), so an unchanged program paid

@@ -234,6 +234,46 @@ replay_still_audits_test() ->
                           "\\{\"ctor\":\"ProbeError\","
                           "\"args\":\\[\"down\"\\]\\}\\}">>)).
 
+%% A handler the checker cannot see, such as an Erlang-bound extern, is
+%% held to the tool's declared types by its record: a result outside them
+%% crashes the caller, naming the tool, and is neither returned nor
+%% recorded.
+an_ill_typed_result_crashes_the_caller_test() ->
+    Path = filename:join("_build", "dispatch_ill_typed_result.jsonl"),
+    _ = file:delete(Path),
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}},
+                                        {tools, probe_table()}]),
+    Handlers = #{{tool, probe} => fun(_Args, _Handlers) -> <<"seven">> end},
+    ?assertError({handler_result, probe, {unencodable, int, <<"seven">>}},
+                 hird_tool_dispatch:call(probe, [], <<"M.f">>, Handlers,
+                                         #{n => 1})),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    ?assertEqual({ok, <<>>}, file:read_file(Path)).
+
+%% So is a thrown error outside the tool's error type, including one
+%% thrown under a tool that declares none.
+an_ill_typed_error_crashes_the_caller_test() ->
+    Path = filename:join("_build", "dispatch_ill_typed_error.jsonl"),
+    _ = file:delete(Path),
+    Quiet = #{name => <<"Quiet">>, params => 0, args => {record, [{n, int}]},
+              result => int, error => dynamic},
+    #{tools := Tools} = Table = probe_table(),
+    {ok, Sink} = hird_audit:start_link(
+        [{sink, {file, Path}}, {tools, Table#{tools := Tools#{quiet => Quiet}}}]),
+    Throws = fun(Error) -> fun(_Args, _Handlers) -> throw({hird_exn, Error}) end end,
+    ?assertError({handler_error, probe, {unencodable, {adt, probe_error, []}, oops}},
+                 hird_tool_dispatch:call(probe, [], <<"M.f">>,
+                                         #{{tool, probe} => Throws(oops)},
+                                         #{n => 1})),
+    ?assertError({handler_error, quiet, {unencodable, dynamic, oops}},
+                 hird_tool_dispatch:call(quiet, [], <<"M.f">>,
+                                         #{{tool, quiet} => Throws(oops)},
+                                         #{n => 1})),
+    ok = hird_audit:sync(),
+    gen_server:stop(Sink),
+    ?assertEqual({ok, <<>>}, file:read_file(Path)).
+
 %% A crash in a handler is not a domain error: it propagates untouched
 %% and leaves no audit record.
 crashes_propagate_unrecorded_test() ->

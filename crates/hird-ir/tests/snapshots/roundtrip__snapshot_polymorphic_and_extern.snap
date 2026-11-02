@@ -4,6 +4,8 @@ expression: pretty_print(&module)
 ---
 module Poly
 
-extern fn map(p0: a → b, p1: List<a>) → List<b>
+extern module "ffi.erl"
+
+extern fn map(p0: a → b, p1: List<a>) → List<b> = "ffi":"map"
 
 fn snd(x: a, y: b) → b = y

@@ -1,0 +1,7 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(\"extern module \\\"echo.erl\\\"\\n\\\n         tool Echo<t> : { value: t } -> t\\n\\\n         extern fn erl_echo(args: { value: t }) -> t = \\\"echo\\\":\\\"echo\\\"\\n\\\n         fn main() -> () ! {Install} = install { Tool<Echo> -> erl_echo } in ()\")"
+---
+echo : ∀a. { value: a } → a ! {Tool<Echo>}
+erl_echo : ∀a. { value: a } → a
+main : () → () ! {Install}

@@ -321,7 +321,7 @@ fn a_module_that_fails_to_compile_fails_the_command() {
 
     for (command, message) in [
         ("run", None),
-        ("build", Some("compiling the generated Erlang failed")),
+        ("build", Some("compiling the Erlang modules failed")),
     ] {
         let output = failing(command);
         let err = String::from_utf8_lossy(&output.stderr);

@@ -445,7 +445,7 @@ impl ToolDecl {
 }
 
 ast_node! {
-    /// An extern function declaration (`extern fn name(params) -> Type`).
+    /// An extern function declaration (`extern fn name(params) → Type = "m":"f"`).
     ExternDecl => EXTERN_DECL
 }
 
@@ -465,6 +465,54 @@ impl ExternDecl {
     #[must_use]
     pub fn return_type(&self) -> Option<TypeExpr> {
         type_in(&self.0, SyntaxKind::RETURN_TYPE)
+    }
+
+    /// The effect-row annotation (`! { … }`), if present.
+    #[must_use]
+    pub fn effect_ann(&self) -> Option<EffectAnn> {
+        child(&self.0)
+    }
+
+    /// The Erlang function the extern binds (`= "module":"function"`).
+    #[must_use]
+    pub fn binding(&self) -> Option<ExternBinding> {
+        child(&self.0)
+    }
+}
+
+ast_node! {
+    /// An extern's Erlang binding (`= "module":"function"`).
+    ExternBinding => EXTERN_BINDING
+}
+
+impl ExternBinding {
+    /// The module's string-literal token, quotes included.
+    #[must_use]
+    pub fn module_token(&self) -> Option<&SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING)
+    }
+
+    /// The function's string-literal token, quotes included.
+    #[must_use]
+    pub fn function_token(&self) -> Option<&SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|e| e.into_token())
+            .filter(|t| t.kind() == SyntaxKind::STRING)
+            .nth(1)
+    }
+}
+
+ast_node! {
+    /// A hand-written Erlang source (`extern module "path.erl"`).
+    ExternModuleDecl => EXTERN_MODULE_DECL
+}
+
+impl ExternModuleDecl {
+    /// The path's string-literal token, quotes included.
+    #[must_use]
+    pub fn path_token(&self) -> Option<&SyntaxToken> {
+        token(&self.0, SyntaxKind::STRING)
     }
 }
 
@@ -665,6 +713,8 @@ pub enum Decl {
     Tool(ToolDecl),
     /// `extern fn name(..)`
     Extern(ExternDecl),
+    /// `extern module "path.erl"`
+    ExternModule(ExternModuleDecl),
     /// `actor Name { .. }`
     Actor(ActorDecl),
     /// `supervisor Name { .. }`
@@ -683,6 +733,7 @@ impl AstNode for Decl {
                 | SyntaxKind::EFFECT_DECL
                 | SyntaxKind::TOOL_DECL
                 | SyntaxKind::EXTERN_DECL
+                | SyntaxKind::EXTERN_MODULE_DECL
                 | SyntaxKind::ACTOR_DECL
                 | SyntaxKind::SUPERVISOR_DECL
         )
@@ -698,6 +749,7 @@ impl AstNode for Decl {
             SyntaxKind::EFFECT_DECL => Self::Effect(EffectDecl(syntax)),
             SyntaxKind::TOOL_DECL => Self::Tool(ToolDecl(syntax)),
             SyntaxKind::EXTERN_DECL => Self::Extern(ExternDecl(syntax)),
+            SyntaxKind::EXTERN_MODULE_DECL => Self::ExternModule(ExternModuleDecl(syntax)),
             SyntaxKind::ACTOR_DECL => Self::Actor(ActorDecl(syntax)),
             SyntaxKind::SUPERVISOR_DECL => Self::Supervisor(SupervisorDecl(syntax)),
             _ => return None,
@@ -715,6 +767,7 @@ impl AstNode for Decl {
             Self::Effect(n) => n.syntax(),
             Self::Tool(n) => n.syntax(),
             Self::Extern(n) => n.syntax(),
+            Self::ExternModule(n) => n.syntax(),
             Self::Actor(n) => n.syntax(),
             Self::Supervisor(n) => n.syntax(),
         }

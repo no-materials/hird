@@ -37,6 +37,7 @@ top_item     ::= use_decl
                | effect_decl
                | tool_decl
                | extern_decl
+               | extern_module
 ```
 
 ## Use Declarations
@@ -156,8 +157,16 @@ unions into the generated function's row.
 ## Extern Declarations
 
 ```
-extern_decl  ::= 'extern' 'fn' IDENT '(' param_list? ')' return_type?
+extern_decl    ::= 'extern' 'fn' IDENT '(' param_list? ')' return_type? effect_ann?
+                   extern_binding?
+extern_binding ::= '=' STRING ':' STRING
+extern_module  ::= 'extern' 'module' STRING
 ```
+
+An extern binds an Erlang function (`= "module":"function"`) from a
+source an `extern module "path.erl"` in the same file declares. The
+binding is optional in the grammar and required by the checker, as are
+the return type and parameter annotations; the strings carry no escapes.
 
 ## Expressions
 

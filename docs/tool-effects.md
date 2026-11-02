@@ -134,6 +134,70 @@ implementation *trades* it for the logger's effects. Standard patterns:
 - **Replay**: substitute a handler that reads a log instead of executing
   (below).
 
+### Real tools: Erlang-bound externs
+
+A handler written in Hirð is pure, so it can only mock. A real
+implementation is an Erlang function, bound by an extern and used as the
+tool's handler:
+
+```
+extern module "files.erl"
+
+type FileError = Missing(String) | Unreadable(String)
+tool ReadFile : { path: String } → String ! {Exn<FileError>}
+
+extern fn erl_read_file(args: { path: String }) → String ! {Exn<FileError>}
+  = "files":"read"
+
+fn main() → () ! {Exn<FileError>} =
+  handle { Tool<ReadFile> → erl_read_file } in recite("poem.txt")
+```
+
+- `extern module "files.erl"` declares the Erlang source, relative to the
+  declaring `.hird` file. `hird build` compiles it with the program,
+  through the build cache. The file name is the Erlang module; names
+  starting with `hird_` are reserved (C0065). A missing file is a build
+  error, not a check error: the checker reads no files.
+- `= "files":"read"` binds the function (C0064), from a module the same
+  file declares (C0065).
+- An extern is used only as the whole handler of a `Tool<…>` arm, in
+  `handle` or `install`. Calling it, binding it, or passing it is C0066.
+  Every foreign call therefore goes through the dispatcher: recorded on a
+  live run, and served from the log on a replay, where the Erlang
+  function never runs.
+- An extern's row is at most one `Exn<E>` (C0067), and the tool must
+  declare it (C0068). That `Exn` is the one exception to `install`'s
+  pure-handler rule.
+
+The Erlang function takes the tool's argument value and returns its
+result, in the generated code's value mapping. Records are maps with atom
+keys, strings are UTF-8 binaries, `()` is `ok`, `Bool` is `true` or
+`false`, lists are lists, and constructors are tagged tuples
+(`Missing(p)` is `{missing, P}`; a nullary one is a bare atom). A
+declared error is raised with `throw({hird_exn, Error})`. Any other
+exception is a crash.
+
+```erlang
+-module(files).
+-export([read/1]).
+
+read(#{path := Path}) ->
+    case file:read_file(Path) of
+        {ok, Text} -> Text;
+        {error, enoent} -> throw({hird_exn, {missing, Path}});
+        {error, Reason} ->
+            throw({hird_exn, {unreadable, atom_to_binary(Reason)}})
+    end.
+```
+
+The checker cannot read Erlang, so the declared type is a promise, and
+the invocation record checks it. A result or error that the tool's types
+cannot encode crashes the caller with `{handler_result, Tool, Mismatch}`
+or `{handler_error, Tool, Mismatch}` before the value reaches Hirð code,
+and no record is written. The same check covers handlers installed from
+Erlang with `hird_handlers:install_handler/2`. `demo/real_tool/` is a
+complete example.
+
 ### The audit sink is a capability
 
 Where invocation records go is not ambient configuration. The sink is an
@@ -513,3 +577,10 @@ in sight.
 - Types are identified across modules by name, as the checker identifies
   them: two modules declaring different ADTs of one name share one entry
   in the runtime's merged signature tables.
+- Erlang code behind an extern runs unsandboxed in the program's
+  emulator. Rows bound what the Hirð side does, not what the Erlang side
+  does, and Erlang that messages the program's processes or calls its
+  generated functions leaves no record.
+- A Hirð wrapper around an extern (a retry, a meter, a cache) is not
+  expressible: an extern cannot be called, and installed handlers are
+  pure. Erlang libraries outside OTP are not built.

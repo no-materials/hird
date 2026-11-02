@@ -1,0 +1,43 @@
+// A real tool: Tool<ReadFile> is implemented by hand-written Erlang
+// (files.erl, next to this file) instead of a mock.
+//
+// The extern binds the Erlang function, and the install block makes it
+// the tool's handler. Hirð code cannot call the extern itself, so every
+// read goes through the tool dispatcher: it is recorded on the audit
+// stream, and a replay serves it from the recording without calling the
+// Erlang code. From the repository root:
+//
+//   hird run demo/real_tool/real_tool.hird --audit-file rec.jsonl   (record)
+//   hird run demo/real_tool/real_tool.hird --replay rec.jsonl       (replay)
+//
+// The replay succeeds even with poem.txt gone: nothing reads it.
+
+module RealTool
+
+extern module "files.erl"
+
+type FileError = Missing(String) | Unreadable(String)
+
+type alias ReadFileArgs = { path: String }
+type alias LogArgs = { level: String, message: String }
+
+tool ReadFile : ReadFileArgs → String ! {Exn<FileError>}
+tool Log : LogArgs → ()
+
+// The Erlang function that reads the file, raising Missing or Unreadable.
+extern fn erl_read_file(args: ReadFileArgs) → String ! {Exn<FileError>}
+  = "files":"read"
+
+// Log lines go to the audit stream; the handler itself does nothing.
+fn quiet_log(args: LogArgs) → () = ()
+
+// Reads the poem and logs it.
+fn recite(path: String) → () ! {Tool<ReadFile>, Tool<Log>, Exn<FileError>} =
+  let poem = read_file({ path: path }) in
+  log({ level: "info", message: path ++ ": " ++ poem })
+
+fn main() → () ! {Exn<FileError>} =
+  handle {
+    Tool<ReadFile> → erl_read_file,
+    Tool<Log> → quiet_log,
+  } in recite("demo/real_tool/poem.txt")

@@ -224,7 +224,24 @@ types each call fixes, so every call must fix `t` to a concrete type.
 
 Tools have no "real" implementation in the language — implementations
 are always supplied by handlers, which makes mocking, dry-running,
-and auditing the default rather than an afterthought.
+and auditing the default rather than an afterthought. A handler written
+in Hirð is pure, so a real implementation is Erlang: an `extern` binds
+an Erlang function from a source the program declares, and can only be
+installed as a tool's handler, so its calls are recorded and replay
+like any other:
+
+```
+extern module "files.erl"
+
+extern fn erl_read_file(args: { path: String }) → String ! {Exn<FileError>}
+  = "files":"read"
+
+fn main() → () ! {Exn<FileError>} =
+  handle { Tool<ReadFile> → erl_read_file } in recite("poem.txt")
+```
+
+[`demo/real_tool/`](../demo/real_tool/) runs one, and
+[`docs/tool-effects.md`](tool-effects.md) covers the Erlang side.
 
 ### Handlers: `handle` and `install`
 
@@ -242,7 +259,8 @@ Handler maps never cross a process boundary. Spawned and supervised
 actors resolve tool calls through the runtime *registry* instead,
 populated by `install { … } in body`: entries are visible to all
 processes for the body's dynamic extent, then restored. Installed
-handlers must be pure. `install` adds `Install` to the row and does
+handlers must be pure, except that an extern may carry the one `Exn`
+its tool declares. `install` adds `Install` to the row and does
 not discharge the body's tool effects — the handlers run later, in
 whatever process calls the tool.
 
@@ -397,7 +415,8 @@ the machine, keyed by each module's generated Erlang and the Erlang
 install that compiled it, so a rebuild compiles only what changed and
 the runtime compiles once per Erlang install. `hird run` compiles what
 the cache lacks in the emulator that then runs the program, so an
-edit-and-run boots one emulator. It lives in `$HIRD_CACHE_DIR`,
+edit-and-run boots one emulator. The Erlang sources a program declares with
+`extern module` compile with it, through the same cache. It lives in `$HIRD_CACHE_DIR`,
 else `hird` under `$XDG_CACHE_HOME`, `%LOCALAPPDATA%`, or `~/.cache`;
 deleting it is always safe. `--timings` reports `modules_compiled` and
 `modules_reused`.

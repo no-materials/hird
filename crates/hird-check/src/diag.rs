@@ -192,6 +192,20 @@ pub enum CheckCode {
     /// A type, alias, tool, or message type takes the name of a built-in
     /// type (`Int`, `Float`, `String`, `List`, `Pid`, `ReplyTo`, `Clock`).
     C0063,
+    /// An extern names no Erlang function (`= "module":"function"`), or its
+    /// function name is not a plain Erlang atom.
+    C0064,
+    /// An `extern module` path is not a relative `.erl` path naming a plain,
+    /// non-`hird_` Erlang module, declares a module twice, or a binding
+    /// names a module its file does not declare.
+    C0065,
+    /// An extern is used other than as the whole handler of a `Tool<…>` arm;
+    /// it cannot be called or passed as a value.
+    C0066,
+    /// An extern's effect row is open or holds anything but one `Exn<…>`.
+    C0067,
+    /// An extern's `Exn<…>` is not in the declared row of the tool it handles.
+    C0068,
 }
 
 /// A secondary source location attached to a diagnostic.

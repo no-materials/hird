@@ -3,7 +3,7 @@
 
 //! Erlang source emission: one IR module to a set of `.erl` files.
 //!
-//! [`emit_modules`] renders the base module — functions and extern stubs —
+//! [`emit_modules`] renders the base module — functions and externs —
 //! plus one `gen_server` behaviour module per actor declaration and one
 //! `supervisor` behaviour module per supervisor declaration. The output
 //! compiles with stock `erlc` and is formatted for human reading. Types are
@@ -112,7 +112,7 @@ pub struct EmittedModule {
 }
 
 /// Renders `module` as Erlang source files: the base module (functions and
-/// extern stubs) first, then one behaviour module per actor (`gen_server`)
+/// externs) first, then one behaviour module per actor (`gen_server`)
 /// and supervisor (`supervisor`) declaration, in source order.
 ///
 /// `source_path` is the Hirð source the module was lowered from; it appears
@@ -502,18 +502,26 @@ impl<'a> Emitter<'a> {
         ));
     }
 
-    /// An extern stub: the declared arity, crashing until an FFI module can
-    /// be named (`v0.1` externs have no backing module).
+    /// An extern: a form at its emitted arity calling the bound Erlang
+    /// function with the declared parameters; the handler map an `Exn` row
+    /// adds is not passed on.
     fn extern_form(&self, e: &IrExternRef, source_path: &str, out: &mut String) {
-        let arity = self.fns.get(&e.name).map_or(0, emitted_arity);
-        let params: Vec<&str> = (0..arity).map(|_| "_").collect();
+        let (declared, arity) = match self.fns.get(&e.name) {
+            Some(ty @ Type::TyFn(params, _, _)) => (params.len(), emitted_arity(ty)),
+            _ => (0, 0),
+        };
+        let params: Vec<String> = (0..declared).map(|i| format!("P{i}")).collect();
+        let mut head = params.clone();
+        head.extend((declared..arity).map(|_| String::from("_Handlers")));
         Self::span_comment(e.span, source_path, out);
         out.push_str(&format!(
-            "{}({}) ->\n{}erlang:error({{unbound_extern, {}}}).\n",
+            "{}({}) ->\n{}{}:{}({}).\n",
             atom(&e.name),
-            params.join(", "),
+            head.join(", "),
             ind(1),
-            atom(&e.name)
+            atom(&e.module),
+            atom(&e.function),
+            params.join(", ")
         ));
     }
 

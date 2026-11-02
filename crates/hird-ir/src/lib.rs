@@ -49,11 +49,11 @@ pub use hird_types::EffectRow;
 pub use ir::{
     IrActorDef, IrActorHandler, IrActorInit, IrApp, IrArm, IrBindPat, IrChild, IrChildSpec,
     IrClock, IrConstructor, IrConstructorDef, IrConstructorPat, IrCrash, IrDecl, IrExpr,
-    IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda, IrLet, IrList,
-    IrListPat, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern, IrRecord,
-    IrRecordField, IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn, IrStand,
-    IrSupervise, IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef, IrVar,
-    IrWildcardPat, LiteralValue,
+    IrExternModule, IrExternRef, IrField, IrFnDef, IrHandle, IrHandleArm, IrInstall, IrLambda,
+    IrLet, IrList, IrListPat, IrLiteral, IrLiteralPat, IrMatch, IrModule, IrParam, IrPattern,
+    IrRecord, IrRecordField, IrReply, IrRequest, IrSchedule, IrSelf, IrSend, IrSpan, IrSpawn,
+    IrStand, IrSupervise, IrSupervisorDef, IrToolDef, IrToolRef, IrTuple, IrTuplePat, IrTypeDef,
+    IrVar, IrWildcardPat, LiteralValue,
 };
 pub use lower::lower_module;
 pub use pretty::pretty_print;

@@ -1,0 +1,8 @@
+---
+source: crates/hird-check/tests/externs.rs
+expression: "check_str(&with_tool(\"extern fn erl_read_file(args: { path: String }) -> String ! {Exn<Missing>}\\n\\\n           = \\\"files\\\":\\\"read\\\"\\n\\\n         fn main() -> () ! {Install} =\\n\\\n           install { Tool<ReadFile> -> erl_read_file } in ()\"))"
+---
+Missing : String → Missing
+erl_read_file : { path: String } → String ! {Exn<Missing>}
+main : () → () ! {Install}
+read_file : { path: String } → String ! {Exn<Missing>, Tool<ReadFile>}

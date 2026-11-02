@@ -66,6 +66,9 @@ enum Command {
     /// them: `$HIRD_CACHE_DIR`, else `hird` under `$XDG_CACHE_HOME`,
     /// `%LOCALAPPDATA%`, or `~/.cache`. Deleting it is always safe. The
     /// modules it lacks compile in parallel in one emulator.
+    ///
+    /// Hand-written Erlang sources the program declares with
+    /// `extern module "path.erl"` compile with it.
     Build {
         /// A `.hird` file, or a directory of independent `.hird` modules.
         input: PathBuf,

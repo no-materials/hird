@@ -60,8 +60,11 @@ single argument (`f((a, b))` passes one tuple).
 
 ### Module and declarations
 
-- `IrModule { name, declarations }` — a module's name and its declarations in
-  source order.
+- `IrModule { name, declarations, extern_modules }` — a module's name, its
+  declarations in source order, and the hand-written Erlang sources it
+  declares: each `IrExternModule { name, path }` gives the Erlang module and
+  the path as written, relative to the declaring source. Omitted from the
+  JSON when empty.
 
 Every declaration also carries an `IrSpan { line }` — the 1-based source line
 of its first token, populated by lowering. Spans back the `%% <file>:<line>`
@@ -76,10 +79,9 @@ semantic artifact that unrelated layout edits do not churn.
   declared type-parameter names; each `IrConstructorDef { name, fields }`
   lists its field types, with type-parameter variables rendered under their
   declared names (e.g. `a`, `List<a>`).
-- `IrExternRef { name, type, module }` — a reference to an external function.
-  `type` is the function's (possibly quantified) scheme. `module` names the
-  backing foreign module; it is always absent in v0.1, where the surface
-  syntax does not yet name one.
+- `IrExternRef { name, type, module, function }` — an extern: the Erlang
+  function `module:function` bound as a tool handler. `type` is its
+  (possibly quantified) scheme, including its row of at most one `Exn`.
 - `IrToolDef { name, params, input, output, effect_row }` — a tool
   declaration. `params` are the declared type-parameter names; `input` and
   `output` are the operation's args record and result types, rendered under

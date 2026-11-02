@@ -6,6 +6,7 @@
 //! files from the build cache, and drive `erl`, whose build driver compiles
 //! the rest.
 
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs;
@@ -160,11 +161,11 @@ struct Pending {
     cache: Option<(PathBuf, Vec<String>)>,
 }
 
-/// Emits `modules` (paired with their source paths) plus the runtime and
-/// boot module into `out_dir`, and copies in the `.beam` of every module
-/// the build cache holds; [`compile`] or [`run`] compiles the rest.
-/// Records the `emit`, `write`, and `reuse` phases and the module counters
-/// in `timings`.
+/// Emits `modules` (paired with their source paths), the Erlang sources
+/// they declare, and the runtime and boot module into `out_dir`, and
+/// copies in the `.beam` of every module the build cache holds; [`compile`]
+/// or [`run`] compiles the rest. Records the `emit`, `write`, and `reuse`
+/// phases and the module counters in `timings`.
 pub(crate) fn build(
     modules: &[(PathBuf, IrModule)],
     out_dir: &Path,
@@ -174,6 +175,7 @@ pub(crate) fn build(
 
     let emitted = timings.phase("emit", || emit(modules))?;
     timings.erl_bytes = emitted.iter().map(|(_, source)| source.len() as u64).sum();
+    let declared = extern_sources(modules)?;
 
     let boot = entry.as_ref().map(|entry| {
         let table_modules: Vec<String> = modules
@@ -185,6 +187,7 @@ pub(crate) fn build(
     });
     let sources: Vec<(&str, &str)> = emitted
         .iter()
+        .chain(&declared)
         .map(|(name, source)| (name.as_str(), source.as_str()))
         .chain(RUNTIME)
         .chain(boot.as_deref().map(|source| (BOOT_MODULE, source)))
@@ -216,7 +219,7 @@ pub(crate) fn build(
 /// the runtime.
 fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failure> {
     let mut emitted: Vec<(String, String)> = Vec::new();
-    let mut origin: std::collections::BTreeMap<String, PathBuf> = RUNTIME
+    let mut origin: BTreeMap<String, PathBuf> = RUNTIME
         .iter()
         .map(|(name, _)| ((*name).to_owned(), PathBuf::from("the Hirð runtime")))
         .collect();
@@ -239,6 +242,43 @@ fn emit(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failur
         }
     }
     Ok(emitted)
+}
+
+/// Reads the hand-written Erlang sources `modules` declare (`extern module`),
+/// each resolved against its declaring source's directory: one `(module
+/// name, source)` per Erlang module. Refuses an unreadable file and one
+/// module declared at two paths. The checker keeps the `hird_` prefix of
+/// generated and runtime modules out of declared names, so none collides.
+fn extern_sources(modules: &[(PathBuf, IrModule)]) -> Result<Vec<(String, String)>, Failure> {
+    let mut sources = Vec::new();
+    let mut declared: BTreeMap<&str, (PathBuf, PathBuf)> = BTreeMap::new();
+    for (path, module) in modules {
+        for source in &module.extern_modules {
+            let file = path.parent().unwrap_or(Path::new("")).join(&source.path);
+            let text = fs::read_to_string(&file).map_err(|e| {
+                fail!(
+                    "cannot read `{}`, declared by `{}`: {e}",
+                    file.display(),
+                    path.display()
+                )
+            })?;
+            let canonical = fs::canonicalize(&file).unwrap_or_else(|_| file.clone());
+            if let Some((first, first_canonical)) = declared.get(source.name.as_str()) {
+                if *first_canonical == canonical {
+                    continue;
+                }
+                return Err(fail!(
+                    "Erlang module `{}` is declared at two paths: `{}` and `{}`",
+                    source.name,
+                    first.display(),
+                    file.display()
+                ));
+            }
+            declared.insert(&source.name, (file, canonical));
+            sources.push((source.name.clone(), text));
+        }
+    }
+    Ok(sources)
 }
 
 /// Copies the `.beam` of each of `sources` the build cache holds into
@@ -304,7 +344,7 @@ pub(crate) fn compile(build: &BuildOutput, timings: &mut Timings) -> Result<(), 
             .status()
             .map_err(erlang_unavailable)?;
         if !status.success() {
-            return Err(fail!("compiling the generated Erlang failed with {status}"));
+            return Err(fail!("compiling the Erlang modules failed with {status}"));
         }
         Ok(())
     })?;

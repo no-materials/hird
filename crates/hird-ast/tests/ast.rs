@@ -760,6 +760,29 @@ fn extern_signature_types() {
 }
 
 #[test]
+fn extern_binding_row_and_module() {
+    let file = file(
+        "extern module \"ffi/files.erl\"\n\
+         extern fn read(p: String) -> String ! {Exn<Missing>} = \"files\":\"read\"",
+    );
+    let mut decls = file.declarations();
+    let Some(Decl::ExternModule(source)) = decls.next() else {
+        panic!("expected an extern module");
+    };
+    assert_eq!(
+        source.path_token().map(|t| t.text()),
+        Some("\"ffi/files.erl\"")
+    );
+    let Some(Decl::Extern(ext)) = decls.next() else {
+        panic!("expected an extern");
+    };
+    assert!(ext.effect_ann().is_some());
+    let binding = ext.binding().expect("a binding");
+    assert_eq!(binding.module_token().map(|t| t.text()), Some("\"files\""));
+    assert_eq!(binding.function_token().map(|t| t.text()), Some("\"read\""));
+}
+
+#[test]
 fn type_decl_params_and_constructor_fields() {
     let file = file("type Result<A, B> = Ok(A) | Err(B, String) | Pending");
     let ty = file

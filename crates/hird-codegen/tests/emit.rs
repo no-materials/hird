@@ -197,8 +197,18 @@ const MSG: &str = "type Status = Status(Int)\n\
 const BOOM: &str = "type Option<a> = Some(a) | None\n\
      fn unwrap(o: Option<Int>) -> Int = match o { Some(x) -> x, None -> crash!(\"empty\"), }";
 
-const FFI: &str = "extern fn sqrt(x: Float) -> Float\n\
-     fn twice(x: Float) -> Float = sqrt(sqrt(x))";
+/// Externs: each calls its bound Erlang function with the declared
+/// parameters; one with an `Exn` row takes (and drops) the handler map, as
+/// its install entry passes it. A reserved-word function name is quoted.
+const FFI: &str = "extern module \"ffi/files.erl\"\n\
+     type Missing = Missing(String)\n\
+     tool ReadFile : { path: String } -> String ! {Exn<Missing>}\n\
+     tool Size : { path: String } -> Int\n\
+     extern fn erl_read_file(args: { path: String }) -> String ! {Exn<Missing>}\n\
+       = \"files\":\"read\"\n\
+     extern fn erl_size(args: { path: String }) -> Int = \"files\":\"receive\"\n\
+     fn main() -> () ! {Install} =\n\
+       install { Tool<ReadFile> -> erl_read_file, Tool<Size> -> erl_size } in ()";
 
 const RESERVED: &str = "type Marker = End | Query\n\
      fn rem(m: Marker) -> Marker = match m { End -> Query, Query -> End, }";
@@ -552,7 +562,7 @@ fn snapshot_crash_in_match_arm() {
 }
 
 #[test]
-fn snapshot_extern_stub() {
+fn snapshot_externs_call_their_bindings() {
     insta::assert_snapshot!(emit(program("Ffi"), "Ffi"));
 }
 

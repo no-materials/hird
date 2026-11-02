@@ -428,13 +428,51 @@ Use for: supplying deployment/demo handlers, test-harness mocks for actors.
 - Arms are `handle`'s: same grammar, same checking (including tool operation
   signatures).
 - Installed handlers must be pure — their effect row closed and empty; they
-  run later, in arbitrary processes.
+  run later, in arbitrary processes. An extern may carry the one `Exn` its
+  tool declares.
 - The expression's row is the body's row plus `Install`, a checker-known bare
   effect head (pre-declared, like `Supervise` — no user declaration needed).
 - Unlike `handle`, `install` does not discharge the body's `Tool<…>` effects
   from the row — the handlers run later, in whatever process dispatches them.
 - Entries are visible to *all* processes while the body runs; the restore is
   best-effort under concurrency.
+
+---
+
+## Externs (real tool implementations)
+
+```
+extern module "files.erl"
+
+tool ReadFile : { path: String } → String ! {Exn<FileError>}
+
+extern fn erl_read_file(args: { path: String }) → String ! {Exn<FileError>}
+  = "files":"read"
+
+fn main() → () ! {Exn<FileError>} =
+  handle { Tool<ReadFile> → erl_read_file } in recite("poem.txt")
+```
+
+A Hirð handler is pure, so it can only mock. A real implementation is an
+Erlang function, bound by an extern and used as a tool's handler.
+
+- `extern module "path.erl"` declares a hand-written Erlang source,
+  relative to the declaring file; `hird build` compiles it with the
+  program. The file name is the Erlang module (`files`); `hird_` names are
+  reserved.
+- `= "module":"function"` is required and names a module this file
+  declares.
+- An extern appears only as the whole handler of a `Tool<…>` arm, in
+  `handle` or `install`. It is never called, bound, or passed, so every
+  foreign call is recorded, and a replay serves it from the log without
+  running the Erlang code.
+- Its row is at most one `Exn<E>`, which the tool must declare. Erlang
+  raises it with `throw({hird_exn, Error})`.
+- Name it after the tool function with an `erl_` prefix (`erl_read_file`
+  for `ReadFile`); the tool already takes `read_file`.
+- The Erlang side sees Hirð values as generated code does: records are
+  maps, strings UTF-8 binaries, `()` is `ok`, constructors are tagged
+  tuples (`Missing(p)` is `{missing, P}`).
 
 ---
 
@@ -491,6 +529,10 @@ others are the shape the discipline takes for user-declared capabilities.
 - **Tool arms**: `Tool<X>` requires `X` to be a declared tool (C0033); the
   handler must match the tool's operation signature (C0034); `install`
   handlers must be pure — closed empty row (C0051).
+- **Externs are tool handlers only**: bind every extern
+  (`= "module":"function"`, C0064) to a module an `extern module` in the
+  same file declares (C0065); never call or pass one (C0066). Its row is at
+  most one `Exn<E>` (C0067), which the handled tool declares (C0068).
 - **Tool signatures must be wire-representable** (C0032): no function
   types, no opaque capability types, no process references (`Pid`,
   `ReplyTo`) in args, result, or error types.

@@ -1,0 +1,43 @@
+---
+source: crates/hird-parse/tests/smoke.rs
+expression: "render_cst(\"extern fn read(p: String) -> String ! {Exn<Missing>} = \\\"files\\\":\\\"read\\\"\")"
+---
+SOURCE_FILE
+  EXTERN_DECL
+    EXTERN_KW "extern"
+    WHITESPACE " "
+    FN_KW "fn"
+    WHITESPACE " "
+    IDENT "read"
+    L_PAREN "("
+    PARAM_LIST
+      PARAM
+        IDENT "p"
+        COLON ":"
+        WHITESPACE " "
+        IDENT "String"
+    R_PAREN ")"
+    RETURN_TYPE
+      WHITESPACE " "
+      ARROW "->"
+      WHITESPACE " "
+      IDENT "String"
+    EFFECT_ANN
+      WHITESPACE " "
+      BANG "!"
+      WHITESPACE " "
+      L_BRACE "{"
+      APP_TYPE
+        IDENT "Exn"
+        TYPE_ARGS
+          LT "<"
+          IDENT "Missing"
+          GT ">"
+      R_BRACE "}"
+    EXTERN_BINDING
+      WHITESPACE " "
+      EQ "="
+      WHITESPACE " "
+      STRING "\"files\""
+      COLON ":"
+      STRING "\"read\""
