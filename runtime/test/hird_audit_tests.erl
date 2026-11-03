@@ -3,10 +3,13 @@
 %%
 %% Audit sink behaviour: JSON-lines file output in arrival order, table
 %% registration, append-across-restarts, an unbounded sync, encoding in the
-%% caller, batched writes, and a bounded backlog.
+%% caller, batched writes, a bounded backlog, and a watched sink's exit
+%% halting the node.
 -module(hird_audit_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+
+-export([watched_sink_exits/1]).
 
 table() ->
     #{tools => #{ping => #{name => <<"Ping">>, params => 0, args => int,
@@ -182,6 +185,61 @@ log_after_the_sink_stops_is_a_noop_test() ->
     gen_server:stop(Sink),
     ?assertEqual(ok, hird_audit:log(record_at(1))),
     ?assertEqual([], lines(Path)).
+
+%% A sink watched by halt_on_exit/1 that is killed mid-run, with a record
+%% queued, halts its node with status 1 and says why on standard error.
+killed_watched_sink_halts_the_node_test_() ->
+    {timeout, 30, fun() ->
+        {Status, Output} = in_child_node(kill),
+        ?assertEqual(1, Status),
+        ?assertMatch({match, _},
+                     re:run(Output, <<"hird: audit sink exited: killed">>))
+    end}.
+
+%% A watched sink that stops cleanly halts the node too: nothing in a
+%% program stops its sink before the node halts.
+stopped_watched_sink_halts_the_node_test_() ->
+    {timeout, 30, fun() ->
+        {Status, Output} = in_child_node(stop),
+        ?assertEqual(1, Status),
+        ?assertMatch({match, _},
+                     re:run(Output, <<"hird: audit sink exited: normal">>))
+    end}.
+
+%% Runs watched_sink_exits(How) in a fresh node: its exit status and its
+%% standard output and error, interleaved.
+in_child_node(How) ->
+    Erl = os:find_executable("erl"),
+    Build = filename:absname(filename:dirname(code:which(?MODULE))),
+    Eval = "hird_audit_tests:watched_sink_exits(" ++ atom_to_list(How) ++ ")",
+    Port = open_port({spawn_executable, Erl},
+                     [exit_status, stderr_to_stdout, binary,
+                      {args, ["-noshell", "-pa", Build, "-eval", Eval]}]),
+    collect(Port, <<>>).
+
+%% The output of `Port` until it exits, and its exit status.
+collect(Port, Output) ->
+    receive
+        {Port, {data, Data}} -> collect(Port, <<Output/binary, Data/binary>>);
+        {Port, {exit_status, Status}} -> {Status, Output}
+    end.
+
+%% @private The child node's side: a watched file sink takes a record and
+%% queues another, then exits as `How` says. Halts with 7 if the node is
+%% still up 5 s later, so a watcher that never fires fails the test fast.
+watched_sink_exits(How) ->
+    Path = fresh("audit_watched.jsonl"),
+    {ok, Sink} = hird_audit:start_link([{sink, {file, Path}}, {tools, table()}]),
+    ok = hird_audit:halt_on_exit(Sink),
+    ok = hird_audit:log(record_at(1)),
+    ok = hird_audit:sync(),
+    ok = hird_audit:log(record_at(2)),
+    case How of
+        kill -> exit(Sink, kill);
+        stop -> gen_server:stop(Sink)
+    end,
+    timer:sleep(5000),
+    halt(7).
 
 %% The messages queued at `Pid`.
 queued(Pid) ->

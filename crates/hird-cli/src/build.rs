@@ -560,9 +560,10 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 /// alone: `-hird_audit_file <path>` appends the audit stream to that file
 /// instead of stdout, and `-hird_replay <path>` starts the replay cursor
 /// over that log before `main` and requires it fully consumed after. A
-/// crash in `main` still flushes the sink before halting. Kept as
-/// generated source so the build output runs on plain `erl` without the
-/// CLI.
+/// crash in `main` still flushes the sink before halting, and the sink
+/// exiting halts the run with status 1 (`hird_audit:halt_on_exit/1`).
+/// Kept as generated source so the build output runs on plain `erl`
+/// without the CLI.
 fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     let tables = table_modules
         .iter()
@@ -585,7 +586,10 @@ fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
         out,
         "%% Path instead of stdout; `-hird_replay Log` replays tool calls from"
     );
-    let _ = writeln!(out, "%% Log and requires it fully consumed.");
+    let _ = writeln!(
+        out,
+        "%% Log and requires it fully consumed. The sink exiting halts the run."
+    );
     let _ = writeln!(out, "main() ->");
     let _ = writeln!(out, "    Sink = case argument(hird_audit_file) of");
     let _ = writeln!(out, "        {{ok, Path}} -> {{file, Path}};");
@@ -593,8 +597,9 @@ fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     let _ = writeln!(out, "    end,");
     let _ = writeln!(
         out,
-        "    {{ok, _}} = hird_audit:start_link([{{sink, Sink}}]),"
+        "    {{ok, Audit}} = hird_audit:start_link([{{sink, Sink}}]),"
     );
+    let _ = writeln!(out, "    ok = hird_audit:halt_on_exit(Audit),");
     for table in &tables {
         let _ = writeln!(out, "    ok = hird_audit:register_tools({table}),");
     }

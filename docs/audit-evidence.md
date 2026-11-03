@@ -104,7 +104,11 @@ implementation does not make.
   of growing the queue, and the flush at exit waits for at most that
   much. The sink writes in batches, each line within 10 ms of arriving.
   A hard halt of the VM — a kill signal, or SIGQUIT — can drop records
-  still queued or buffered.
+  still queued or buffered. So can a sink that exits mid-run, killed or
+  failing to write: the lines queued at it, and a batch it did not get to
+  flush, go with it. The run then halts at once with status 1 and the
+  sink's exit reason on standard error, so a stream cut short this way
+  never comes from a run that reported success.
 - **Arrival order, not causal order.** The stream is ordered by arrival at
   the sink. Calls from one process appear in call order; concurrent actors
   interleave, and a record carries no ordering token beyond its

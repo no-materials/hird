@@ -1411,6 +1411,37 @@ so that promise is currently unimplementable as stated.
    and copying imported types into the importer's table (a private type
    reached through a public one is invisible to the importer).
 
+   *Amended 2026-11-03 — a run does not outlive its audit sink.*
+   Unconditional recording holds only while the sink is up. The boot
+   process started the sink linked to itself and traps exits, so a sink
+   that died left an unread message: the program ran on, every later
+   record went to a missing name and was dropped — and, unencoded, left
+   foreign results unchecked (ADR-031 §4) — and the run could exit 0
+   with an incomplete stream. ADR-025 left a dying sink to the sink's
+   own failure policy; this is that policy, and it fails closed. The boot
+   module passes the sink it starts to `hird_audit:halt_on_exit/1`, whose
+   watcher — a process of its own, linked to nothing — prints the exit
+   reason to standard error and halts the node with status 1 once the
+   sink exits, for any reason: nothing in a program stops its sink before
+   the halt, so even a normal exit is a failure. The lines queued at the
+   sink, its unwritten batch unless it got to flush on the way out, and
+   any record logged before the halt lands are lost, and the failed run
+   says so. A standing program halts the same way, without the ordered
+   tree shutdown of a stop trigger, since stopping the trees first would
+   let them go on making unrecorded calls. A sink started without the
+   watcher, as test harnesses start one, is unchanged: with no sink
+   running, dispatch is unaudited and `log/1` drops the record.
+   *Rejected*: running the sink under a supervisor that restarts it — the
+   new sink cannot know which lines went down with the old one, so a
+   restart leaves a gap nothing marks, and a lossless restart needs a
+   per-record acknowledgement, giving up the cast-and-batch throughput; a
+   supervisor that does not restart it adds nothing a monitor does not,
+   and one linked to the boot process would be among the trees
+   `hird_stand` stops before the final sync. Also rejected: failing the
+   next `log/1` instead of the node — a program that makes no further
+   tool call, or whose next caller is an actor its supervisor restarts,
+   would still finish with records missing.
+
 3. **Unhandled tool calls fall back to the runtime registry, then crash.**
    On a map miss the dispatcher consults the process-independent default
    registry (the runtime library's handler-installation machinery); if that

@@ -301,6 +301,44 @@ fn one_erlang_module_has_one_path() {
     );
 }
 
+/// An audit sink killed mid-run fails the run with status 1 and the
+/// sink's exit reason, rather than letting it finish with records lost.
+/// The Erlang tool kills the sink, then holds the call open long enough
+/// that only the sink's exit can end the run.
+#[test]
+fn a_killed_audit_sink_fails_the_run() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not on PATH");
+        return;
+    }
+    let dir = scratch("ffi_killed_sink");
+    write_program(
+        &dir,
+        "-module(notes).\n-export([read/1]).\n\
+         read(_) ->\n\
+         \x20   exit(whereis(hird_audit), kill),\n\
+         \x20   timer:sleep(5000),\n\
+         \x20   <<\"text\">>.\n",
+    );
+    let output = hird(
+        &dir,
+        &[
+            "run",
+            "notes.hird",
+            "-o",
+            "out",
+            "--audit-file",
+            "rec.jsonl",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "stderr: {stderr}");
+    assert!(
+        stderr.contains("hird: audit sink exited: killed"),
+        "stderr: {stderr}"
+    );
+}
+
 /// The real-tool demo, run from the repository root as its header says:
 /// the recording holds the poem it read, and replaying it succeeds.
 #[test]

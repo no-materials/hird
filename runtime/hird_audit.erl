@@ -8,10 +8,17 @@
 %% register_tools/1, and the sink publishes the merged table as a
 %% persistent term, so log/1 encodes in the calling process and the sink
 %% only appends finished lines, a batch per write.
+%%
+%% A program cannot go on without its sink: lines queued at it, and a batch
+%% it has not written, exit with it, and a restarted sink could not tell
+%% which. halt_on_exit/1 makes the sink's exit, for any reason, halt the
+%% node with status 1, and the generated boot module applies it to the
+%% sink it starts. A sink started without it, as a test harness does, may
+%% stop and restart freely.
 -module(hird_audit).
 -behaviour(gen_server).
 
--export([start_link/1, register_tools/1, log/1, sync/0]).
+-export([start_link/1, halt_on_exit/1, register_tools/1, log/1, sync/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -type sink() :: stdout | {file, file:filename_all()}.
@@ -44,6 +51,24 @@ start_link(Options) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Options,
                           [{spawn_opt, [{message_queue_data, off_heap}]}]).
 
+%% Halts the node with status 1 once `Sink` exits, for any reason, after
+%% printing the reason to standard error: the run fails loudly rather than
+%% going on unaudited. Halts at once if `Sink` is already gone. The watcher
+%% is linked to nothing, so it shows in no caller's links.
+-spec halt_on_exit(pid()) -> ok.
+halt_on_exit(Sink) ->
+    _ = spawn(fun() ->
+        Ref = monitor(process, Sink),
+        receive
+            {'DOWN', Ref, process, Sink, Reason} ->
+                io:format(standard_error,
+                          "hird: audit sink exited: ~p; the audit stream "
+                          "may be missing records~n", [Reason]),
+                erlang:halt(1)
+        end
+    end),
+    ok.
+
 %% Merges a generated module's signature table into the sink's table.
 %% Republishes the persistent term, which scans every process: a startup
 %% call, not a per-record one.
@@ -55,7 +80,8 @@ register_tools(Table) ->
 %% hird_types:encode_invocation/2 does when the registered tables cannot
 %% encode it. Asynchronous while the sink has under ?BACKLOG bytes queued;
 %% past that, waits until the sink takes the line. A no-op when no sink is
-%% running, so dispatch works (unaudited) without one.
+%% running, so dispatch works (unaudited) without one; in a booted program
+%% that is only after the sink exited, and halt_on_exit/1 is halting it.
 -spec log(hird_types:record_in()) -> ok.
 log(Record) ->
     case whereis(?MODULE) of
@@ -74,7 +100,7 @@ log(Sink, #{tools := Tools, backlog := Backlog}, Record) ->
     end.
 
 %% Hands `Line` to the sink and waits until it is taken. A sink that exits
-%% meanwhile drops it, as it would a cast.
+%% meanwhile drops it, as it would a cast (see halt_on_exit/1).
 wait(Sink, Line) ->
     try gen_server:call(Sink, {log, Line}, infinity)
     catch exit:_ -> ok

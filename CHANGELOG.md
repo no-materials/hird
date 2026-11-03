@@ -75,6 +75,15 @@ schedule and is not covered by these entries.
 
 ### Fixed
 
+- **A run no longer outlives its audit sink.** If the sink died mid-run,
+  killed or failing to write, the program carried on without it: every
+  later record was dropped without a trace, and the run could still exit
+  0 with its audit stream incomplete. The run now halts at once with
+  status 1, printing `hird: audit sink exited: <reason>` to standard
+  error. A standing program halts the same way, without its ordered
+  shutdown. The records the sink still held are lost with it, but the
+  failed run says so.
+
 - **Generic tools and imported types crashed the audit sink.** Codegen
   recorded a generic tool's type parameters, and any type the tool's own
   module did not declare (an imported ADT, or the predeclared `Option`

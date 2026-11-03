@@ -18,7 +18,8 @@
 %% Hirð code sees. Around the invocation the dispatcher captures the
 %% invocation record (tool, type arguments, args, result, timestamp,
 %% caller) and sends it to the audit sink (hird_audit); the record is
-%% dropped there when no sink is running. `TypeArgs` is the call site's
+%% dropped there when no sink is running, which a booted program does not
+%% outlive (hird_audit:halt_on_exit/1). `TypeArgs` is the call site's
 %% instantiation of a generic tool's type parameters, one wire shape each
 %% (`[]` for any other tool), and `Caller` the codegen-supplied caller id
 %% (`<<"Module.function">>` or the actor form), to which the dispatcher

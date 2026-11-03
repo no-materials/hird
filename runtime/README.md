@@ -38,7 +38,10 @@ dispatcher.
   writing a batch once 64 KiB are buffered or 10 ms after its first line,
   and on `sync/0`. `log/1` casts while the sink has under 8 MiB of lines
   queued and waits in a call past that, so a burst slows its producers
-  instead of growing the sink's mailbox without bound.
+  instead of growing the sink's mailbox without bound. `halt_on_exit/1`
+  makes the sink's exit, for any reason, halt the node with status 1
+  after printing the reason; the boot module applies it to the sink it
+  starts, so a program never runs on without its audit stream.
 - `hird_handlers.erl` — the process-independent default-handler registry:
   `install_handler/2`, `lookup_handler/1`, `with_handlers/2`. Handler maps
   never cross the spawn boundary, so this registry is how deployments and
