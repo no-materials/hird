@@ -186,6 +186,29 @@ replay_ignores_registry_handlers_test() ->
                         end)
         end).
 
+%% A cursor that dies mid-replay never hands the run back to live
+%% dispatch: the next call fails, and no handler runs.
+dispatch_after_the_cursor_dies_never_runs_live_test() ->
+    Self = self(),
+    Handlers = #{{tool, probe} =>
+                     fun(_Args, _Handlers) -> Self ! ran_live, 0 end},
+    Path = filename:join("_build", "dispatch_replay_dead.jsonl"),
+    ok = file:write_file(Path, <<>>),
+    {ok, Pid} = hird_replay:start_link(Path, [probe_table()]),
+    Ref = monitor(process, Pid),
+    unlink(Pid),
+    exit(Pid, kill),
+    receive {'DOWN', Ref, process, Pid, killed} -> ok end,
+    try
+        ?assertExit({noproc, _},
+                    hird_tool_dispatch:call(probe, [], <<"M.f">>, Handlers,
+                                            #{n => 3})),
+        ?assertEqual(none, receive ran_live -> ran_live after 0 -> none end)
+    after
+        {ok, Clean} = hird_replay:start_link(Path, [probe_table()]),
+        ok = gen_server:stop(Clean)
+    end.
+
 %% An err-tagged record replays its failure: the same `{hird_exn, _}`
 %% throw the recorded handler raised.
 replay_rethrows_logged_failures_test() ->

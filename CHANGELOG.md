@@ -75,6 +75,14 @@ schedule and is not covered by these entries.
 
 ### Fixed
 
+- **A replay no longer turns live when its cursor dies.** If the replay
+  cursor died mid-run, killed or crashing, every later tool call of a
+  `--replay` run went to its live handler: the replay started calling
+  real tools and its audit stream gained live records, with nothing
+  reported. Once the cursor is gone a call now fails, so nothing runs
+  live, and the run halts at once with status 1, printing
+  `hird: replay cursor exited: <reason>` to standard error.
+
 - **A run no longer outlives its audit sink.** If the sink died mid-run,
   killed or failing to write, the program carried on without it: every
   later record was dropped without a trace, and the run could still exit

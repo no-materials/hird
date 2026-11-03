@@ -5,10 +5,13 @@
 %% one stream per process, interleaving freely; divergences that never
 %% advance, the whole-log finish check, structured load failures, and a
 %% generic tool's records decoded at the type arguments of the call
-%% offered against them.
+%% offered against them. A cursor that exits other than cleanly leaves the
+%% node replaying with no cursor, and a watched one halts its node.
 -module(hird_replay_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+
+-export([watched_cursor_exits/0]).
 
 %% A `Ping : { n: Int } → Int ! Exn<PingError>` signature table.
 table() ->
@@ -147,6 +150,87 @@ unnamed_callers_share_the_anonymous_stream_test() ->
         ?assertEqual({ok, 20}, hird_replay:offer(undefined, ping, [], #{n => 2})),
         ?assertEqual(ok, hird_replay:finish())
     end).
+
+%% A killed cursor leaves the node replaying: offers fail rather than the
+%% node going back to live dispatch.
+a_killed_cursor_leaves_the_node_replaying_test() ->
+    {ok, Pid} = hird_replay:start_link(
+                    log_file("replay_killed.jsonl", [line(1, {ok, 10})]),
+                    [table()]),
+    try
+        ok = kill(Pid),
+        ?assert(hird_replay:active()),
+        ?assertExit({noproc, _}, offer(ping, [], #{n => 1}))
+    after
+        end_replay()
+    end.
+
+%% So does a cursor that crashes: only a clean stop ends the replay.
+a_crashed_cursor_leaves_the_node_replaying_test() ->
+    process_flag(trap_exit, true),
+    {ok, Pid} = hird_replay:start_link(
+                    log_file("replay_crashed.jsonl", [line(1, {ok, 10})]),
+                    [table()]),
+    try
+        ?assertExit({{function_clause, _}, _},
+                    gen_server:call(hird_replay, unknown_request)),
+        receive {'EXIT', Pid, _} -> ok end,
+        ?assert(hird_replay:active()),
+        ?assertExit({noproc, _}, offer(ping, [], #{n => 1}))
+    after
+        end_replay()
+    end.
+
+%% Kills `Pid`, unlinked first, and waits until it is gone.
+kill(Pid) ->
+    Ref = monitor(process, Pid),
+    unlink(Pid),
+    exit(Pid, kill),
+    receive {'DOWN', Ref, process, Pid, killed} -> ok end.
+
+%% Ends the replay a dead cursor left behind: a cursor that stops cleanly
+%% takes the node out of replay.
+end_replay() ->
+    {ok, Pid} = hird_replay:start_link(log_file("replay_ended.jsonl", []),
+                                       [table()]),
+    ok = gen_server:stop(Pid),
+    ?assertNot(hird_replay:active()).
+
+%% A cursor watched by halt_on_exit/1 that is killed halts its node with
+%% status 1 and says why on standard error.
+killed_watched_cursor_halts_the_node_test_() ->
+    {timeout, 30, fun() ->
+        Erl = os:find_executable("erl"),
+        Build = filename:absname(filename:dirname(code:which(?MODULE))),
+        Port = open_port({spawn_executable, Erl},
+                         [exit_status, stderr_to_stdout, binary,
+                          {args, ["-noshell", "-pa", Build, "-eval",
+                                  "hird_replay_tests:watched_cursor_exits()"]}]),
+        {Status, Output} = collect(Port, <<>>),
+        ?assertEqual(1, Status),
+        ?assertMatch({match, _},
+                     re:run(Output, <<"hird: replay cursor exited: killed">>))
+    end}.
+
+%% The output of `Port` until it exits, and its exit status.
+collect(Port, Output) ->
+    receive
+        {Port, {data, Data}} -> collect(Port, <<Output/binary, Data/binary>>);
+        {Port, {exit_status, Status}} -> {Status, Output}
+    end.
+
+%% @private The child node's side: a watched cursor answers one offer and
+%% is killed. Halts with 7 if the node is still up 5 s later, so a watcher
+%% that never fires fails the test fast.
+watched_cursor_exits() ->
+    {ok, Pid} = hird_replay:start_link(
+                    log_file("replay_watched.jsonl", [line(1, {ok, 10})]),
+                    [table()]),
+    ok = hird_replay:halt_on_exit(Pid),
+    {ok, 10} = offer(ping, [], #{n => 1}),
+    exit(Pid, kill),
+    timer:sleep(5000),
+    halt(7).
 
 %% Load-failure tests trap exits: a failed `init` exits the linked
 %% starter as well as returning `{error, _}`, and eunit runs each test in

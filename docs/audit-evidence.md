@@ -76,7 +76,8 @@ runtime, or in both.
   concurrently may reach the log in any order. Any mismatch is a hard
   error carrying a structured divergence, and a log the run did not read
   to the end fails the run. There is no keyed matching and no live
-  fall-through.
+  fall-through, not even when the replay cursor dies mid-run: every
+  later call then fails, and the run halts with status 1.
 
 ## What it does not guarantee
 

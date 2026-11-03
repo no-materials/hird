@@ -8,7 +8,7 @@
 %% stream. Every line is validated at startup and decoded type-directedly
 %% then, except a generic tool's record: its shapes depend on the type
 %% arguments its call fixes, so it is decoded when that call is offered.
-%% While the cursor is running the dispatcher routes every tool call here
+%% While the node is replaying the dispatcher routes every tool call here
 %% instead of resolving a handler, so no `handle` or `install` block in the
 %% program can shadow the log. Each offer must name the tool and args of
 %% the next record in the offering process's stream, which then yields its
@@ -16,11 +16,18 @@
 %% dispatcher raises as a crash, never a value Hirð code sees. How the
 %% streams interleave is free: concurrent processes reach the cursor in
 %% whatever order the scheduler runs them, not the order the log holds.
+%%
+%% The node is replaying from a cursor's start until it stops cleanly. A
+%% cursor that exits any other way, killed or crashed, leaves the node
+%% replaying with no cursor, so every later offer fails: a replay never
+%% falls through to live dispatch. halt_on_exit/1 makes the cursor's exit
+%% halt the node with status 1, and the generated boot module applies it
+%% to the cursor it starts.
 -module(hird_replay).
 -behaviour(gen_server).
 
--export([start_link/2, active/0, offer/4, finish/0]).
--export([init/1, handle_call/3, handle_cast/2]).
+-export([start_link/2, halt_on_exit/1, active/0, offer/4, finish/0]).
+-export([init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 %% Where and how a replay diverged: the offering process (`undefined` for
 %% the anonymous stream), the 0-based log position of the record its
@@ -40,6 +47,9 @@
 
 -export_type([divergence/0]).
 
+%% The persistent term marking the node as replaying.
+-define(KEY, {?MODULE, replaying}).
+
 %% Starts the cursor registered as ?MODULE, loading every line of the log
 %% at `Path` against the merged signature `Tables`. Fails with
 %% `{replay_load_error, …}` when the file is unreadable or any line does
@@ -51,16 +61,36 @@
 start_link(Path, Tables) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Path, Tables}, []).
 
-%% Whether a replay cursor is running (the dispatcher's routing test).
+%% Halts the node with status 1 once `Cursor` exits, for any reason, after
+%% printing the reason to standard error: a replay whose cursor is gone
+%% cannot finish. Halts at once if `Cursor` is already gone. The watcher
+%% is linked to nothing, so it shows in no caller's links.
+-spec halt_on_exit(pid()) -> ok.
+halt_on_exit(Cursor) ->
+    _ = spawn(fun() ->
+        Ref = monitor(process, Cursor),
+        receive
+            {'DOWN', Ref, process, Cursor, Reason} ->
+                io:format(standard_error,
+                          "hird: replay cursor exited: ~p; the replay is "
+                          "incomplete~n", [Reason]),
+                erlang:halt(1)
+        end
+    end),
+    ok.
+
+%% Whether the node is replaying (the dispatcher's routing test): from a
+%% cursor's start until it stops cleanly, whether or not it still runs.
 -spec active() -> boolean().
 active() ->
-    whereis(?MODULE) =/= undefined.
+    persistent_term:get(?KEY, false).
 
 %% Offers the next tool call of `Process` (`undefined` for an unnamed
 %% process, which offers against the anonymous stream), a generic tool's
 %% type arguments included. A match yields the logged result —
 %% `{ok, Value}` or `{err, Error}` — and advances that process's stream; a
-%% mismatch yields `{diverged, Divergence}` without advancing.
+%% mismatch yields `{diverged, Divergence}` without advancing. Exits, as a
+%% call to a missing server does, when the cursor is gone.
 -spec offer(binary() | undefined, atom(), [hird_types:shape()], term()) ->
     {ok, term()} | {err, term()} | {diverged, divergence()}.
 offer(Process, Tool, TypeArgs, Args) ->
@@ -82,6 +112,7 @@ init({Path, Tables}) ->
         {ok, Bytes} ->
             try load(lines(Bytes), Table, 1) of
                 Log ->
+                    persistent_term:put(?KEY, true),
                     {ok, #{streams => streams(Log), consumed => 0,
                            size => length(Log), table => Table}}
             catch
@@ -123,6 +154,14 @@ handle_call(finish, _From, #{consumed := C, size := Size} = State) ->
 %% @private
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+%% @private Only a clean stop ends the replay; a cursor that crashed
+%% leaves the node replaying.
+terminate(normal, _State) ->
+    _ = persistent_term:erase(?KEY),
+    ok;
+terminate(_Reason, _State) ->
+    ok.
 
 %% The record a stream expects, as far as the offer lets it decode: a
 %% loaded record in full; a generic tool's line decoded at the offered type

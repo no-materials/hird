@@ -9,22 +9,22 @@
 
 -export([call/5]).
 
-%% Dispatches one tool call. When a replay cursor is running
-%% (hird_replay), every dispatch consults it instead of resolving a
-%% handler — see replayed/5. Otherwise the handler is `{tool, ToolName}`
-%% in the threaded handler map, falling back to the process-independent
-%% default registry (hird_handlers) on a miss; a miss in both raises
-%% `{unhandled_tool, ToolName}` — a crash for the supervisor, never a value
-%% Hirð code sees. Around the invocation the dispatcher captures the
-%% invocation record (tool, type arguments, args, result, timestamp,
-%% caller) and sends it to the audit sink (hird_audit); the record is
-%% dropped there when no sink is running, which a booted program does not
-%% outlive (hird_audit:halt_on_exit/1). `TypeArgs` is the call site's
-%% instantiation of a generic tool's type parameters, one wire shape each
-%% (`[]` for any other tool), and `Caller` the codegen-supplied caller id
-%% (`<<"Module.function">>` or the actor form), to which the dispatcher
-%% appends `@Process`, the calling process's identity (hird_process),
-%% when it has one.
+%% Dispatches one tool call. While the node is replaying
+%% (hird_replay:active/0), every dispatch consults the cursor instead of
+%% resolving a handler — see replayed/5. Otherwise the handler is
+%% `{tool, ToolName}` in the threaded handler map, falling back to the
+%% process-independent default registry (hird_handlers) on a miss; a miss
+%% in both raises `{unhandled_tool, ToolName}` — a crash for the
+%% supervisor, never a value Hirð code sees. Around the invocation the
+%% dispatcher captures the invocation record (tool, type arguments, args,
+%% result, timestamp, caller) and sends it to the audit sink (hird_audit);
+%% the record is dropped there when no sink is running, which a booted
+%% program does not outlive (hird_audit:halt_on_exit/1). `TypeArgs` is
+%% the call site's instantiation of a generic tool's type parameters, one
+%% wire shape each (`[]` for any other tool), and `Caller` the
+%% codegen-supplied caller id (`<<"Module.function">>` or the actor form),
+%% to which the dispatcher appends `@Process`, the calling process's
+%% identity (hird_process), when it has one.
 %%
 %% A handler signals a domain failure by throwing `{hird_exn, Error}`,
 %% where `Error` is a value of the tool's declared error type. The
@@ -88,7 +88,8 @@ checked(Kind, ToolName, Audit) ->
 %% the calling process's next one, so concurrent processes replay in
 %% whatever order they reach it. A logged failure replays as the
 %% `{hird_exn, Error}` throw the live handler raised; a mismatch crashes
-%% with the structured divergence, unrecorded.
+%% with the structured divergence, unrecorded. With the cursor gone, the
+%% offer exits, so the call fails rather than running live.
 replayed(ToolName, TypeArgs, Caller, Process, Args) ->
     case hird_replay:offer(Process, ToolName, TypeArgs, Args) of
         {ok, Result} ->

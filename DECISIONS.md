@@ -858,6 +858,21 @@ pure data and the future runtime is only one of its producers.
    successes. Only divergence-reporting ergonomics remain provisional
    pending real runs.
 
+   *Amended 2026-11-03*: live fall-through was still reachable at
+   runtime. The dispatcher routed calls to the cursor only while one was
+   registered, so a cursor that died mid-run, killed or crashing, handed
+   every later call to its live handler: a replayed run started calling
+   real tools, its audit stream gained live records, and nothing said
+   so. Replaying is now a state of the node, not of a running process.
+   The cursor marks the node as replaying once its log loads and clears
+   the mark only when it stops cleanly, so a cursor that exits any other
+   way leaves every later call failing, never running live. The run also
+   halts at once with status 1 and the cursor's exit reason: the boot
+   module applies `hird_replay:halt_on_exit/1` to the cursor it starts,
+   the same policy as the audit sink's (ADR-022 §2, amended 2026-11-03).
+   Restarting the cursor is rejected as restarting the sink is: the old
+   cursor's place in each stream dies with it.
+
 ### Consequences
 
 - The wire format is locked and conformance-tested before any runtime

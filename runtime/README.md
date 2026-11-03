@@ -16,8 +16,8 @@ dispatcher.
   tool's type parameters (`[]` otherwise): the handler is
   `{tool, ToolName}` in the threaded map, falling back to the default
   registry, and a miss in both crashes with `{unhandled_tool, ToolName}`.
-  While a replay cursor is running, the dispatcher instead consults it for
-  every call — no handler in the program can shadow the log. Every
+  While the node is replaying, the dispatcher instead consults the cursor
+  for every call — no handler in the program can shadow the log. Every
   invocation — mocked, real, or replayed — is captured as an invocation
   record and sent to the audit sink, its caller id qualified with the
   calling process's identity (`Caller@Process`). A handler signals a
@@ -58,7 +58,11 @@ dispatcher.
   `offer/4` matches a process's dispatch strict-sequentially against its
   own stream; streams interleave freely. Any mismatch is a structured
   divergence the dispatcher raises as a crash; `finish/0` reports a log
-  the run did not fully consume.
+  the run did not fully consume. The node is replaying from the cursor's
+  start until it stops cleanly: a cursor killed or crashed leaves every
+  later call failing, never running live, and `halt_on_exit/1` (which
+  the boot module applies) halts the node with status 1 once the cursor
+  exits.
 - `hird_process.erl` — process identity: the run-stable name the
   dispatcher records and replay matches by — `main`, `Sup/child` for a
   supervised child, `Spawner/Actor#N` for a spawned actor. Generated code

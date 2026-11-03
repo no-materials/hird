@@ -560,10 +560,10 @@ fn find_entry_point(modules: &[(PathBuf, IrModule)]) -> Result<Option<EntryPoint
 /// alone: `-hird_audit_file <path>` appends the audit stream to that file
 /// instead of stdout, and `-hird_replay <path>` starts the replay cursor
 /// over that log before `main` and requires it fully consumed after. A
-/// crash in `main` still flushes the sink before halting, and the sink
-/// exiting halts the run with status 1 (`hird_audit:halt_on_exit/1`).
-/// Kept as generated source so the build output runs on plain `erl`
-/// without the CLI.
+/// crash in `main` still flushes the sink before halting, and the sink or
+/// the cursor exiting halts the run with status 1 (`halt_on_exit/1` of
+/// `hird_audit` and `hird_replay`). Kept as generated source so the build
+/// output runs on plain `erl` without the CLI.
 fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     let tables = table_modules
         .iter()
@@ -588,8 +588,9 @@ fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     );
     let _ = writeln!(
         out,
-        "%% Log and requires it fully consumed. The sink exiting halts the run."
+        "%% Log and requires it fully consumed. The sink or the cursor exiting"
     );
+    let _ = writeln!(out, "%% halts the run.");
     let _ = writeln!(out, "main() ->");
     let _ = writeln!(out, "    Sink = case argument(hird_audit_file) of");
     let _ = writeln!(out, "        {{ok, Path}} -> {{file, Path}};");
@@ -605,11 +606,13 @@ fn boot_module(entry: &EntryPoint, table_modules: &[String]) -> String {
     }
     let _ = writeln!(out, "    Replay = argument(hird_replay),");
     let _ = writeln!(out, "    case Replay of");
+    let _ = writeln!(out, "        {{ok, Log}} ->");
     let _ = writeln!(
         out,
-        "        {{ok, Log}} -> {{ok, _}} = hird_replay:start_link(Log, [{}]);",
+        "            {{ok, Cursor}} = hird_replay:start_link(Log, [{}]),",
         tables.join(", ")
     );
+    let _ = writeln!(out, "            ok = hird_replay:halt_on_exit(Cursor);");
     let _ = writeln!(out, "        none -> ok");
     let _ = writeln!(out, "    end,");
     let _ = writeln!(out, "    ok = hird_process:name(<<\"main\">>),");

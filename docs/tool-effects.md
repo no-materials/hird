@@ -348,7 +348,9 @@ Keyed matching (find a record by tool and args anywhere in the log) and
 live fall-through (execute for real on a miss) are deliberately excluded:
 both reintroduce the nondeterminism replay exists to remove. The process
 selects a stream, never a record. If a program diverges from its log, the
-honest answer is an error, not a guess.
+honest answer is an error, not a guess. The same holds if the replay
+cursor itself is lost: a run whose cursor exits mid-replay fails every
+later call rather than running it live, and halts with status 1.
 
 *What a replay does not fix.* The log records tool calls, not messages.
 A process whose calls depend on the order messages from *independent*

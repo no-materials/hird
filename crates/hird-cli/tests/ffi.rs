@@ -5,13 +5,16 @@
 //! Erlang module next to the `.hird` source runs under `hird run`, every
 //! call is on the audit stream, and a replay serves the results without
 //! calling the Erlang code. The Erlang side appends each call it receives
-//! to `calls.log`, so a test sees exactly which runs reached it.
-//! BEAM-dependent tests are skipped (with a note) when `erlc` is not on the
-//! `PATH`.
+//! to `calls.log`, so a test sees exactly which runs reached it. A replay
+//! whose cursor is killed mid-run fails without ever reaching the Erlang
+//! code. BEAM-dependent tests are skipped (with a note) when `erlc` is not
+//! on the `PATH`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// A program reading one note through an Erlang-implemented tool and
 /// logging it through a Hirð mock.
@@ -335,6 +338,186 @@ fn a_killed_audit_sink_fails_the_run() {
     assert_eq!(output.status.code(), Some(1), "stderr: {stderr}");
     assert!(
         stderr.contains("hird: audit sink exited: killed"),
+        "stderr: {stderr}"
+    );
+}
+
+/// A program making 20000 calls through an Erlang tool that appends each
+/// call it receives to `$LIVE_LOG`, when that is set.
+const PINGS: &str = "module Pings\n\
+     \n\
+     extern module \"ffi/pinger.erl\"\n\
+     \n\
+     tool Ping : { n: Int } → Int\n\
+     extern fn erl_ping(args: { n: Int }) → Int = \"pinger\":\"ping\"\n\
+     \n\
+     fn pings(n: Int) → () ! {Tool<Ping>} =\n\
+       if n == 0 then () else match ping({ n: n }) { _ → pings(n - 1) }\n\
+     \n\
+     fn main() → () =\n\
+       handle { Tool<Ping> → erl_ping } in pings(20000)\n";
+
+/// The Erlang side of [`PINGS`].
+const PINGER_ERL: &str = "-module(pinger).\n\
+     -export([ping/1]).\n\
+     \n\
+     ping(#{n := N}) ->\n\
+     \x20   case os:getenv(\"LIVE_LOG\") of\n\
+     \x20       false -> ok;\n\
+     \x20       Path -> ok = file:write_file(Path, [integer_to_list(N), $\\n], [append])\n\
+     \x20   end,\n\
+     \x20   N.\n";
+
+/// Test scaffolding that kills the replay cursor from inside the node,
+/// started through `ERL_AFLAGS` as `-s cursor_killer <fun>`: no handler
+/// runs under replay, so no tool can. Each function returns at once, so
+/// the node boots on.
+const CURSOR_KILLER_ERL: &str = "-module(cursor_killer).\n\
+     -export([after_reply/0, at_rest/0]).\n\
+     \n\
+     %% Kills the cursor right after it answers a call, so the program's\n\
+     %% next call finds it gone.\n\
+     after_reply() ->\n\
+     \x20   _ = spawn(fun() ->\n\
+     \x20       sys:install(cursor(), {fun kill_after_reply/3, armed})\n\
+     \x20   end),\n\
+     \x20   ok.\n\
+     \n\
+     kill_after_reply(armed, Event, _State) when element(1, Event) =:= out ->\n\
+     \x20   exit(self(), kill);\n\
+     kill_after_reply(armed, _Event, _State) ->\n\
+     \x20   armed.\n\
+     \n\
+     %% Kills the cursor 300 ms after it starts.\n\
+     at_rest() ->\n\
+     \x20   _ = spawn(fun() ->\n\
+     \x20       Cursor = cursor(),\n\
+     \x20       timer:sleep(300),\n\
+     \x20       exit(Cursor, kill)\n\
+     \x20   end),\n\
+     \x20   ok.\n\
+     \n\
+     %% The replay cursor, once it is registered.\n\
+     cursor() ->\n\
+     \x20   case whereis(hird_replay) of\n\
+     \x20       undefined -> timer:sleep(1), cursor();\n\
+     \x20       Pid -> Pid\n\
+     \x20   end.\n";
+
+/// Compiles [`CURSOR_KILLER_ERL`] into `dir/killer`, returning the
+/// `ERL_AFLAGS` that start `function` in a node run from `dir`.
+fn cursor_killer(dir: &Path, function: &str) -> String {
+    let killer = dir.join("killer");
+    fs::create_dir_all(&killer).expect("create killer dir");
+    let source = killer.join("cursor_killer.erl");
+    fs::write(&source, CURSOR_KILLER_ERL).expect("write the killer");
+    let status = Command::new("erlc")
+        .arg("-o")
+        .arg(&killer)
+        .arg(&source)
+        .status()
+        .expect("spawn erlc");
+    assert!(status.success(), "the killer compiles");
+    format!("-pa killer -s cursor_killer {function}")
+}
+
+/// A replay whose cursor is killed between two calls never runs the
+/// program's next call live: the run fails with status 1 naming the
+/// cursor, and the Erlang tool is never reached.
+#[test]
+fn a_killed_replay_cursor_never_runs_a_call_live() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not on PATH");
+        return;
+    }
+    let dir = scratch("ffi_killed_cursor");
+    fs::create_dir_all(dir.join("ffi")).expect("create ffi dir");
+    fs::write(dir.join("ffi/pinger.erl"), PINGER_ERL).expect("write the Erlang tool");
+    fs::write(dir.join("pings.hird"), PINGS).expect("write the program");
+    let recorded = hird(
+        &dir,
+        &[
+            "run",
+            "pings.hird",
+            "-o",
+            "out",
+            "--audit-file",
+            "rec.jsonl",
+        ],
+    );
+    assert!(
+        recorded.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&recorded.stderr)
+    );
+
+    let replayed = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .env("HIRD_CACHE_DIR", dir.join("cache"))
+        .env("LIVE_LOG", dir.join("live.log"))
+        .env("ERL_AFLAGS", cursor_killer(&dir, "after_reply"))
+        .current_dir(&dir)
+        .args(["run", "pings.hird", "-o", "out", "--replay", "rec.jsonl"])
+        .output()
+        .expect("spawn the hird binary");
+    let stderr = String::from_utf8_lossy(&replayed.stderr);
+    assert_eq!(replayed.status.code(), Some(1), "stderr: {stderr}");
+    assert!(
+        !dir.join("live.log").exists(),
+        "a replayed call ran live: {}",
+        fs::read_to_string(dir.join("live.log")).unwrap_or_default()
+    );
+    // The cursor's watcher and the crash of the call that found the cursor
+    // gone race to report; either names it.
+    assert!(
+        stderr.contains("hird: replay cursor exited: killed") || stderr.contains("hird_replay"),
+        "stderr: {stderr}"
+    );
+}
+
+/// A standing program whose replay cursor is killed halts with status 1
+/// and the cursor's exit reason, instead of standing on with no cursor.
+#[test]
+fn a_killed_replay_cursor_halts_a_standing_program() {
+    if !erlang_available() {
+        eprintln!("skipping: erlc not on PATH");
+        return;
+    }
+    let dir = scratch("ffi_killed_cursor_standing");
+    fs::write(
+        dir.join("standing.hird"),
+        "module Standing\n\nfn main() → () ! {Stand} = stand()\n",
+    )
+    .expect("write the program");
+    fs::write(dir.join("empty.jsonl"), "").expect("write the empty log");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hird"))
+        .env("HIRD_CACHE_DIR", dir.join("cache"))
+        .env("ERL_AFLAGS", cursor_killer(&dir, "at_rest"))
+        .current_dir(&dir)
+        .args([
+            "run",
+            "standing.hird",
+            "-o",
+            "out",
+            "--replay",
+            "empty.jsonl",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the hird binary");
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while child.try_wait().expect("poll the hird binary").is_none() {
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("the program stood on with its cursor gone");
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    let output = child.wait_with_output().expect("collect the output");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "stderr: {stderr}");
+    assert!(
+        stderr.contains("hird: replay cursor exited: killed"),
         "stderr: {stderr}"
     );
 }
